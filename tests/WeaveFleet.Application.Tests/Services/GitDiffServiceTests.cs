@@ -673,6 +673,48 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task search_changes_greps_the_changed_files_on_both_sides_and_names_the_files_that_match()
+    {
+        // Find in Changes searched by loading every changed file (hundreds of requests); one grep of each side of the
+        // change set says which files hold the text, so only those load.
+        var runner = new RecordingGitRunner(
+            new GitCommandResult(0, "2\t1\tsrc/a.cs\n0\t5\tsrc/gone.cs\n", string.Empty),
+            new GitCommandResult(0, "M\tsrc/a.cs\nD\tsrc/gone.cs\n", string.Empty),
+            new GitCommandResult(0, "src/new.cs\n", string.Empty),
+            new GitCommandResult(0, "src/a.cs:2\nsrc/new.cs:1\n", string.Empty),
+            new GitCommandResult(0, "base:src/gone.cs:3\nbase:src/a.cs:1\n", string.Empty));
+        var service = new GitDiffService(runner);
+
+        var result = await service.SearchChangesAsync("/repo/root", "base", "src", "Shelf", CancellationToken.None);
+
+        result.ShouldNotBeNull();
+        result.Select(match => (match.Path, match.Count)).ShouldBe([("src/a.cs", 2), ("src/gone.cs", 3), ("src/new.cs", 1)], ignoreOrder: true);
+        var working = runner.Calls[3].Arguments;
+        working.ShouldBe(["grep", "--untracked", "-I", "-i", "-F", "-c", "-e", "Shelf", "--", ":(literal)src/a.cs", ":(literal)src/new.cs"]);
+        var baseline = runner.Calls[4].Arguments;
+        baseline.ShouldBe(["grep", "-I", "-i", "-F", "-c", "-e", "Shelf", "base", "--", ":(literal)src/a.cs", ":(literal)src/gone.cs"]);
+    }
+
+    [Fact]
+    public async Task search_changes_takes_grep_finding_nothing_as_no_matches_and_a_git_failure_as_unknown()
+    {
+        var none = new GitDiffService(new RecordingGitRunner(
+            new GitCommandResult(0, "1\t0\ta.cs\n", string.Empty),
+            new GitCommandResult(0, "M\ta.cs\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
+            new GitCommandResult(1, string.Empty, string.Empty),
+            new GitCommandResult(1, string.Empty, string.Empty)));
+        (await none.SearchChangesAsync("/repo/root", "base", string.Empty, "zzz", CancellationToken.None)).ShouldNotBeNull().ShouldBeEmpty();
+
+        var broken = new GitDiffService(new RecordingGitRunner(
+            new GitCommandResult(0, "1\t0\ta.cs\n", string.Empty),
+            new GitCommandResult(0, "M\ta.cs\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
+            new GitCommandResult(128, string.Empty, "fatal: bad")));
+        (await broken.SearchChangesAsync("/repo/root", "base", string.Empty, "zzz", CancellationToken.None)).ShouldBeNull();
+    }
+
+    [Fact]
     public async Task compute_file_diff_with_content_returns_null_for_a_path_outside_the_session_folder_without_running_git()
     {
         var runner = new RecordingGitRunner();

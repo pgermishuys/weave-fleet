@@ -33,6 +33,9 @@ type DiffsAnswer = { data?: unknown; error?: unknown; response: Response };
 /** /diffs requests on their way, by machine and session, for callers that join one. */
 const pendingLists = new Map<string, Promise<DiffsAnswer>>();
 
+/** How long edits gather before Changes asks again (OpenChamber waits 250 ms after a tool call settles). */
+const EDIT_WINDOW_MS = 250;
+
 function listKey(items: readonly FileDiffItem[]): string {
   return items.map((item) => `${item.file}\u0000${item.status}\u0000${item.additions}\u0000${item.deletions}`).join("\n");
 }
@@ -156,14 +159,34 @@ export function useDiffs(
       return;
     }
 
-    if (debounceTimeoutId) {
-      clearTimeout(debounceTimeoutId);
-    }
+    // As OpenChamber does: the first edit opens a window and the refresh runs at its end; edits inside it join it rather
+    // than pushing it back, so Changes keeps up while the agent writes instead of waiting for it to pause.
+    if (debounceTimeoutId) return;
 
     debounceTimeoutId = setTimeout(() => {
-      void fetchDiffs();
       debounceTimeoutId = undefined;
-    }, 500);
+      void refreshAfterEdits();
+    }, EDIT_WINDOW_MS);
+  }
+
+  // One refresh at a time: one still running when the window ends (a big repository's list takes seconds) is followed
+  // by one more, not joined by a second.
+  let refreshing = false;
+  let refreshAgain = false;
+  async function refreshAfterEdits(): Promise<void> {
+    if (refreshing) {
+      refreshAgain = true;
+      return;
+    }
+    refreshing = true;
+    try {
+      do {
+        refreshAgain = false;
+        await fetchDiffs();
+      } while (refreshAgain);
+    } finally {
+      refreshing = false;
+    }
   }
 
   watch(

@@ -548,3 +548,9 @@ public sealed record AgentBrowserSettingsResponse(bool Enabled, string Pages, bo
 
 /// <summary>A change to Settings → Permissions; a null field stays as it is.</summary>
 public sealed record AgentBrowserSettingsRequest(bool? Enabled, string? Pages, bool? Scripts);
+
+/// <summary>A changed file that holds the searched text, by the session's own path, and how many of its lines do.</summary>
+public sealed record ChangeSearchFile(string File, int Count);
+
+/// <summary>What GET /api/sessions/{id}/diffs/search found: the changed files holding the text (any case).</summary>
+public sealed record SearchSessionChangesResponse(IReadOnlyList<ChangeSearchFile> Files);

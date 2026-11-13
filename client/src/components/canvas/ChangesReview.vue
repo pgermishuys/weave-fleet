@@ -9,6 +9,7 @@ import {
   Ellipsis,
   ExternalLink,
   FileText,
+  Search,
   Undo2,
   WrapText,
 } from "lucide-vue-next";
@@ -22,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { readSessionFile, restoreSessionFile, writeSessionFile } from "@/api/session-files";
+import { readSessionFile, restoreSessionFile, searchSessionChanges, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
 import LinesBar from "@/components/canvas/LinesBar.vue";
 import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
@@ -161,11 +162,56 @@ function versionOf(file: FileDiffItem): string {
   return `${file.status}:${file.additions}:${file.deletions}`;
 }
 
+// ─── Drawing files as they come into view ────────────────────────────────────
+// As T3 Code and OpenChamber do, an open file's diff is fetched and drawn once it comes within 600 px of the visible
+// part of the review, and stays drawn; until then it holds its place at about its height. Drawing every open file's
+// lines at once made opening a session with changes about a third slower. Without IntersectionObserver (tests, very old
+// webviews) every file draws at once, as before.
+const NEAR_MARGIN = "600px 0px";
+const canObserve = typeof IntersectionObserver !== "undefined";
+const near = shallowRef<ReadonlySet<string>>(new Set());
+let nearObserver: IntersectionObserver | null = null;
+
+function isNear(path: string): boolean {
+  return !canObserve || near.value.has(path);
+}
+function markNear(paths: readonly string[]): void {
+  const fresh = paths.filter((path) => !near.value.has(path));
+  if (fresh.length > 0) near.value = new Set([...near.value, ...fresh]);
+}
+/**
+ * The room a file not drawn yet holds, and keeps while its diff loads: about as tall as its changed lines will draw. A
+ * short "Loading…" in its place would pull the files below it into view, and they would all load at once.
+ */
+function pendingHeight(file: FileDiffItem): number {
+  return Math.min(file.additions + file.deletions + 8, MAX_DRAWN_LINES) * 20;
+}
+function observeSection(element: unknown): void {
+  if (element instanceof HTMLElement) nearObserver?.observe(element);
+}
 watch(
-  [files, collapsed],
+  body,
+  (element) => {
+    nearObserver?.disconnect();
+    nearObserver = null;
+    if (!element || !canObserve) return;
+    nearObserver = new IntersectionObserver(
+      (entries) => {
+        markNear(entries.filter((entry) => entry.isIntersecting).map((entry) => (entry.target as HTMLElement).dataset.reviewFile ?? ""));
+      },
+      { root: element, rootMargin: NEAR_MARGIN },
+    );
+    for (const section of element.querySelectorAll<HTMLElement>("[data-review-file]")) nearObserver.observe(section);
+  },
+  { flush: "post" },
+);
+onBeforeUnmount(() => nearObserver?.disconnect());
+
+watch(
+  [files, collapsed, near],
   () => {
     for (const file of files.value) {
-      if (isOpen(file.file)) load(file.file, versionOf(file));
+      if (isOpen(file.file) && isNear(file.file)) load(file.file, versionOf(file));
     }
   },
   { immediate: true },
@@ -412,6 +458,7 @@ const findFiles = computed<FindFile[]>(() => {
 /** Draws a match's line: opens its file, its unchanged run, the rest of a long diff, or its diff behind Rendered. */
 function revealHit(hit: ChangesHit): void {
   if (!isOpen(hit.path)) toggleFile(hit.path);
+  markNear([hit.path]);
   if (rendered.value.has(hit.path)) toggleRendered(hit.path, false);
   if (hit.inFold && !openFolds.value.has(foldKey(hit.path, hit.itemId))) openFold(hit.path, hit.itemId);
   const drawn = visibleItems(hit.path).some(
@@ -429,24 +476,78 @@ const find = useChangesFind({
     findBar.value?.field?.focus();
     findBar.value?.field?.select();
   },
-  redraws: () => [layout.value, collapsed.value, openFolds.value, drawnAll.value, rendered.value, views.value],
+  redraws: () => [layout.value, collapsed.value, openFolds.value, drawnAll.value, rendered.value, views.value, near.value],
 });
 
-// While the bar is open, collapsed files load too, so the search covers every file. Lockfiles and very large diffs
-// stay shut: drawing their lines is what freezes the panel, and nobody searches them.
+// The machine says which changed files hold the text (one git grep of each side of the change set), and only those
+// load: loading every file to search it meant hundreds of requests on a big change. A machine that can't say (an older
+// Fleet, git failing) gets the old way, every file loading while the bar is open. git's -i folds ASCII letters only, so
+// a query with others is searched the old way too.
+// undefined: nothing asked (bar shut, nothing typed, or the answer is on its way); null: the machine can't say.
+const serverMatches = shallowRef<ReadonlyMap<string, number> | null | undefined>(undefined);
+const searchPending = shallowRef(false);
+let searchRun = 0;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let searchAbort: AbortController | undefined;
 watch(
-  [find.isOpen, files],
+  [find.isOpen, () => find.query.value.trim(), files],
+  ([open, query]) => {
+    clearTimeout(searchTimer);
+    searchAbort?.abort();
+    const run = ++searchRun;
+    if (!open || query === "") {
+      serverMatches.value = undefined;
+      searchPending.value = false;
+      return;
+    }
+    if (/[^\u0000-\u007f]/.test(query)) {
+      serverMatches.value = null;
+      searchPending.value = false;
+      return;
+    }
+    searchPending.value = true;
+    searchTimer = setTimeout(async () => {
+      searchAbort = new AbortController();
+      const found = await searchSessionChanges(machine, props.sessionId, query, searchAbort.signal);
+      if (run !== searchRun) return;
+      serverMatches.value = found;
+      searchPending.value = false;
+    }, 120);
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer);
+  searchAbort?.abort();
+});
+
+/** Whether find needs this file loaded: it holds the text, or the machine can't say. Lockfiles and very large diffs stay shut. */
+function findWants(file: FileDiffItem): boolean {
+  const matches = serverMatches.value;
+  return !startsCollapsed(file) && matches !== undefined && (matches === null || matches.has(file.file));
+}
+watch(
+  [find.isOpen, serverMatches, files],
   ([open]) => {
     if (!open) return;
     for (const file of files.value) {
-      if (!startsCollapsed(file)) load(file.file, versionOf(file));
+      if (findWants(file)) load(file.file, versionOf(file));
     }
   },
   { immediate: true },
 );
-const findSearching = computed(() => files.value.some((file) => entries.value[file.file]?.status === "loading"));
+const findSearching = computed(
+  () => searchPending.value || files.value.some((file) => findWants(file) && entries.value[file.file]?.status === "loading"),
+);
+// Files with matches that aren't searched here: lockfiles and very large diffs, shut. Without the machine's answer,
+// every such file counts.
 const findUnsearched = computed(
-  () => files.value.filter((file) => entries.value[file.file]?.status !== "ready" && startsCollapsed(file) && !isOpen(file.file)).length,
+  () => files.value.filter((file) =>
+    startsCollapsed(file)
+    && !isOpen(file.file)
+    && entries.value[file.file]?.status !== "ready"
+    && (serverMatches.value == null || serverMatches.value.has(file.file)),
+  ).length,
 );
 
 // ─── Selected lines: Copy link, Quote, Add to message ────────────────────────
@@ -597,6 +698,7 @@ watch(
     if (!allFiles.value.some((file) => file.file === request.path)) return;
     handledSeq = request.seq;
     if (!isOpen(request.path)) toggleFile(request.path);
+    markNear([request.path]);
     await nextTick();
     const sections = body.value?.querySelectorAll<HTMLElement>("[data-review-file]") ?? [];
     for (const section of sections) {
@@ -681,6 +783,20 @@ function onCodeScroll(event: Event): void {
       <button
         type="button"
         class="review__icon"
+        :aria-pressed="find.isOpen.value"
+        title="Find in changes (Ctrl+F)"
+        aria-label="Find in changes"
+        data-testid="review-find"
+        @click="find.isOpen.value ? find.close() : find.open()"
+      >
+        <Search
+          :size="15"
+          aria-hidden="true"
+        />
+      </button>
+      <button
+        type="button"
+        class="review__icon"
         :aria-pressed="wrap"
         title="Wrap long lines"
         aria-label="Wrap long lines"
@@ -749,6 +865,7 @@ function onCodeScroll(event: Event): void {
       <section
         v-for="file in files"
         :key="file.file"
+        :ref="observeSection"
         class="rfile"
         :class="{ 'rfile--collapsed': !isOpen(file.file) }"
         :data-review-file="file.file"
@@ -852,8 +969,16 @@ function onCodeScroll(event: Event): void {
         </header>
 
         <div
-          v-if="isOpen(file.file)"
+          v-if="isOpen(file.file) && !isNear(file.file)"
+          class="rfile__body rfile__pending"
+          :style="{ height: `${pendingHeight(file)}px` }"
+          aria-hidden="true"
+          data-testid="review-file-pending"
+        />
+        <div
+          v-else-if="isOpen(file.file)"
           class="rfile__body"
+          :style="!views[file.file]?.entry || views[file.file]?.entry?.status === 'loading' ? { minHeight: `${pendingHeight(file)}px` } : undefined"
         >
           <p
             v-if="!views[file.file]?.entry || views[file.file]?.entry?.status === 'loading'"

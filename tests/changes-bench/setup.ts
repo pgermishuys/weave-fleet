@@ -151,7 +151,8 @@ async function api(path: string, body: unknown): Promise<any> {
 if (process.argv.includes("--repos")) {
   buildSmall();
   buildLarge();
-  buildBig();
+  if (existsSync(join(proj, "bigrepo", ".git"))) buildBig();
+  else console.warn("no bigrepo: the big scenario is skipped (README.md says how to clone one)");
 }
 
 await api("/api/workspace-roots", { path: proj });
@@ -159,7 +160,7 @@ const sessions: Record<string, string> = {};
 for (const [key, folder, title] of [
   ["small", "tiny-notes", "Tidy the notes"],
   ["large", "lantern-shop", "Build the storefront"],
-  ["big", "bigrepo", "Edit the docs"],
+  ...(existsSync(join(proj, "bigrepo", ".git")) ? [["big", "bigrepo", "Edit the docs"] as const] : []),
 ] as const) {
   const created = await api("/api/sessions", { directory: join(proj, folder), title });
   sessions[key] = created.session.id;

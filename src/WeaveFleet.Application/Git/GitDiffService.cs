@@ -267,6 +267,97 @@ public sealed partial class GitDiffService
             : await ToFileDiffContentAsync(repoRoot, baselineRef, summary, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The changed files whose text, before or after, holds <paramref name="query"/> (any case, as written), each with how
+    /// many of its lines do on the side with more. One <c>git grep</c> of the working tree and one of the baseline over the
+    /// changed paths, instead of reading every file. Binary files aren't searched. Null when git fails.
+    /// </summary>
+    public async Task<IReadOnlyList<ChangeSearchMatch>?> SearchChangesAsync(
+        string repoRoot,
+        string baselineRef,
+        string workspacePrefix,
+        string query,
+        CancellationToken ct)
+    {
+        var listing = await ComputeDiffsWithAvailabilityAsync(repoRoot, baselineRef, workspacePrefix, ct).ConfigureAwait(false);
+        if (!listing.Available)
+            return null;
+
+        var after = listing.Diffs.Where(diff => !diff.IsBinary && diff.Status != "deleted").Select(diff => diff.Path).ToList();
+        var before = listing.Diffs.Where(diff => !diff.IsBinary && !diff.IsUntracked && diff.Status != "added").Select(diff => diff.Path).ToList();
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var chunk in PathspecChunks(after))
+        {
+            var found = await GrepCountsAsync(repoRoot, ["grep", "--untracked", "-I", "-i", "-F", "-c", "-e", query], null, chunk, ct).ConfigureAwait(false);
+            if (found is null)
+                return null;
+            foreach (var (path, count) in found)
+                counts[path] = Math.Max(count, counts.GetValueOrDefault(path));
+        }
+
+        foreach (var chunk in PathspecChunks(before))
+        {
+            var found = await GrepCountsAsync(repoRoot, ["grep", "-I", "-i", "-F", "-c", "-e", query, baselineRef], baselineRef, chunk, ct).ConfigureAwait(false);
+            if (found is null)
+                return null;
+            foreach (var (path, count) in found)
+                counts[path] = Math.Max(count, counts.GetValueOrDefault(path));
+        }
+
+        return [.. counts.Select(pair => new ChangeSearchMatch(pair.Key, pair.Value))];
+    }
+
+    /// <summary>Runs one <c>git grep -c</c>; its lines are <c>[ref:]path:count</c>. Exit 1 is "no match"; anything else non-zero is a failure (null).</summary>
+    private async Task<List<(string Path, int Count)>?> GrepCountsAsync(
+        string repoRoot,
+        IReadOnlyList<string> arguments,
+        string? treePrefix,
+        IReadOnlyList<string> paths,
+        CancellationToken ct)
+    {
+        var result = await RunGitAsync(repoRoot, [.. arguments, "--", .. paths.Select(path => $":(literal){path}")], ct).ConfigureAwait(false);
+        if (result.ExitCode == 1)
+            return [];
+        if (!result.IsSuccess)
+            return null;
+
+        var found = new List<(string, int)>();
+        foreach (var line in result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var text = line.TrimEnd('\r');
+            if (treePrefix is not null && text.StartsWith(treePrefix + ":", StringComparison.Ordinal))
+                text = text[(treePrefix.Length + 1)..];
+            var colon = text.LastIndexOf(':');
+            if (colon > 0 && int.TryParse(text.AsSpan(colon + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var count))
+                found.Add((text[..colon], count));
+        }
+
+        return found;
+    }
+
+    /// <summary>The paths in groups short enough for one command line (Windows allows about 32,000 characters).</summary>
+    private static IEnumerable<IReadOnlyList<string>> PathspecChunks(IReadOnlyList<string> paths)
+    {
+        var chunk = new List<string>();
+        var length = 0;
+        foreach (var path in paths)
+        {
+            if (chunk.Count > 0 && length + path.Length > 16_000)
+            {
+                yield return chunk;
+                chunk = [];
+                length = 0;
+            }
+
+            chunk.Add(path);
+            length += path.Length + 14;
+        }
+
+        if (chunk.Count > 0)
+            yield return chunk;
+    }
+
     /// <summary>Whether a repository path is a plain path inside the session's folder (no <c>..</c> to climb out of it).</summary>
     private static bool IsWithinPrefix(string path, string prefix)
     {
@@ -859,3 +950,6 @@ internal sealed record FileContentReadResult(FileContentReadState State, string?
 
     public static FileContentReadResult Available(string content) => new(FileContentReadState.Available, content);
 }
+
+/// <summary>A changed file that holds the searched text, and how many of its lines do (on the side with more).</summary>
+public sealed record ChangeSearchMatch(string Path, int Count);
