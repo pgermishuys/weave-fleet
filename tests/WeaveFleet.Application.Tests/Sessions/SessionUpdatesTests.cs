@@ -246,6 +246,27 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public async Task an_update_for_an_archived_asker_waits_and_is_sent_when_its_next_turn_ends()
+    {
+        _sender.Deliver = false;
+        _sender.AskerArchived = true;
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+
+        // The delegated session finishes after its parent was archived: the parent can't be prompted.
+        await ReplyAsync(Target, parentId: MessageId);
+        await IdleAsync(Target);
+        _sender.Sent.ShouldHaveSingleItem();
+
+        // Restored; its next turn ends, and it hears now.
+        _sender.Deliver = true;
+        _sender.AskerArchived = false;
+        await IdleAsync(Asker);
+
+        _sender.Sent.Count.ShouldBe(2);
+        _sender.Sent[1].TargetId.ShouldBe(Target);
+    }
+
+    [Fact]
     public async Task nobody_hears_about_a_session_they_did_not_ask_about()
     {
         await ReplyAsync(Target, parentId: MessageId);
@@ -351,6 +372,9 @@ public sealed class SessionUpdatesTests
         public List<(SessionUpdateWatch Watch, TurnError? Failure)> Read { get; } = [];
         public List<SessionUpdate> Sent { get; } = [];
         public bool Deliver { get; set; } = true;
+        public bool AskerArchived { get; set; }
+
+        public Task<bool> AskerArchivedAsync(SessionUpdate update, CancellationToken ct) => Task.FromResult(AskerArchived);
 
         public Task<SessionUpdate?> ReadAsync(SessionUpdateWatch watch, TurnError? failure, CancellationToken ct)
         {

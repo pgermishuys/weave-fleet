@@ -37,6 +37,12 @@ public interface ISessionUpdateSender
 
     /// <summary>Prompts the session that asked. False when it wasn't delivered.</summary>
     Task<bool> SendAsync(SessionUpdate update, CancellationToken ct);
+
+    /// <summary>
+    /// Whether the session that asked is archived, which can't be prompted until it's restored. An update it
+    /// couldn't take for that reason is kept for its next turn instead of dropped.
+    /// </summary>
+    Task<bool> AskerArchivedAsync(SessionUpdate update, CancellationToken ct) => Task.FromResult(false);
 }
 
 /// <summary>
@@ -332,11 +338,13 @@ public sealed partial class SessionUpdates(
             _startedByUpdate.Add(askerId);
         }
 
+        var keep = false;
         try
         {
             using var scope = BeginScope(update.UserId);
             if (await scope.Sender.SendAsync(update, CancellationToken.None).ConfigureAwait(false))
                 return;
+            keep = await scope.Sender.AskerArchivedAsync(update, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -344,7 +352,17 @@ public sealed partial class SessionUpdates(
         }
 
         lock (_gate)
+        {
             _startedByUpdate.Remove(askerId);
+
+            // An archived session can't be prompted, and its delegated session may finish after it was archived: the
+            // update waits at the front for the session's next turn once it's restored, rather than being lost.
+            if (keep)
+            {
+                var waiting = _held.TryGetValue(askerId, out var queue) ? queue.ToArray() : [];
+                _held[askerId] = new Queue<SessionUpdate>([update, .. waiting]);
+            }
+        }
     }
 
     /// <summary>A scope that acts as the sessions' owner, as the relay's pump has no user of its own.</summary>
@@ -460,6 +478,9 @@ public sealed class SessionUpdateSender(
             outcome,
             FromOtherMachine: true);
     }
+
+    public async Task<bool> AskerArchivedAsync(SessionUpdate update, CancellationToken ct)
+        => await sessions.GetByIdAsync(update.AskerId).ConfigureAwait(false) is { RetentionStatus: "archived" };
 
     public async Task<bool> SendAsync(SessionUpdate update, CancellationToken ct)
     {
