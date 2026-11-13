@@ -90,6 +90,25 @@ public sealed class TerminalEndpointTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task ClosingWhileOutputIsStillFlowing_StillAnswersTheCloseHandshake()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var sessionId = await CreateSessionAsync();
+        var terminalId = await CreateTerminalAsync(sessionId);
+        // The shell is still printing when the close arrives, so the output pump may be mid-send when it is stopped.
+        // Stopping it used to abort the socket, and the client got a reset instead of the close.
+        for (var i = 0; i < 120; i++)
+        {
+            using var socket = await ConnectAsync(sessionId, terminalId, origin: null);
+            await ReadUntilTextAsync(socket, """{"type":"ready"}""");
+            await SendAsync(socket, $"echo closing-{i}\r");
+            await Task.Delay(Random.Shared.Next(0, 6));
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", default);
+            socket.State.ShouldBe(WebSocketState.Closed);
+        }
+    }
+
+    [Fact]
     public async Task APageFromAnotherOrigin_CantAttach()
     {
         var sessionId = await CreateSessionAsync();

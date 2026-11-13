@@ -68,9 +68,11 @@ internal static class TerminalSocket
         }
 
         // Only the output pump sends from here, so sends never overlap. Cancelling a pending receive aborts a
-        // WebSocket, so the input loop is never cancelled: it ends when the client's close arrives.
+        // WebSocket, so the input loop is never cancelled: it ends when the client's close arrives. Cancelling a
+        // send in flight aborts it too (the client sees a reset instead of the close handshake), so stopping the
+        // pump only cancels its wait for the next frame; its sends end with the request.
         using var stopOutput = CancellationTokenSource.CreateLinkedTokenSource(aborted);
-        var output = PumpOutputAsync(socket, attachment, stopOutput.Token);
+        var output = PumpOutputAsync(socket, attachment, stopOutput.Token, aborted);
         var input = ReceiveInputAsync(socket, attachment, aborted);
 
         if (await Task.WhenAny(output, input) == input)
@@ -117,11 +119,12 @@ internal static class TerminalSocket
     private static async Task<(WebSocketCloseStatus Status, string Reason)> PumpOutputAsync(
         WebSocket socket,
         TerminalAttachment attachment,
+        CancellationToken stop,
         CancellationToken ct)
     {
         try
         {
-            await foreach (var frame in attachment.Frames.ReadAllAsync(ct))
+            await foreach (var frame in attachment.Frames.ReadAllAsync(stop))
             {
                 switch (frame.Kind)
                 {
