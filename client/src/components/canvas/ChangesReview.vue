@@ -866,6 +866,14 @@ function onCodeScroll(event: Event): void {
             class="rfile__note"
           >
             Couldn't load this diff.
+            <button
+              type="button"
+              class="rfile__retry"
+              data-testid="review-file-retry"
+              @click="reload(file.file, versionOf(file))"
+            >
+              Try again
+            </button>
           </p>
           <p
             v-else-if="views[file.file]?.placeholder"
@@ -1411,6 +1419,16 @@ function onCodeScroll(event: Event): void {
   padding: 12px 14px;
   color: var(--muted);
   font-size: 12.5px;
+}
+
+.rfile__retry {
+  margin-left: 8px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }
 
 .rfile__rendered {

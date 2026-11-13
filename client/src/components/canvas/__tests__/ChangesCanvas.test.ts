@@ -20,6 +20,8 @@ const sharedDiffs = {
   diffs: ref<FileDiffItem[]>([]),
   base: ref<SessionDiffBase | null>(null),
   refusal: ref<{ message: string; fixCommand: string } | null>(null),
+  error: ref<string | undefined>(undefined),
+  fetchDiffs: vi.fn(async () => {}),
   byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
 
@@ -40,6 +42,19 @@ describe("ChangesCanvas", () => {
     sharedDiffs.diffs.value = [];
     sharedDiffs.base.value = null;
     sharedDiffs.hasLoaded.value = true;
+    sharedDiffs.error.value = undefined;
+    sharedDiffs.fetchDiffs.mockClear();
+  });
+
+  it("says the changes could not be loaded, with Try again, instead of No changes when /diffs fails", async () => {
+    sharedDiffs.error.value = "HTTP 500";
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("No changes");
+    expect(wrapper.get('[data-testid="changes-load-failed"]').text()).toContain("Couldn't load the changes");
+    await wrapper.get('[data-testid="changes-retry"]').trigger("click");
+    expect(sharedDiffs.fetchDiffs).toHaveBeenCalledTimes(1);
   });
 
   it("says_why_when_git_refuses_the_folder_and_shows_the_fix_command", () => {

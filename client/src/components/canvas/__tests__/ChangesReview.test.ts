@@ -93,6 +93,24 @@ describe("ChangesReview", () => {
       respond(decodeURIComponent(new URL(url, "http://x").searchParams.get("path") ?? "")));
   });
 
+  it("offers Try again on a file whose diff failed to load, and draws it when the retry answers", async () => {
+    let failing = true;
+    fetchMock.mockImplementation(async (_machine: unknown, url: string) => {
+      const path = decodeURIComponent(new URL(url, "http://x").searchParams.get("path") ?? "");
+      return failing && path === "src/notes.ts" ? new Response("", { status: 502 }) : respond(path);
+    });
+    const wrapper = mountReview();
+    await flushPromises();
+
+    expect(notesSection(wrapper).text()).toContain("Couldn't load this diff");
+    failing = false;
+    await notesSection(wrapper).get("[data-testid='review-file-retry']").trigger("click");
+    await flushPromises();
+
+    expect(notesSection(wrapper).text()).not.toContain("Couldn't load");
+    expect(notesSection(wrapper).text()).toContain("tags: string[];");
+  });
+
   it("shows one section per file with totals, hunks, and folded unchanged runs", async () => {
     const wrapper = mountReview();
     await flushPromises();
