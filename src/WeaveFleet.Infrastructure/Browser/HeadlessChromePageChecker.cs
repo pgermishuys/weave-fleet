@@ -133,13 +133,13 @@ public sealed class HeadlessChromePageChecker : IPageChecker, IAsyncDisposable
             {
                 // A browser that died mid-check shouldn't poison the next call.
                 await _host.ResetAsync(cdp);
-                LogFailed(_logger, error.Message, null);
+                LogFailed(_logger, $"{error.GetType().Name}: {error.Message}", error);
                 return PageCheckOutcome.Fail(error.Message);
             }
             catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
             {
                 // A reply in a shape the check didn't expect: the page is still shown, just unchecked.
-                LogFailed(_logger, error.Message, null);
+                LogFailed(_logger, $"{error.GetType().Name}: {error.Message}", error);
                 return PageCheckOutcome.Fail("the browser's answer about the page didn't make sense");
             }
         }
