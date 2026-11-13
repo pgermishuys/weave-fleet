@@ -85,6 +85,15 @@ jobs:
           # would get no annotated check on the PR.
           use-actions-summary: false
 
+      - name: Complete the result check run if the reporter left it open
+        if: always()
+        uses: ./.github/actions/complete-check-run
+        with:
+          name: Unit Test Results
+          job-status: ${{ job.status }}
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ github.token }}
+
   # ── .NET live tests (real OpenCode / OpenCode 2) ─────────────────────────
   live:
     name: .NET Live Tests
@@ -250,6 +259,15 @@ jobs:
           # would get no annotated check on the PR.
           use-actions-summary: false
 
+      - name: Complete the result check run if the reporter left it open
+        if: always()
+        uses: ./.github/actions/complete-check-run
+        with:
+          name: Live Test Results
+          job-status: ${{ job.status }}
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ github.token }}
+
   # ── Frontend checks (lint, typecheck) ───────────────────────────────────
   client-checks:
     name: Client checks
@@ -339,6 +357,15 @@ jobs:
           # Its java-junit parser can't read vitest's stack lines, so it would pin the failure to the XML file. The
           # github-actions reporter above annotates the failing test's own line instead.
           max-annotations: 0
+
+      - name: Complete the result check run if the reporter left it open
+        if: always()
+        uses: ./.github/actions/complete-check-run
+        with:
+          name: Client Test Results (${{ matrix.shard }}/2)
+          job-status: ${{ job.status }}
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ github.token }}
 
   # ── Mod host (mods/host: Bun + TypeScript) ───────────────────────────────
   mods-host:
@@ -700,6 +727,15 @@ jobs:
           # The default (true) only writes the job summary and never creates this check run, so a failing test
           # would get no annotated check on the PR.
           use-actions-summary: false
+
+      - name: Complete the result check run if the reporter left it open
+        if: always()
+        uses: ./.github/actions/complete-check-run
+        with:
+          name: E2E Results
+          job-status: ${{ job.status }}
+          sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          token: ${{ github.token }}
 
   # ── AOT publish validation ────────────────────────────────────────────────
   aot:

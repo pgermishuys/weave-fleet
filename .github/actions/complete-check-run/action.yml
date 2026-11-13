@@ -1,0 +1,51 @@
+name: Complete check run
+description: >
+  Ends any check run of the given name that dorny/test-reporter left in_progress. The reporter creates the check run,
+  then updates it by id about 0.4 s later, and that update often 404s (GitHub's check-runs API lags behind the create).
+  Its step is continue-on-error, so the run was never completed and sat in_progress forever.
+inputs:
+  name:
+    description: The check run name given to dorny/test-reporter.
+    required: true
+  job-status:
+    description: The job's status (job.status), mapped to the conclusion of a run this step has to complete.
+    required: true
+  sha:
+    description: The commit the check run was created on.
+    required: true
+  token:
+    description: A token with checks write.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        CHECK_NAME: ${{ inputs.name }}
+        JOB_STATUS: ${{ inputs.job-status }}
+        SHA: ${{ inputs.sha }}
+        REPO: ${{ github.repository }}
+        JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        case "$JOB_STATUS" in
+          success) conclusion=success ;;
+          cancelled) conclusion=cancelled ;;
+          *) conclusion=failure ;;
+        esac
+        # The create is already visible to the list by now (the reporter's own update ran before this step).
+        ids=$(gh api -X GET "repos/$REPO/commits/$SHA/check-runs" -f check_name="$CHECK_NAME" -f status=in_progress \
+          --paginate -q '.check_runs[] | select(.app.slug == "github-actions") | .id')
+        for id in $ids; do
+          echo "Check run $id ($CHECK_NAME) was left in_progress by the reporter: completing it as $conclusion"
+          ok=
+          for attempt in 1 2 3 4 5; do
+            if gh api -X PATCH "repos/$REPO/check-runs/$id" -f status=completed -f conclusion="$conclusion" \
+              -f "output[title]=$CHECK_NAME" \
+              -f "output[summary]=The test reporter could not publish its report on this check run (GitHub's API returned 404 right after creating it). The job's tests ended $conclusion; see $JOB_URL." >/dev/null; then
+              ok=1; break
+            fi
+            sleep $((attempt * 2))
+          done
+          [ -n "$ok" ] || echo "::warning::Could not complete check run $id ($CHECK_NAME)"
+        done
