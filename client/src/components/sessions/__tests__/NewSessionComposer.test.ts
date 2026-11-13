@@ -914,7 +914,7 @@ describe("NewSessionComposer", () => {
       URL.revokeObjectURL = vi.fn();
       rememberFolder({ kind: "repository", path: rocket.path });
       const view = await mountComposer();
-      const image = new File([new Uint8Array(8)], "login-error.png", { type: "image/png" });
+      const image = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], "login-error.png", { type: "image/png" });
 
       await type(view, "What is wrong here?");
       await view.get("[data-testid='new-session-message']").trigger("paste", { clipboardData: { files: [image], getData: () => "" } });
@@ -928,7 +928,7 @@ describe("NewSessionComposer", () => {
     it("says so when the harness can't take images", async () => {
       rememberFolder({ kind: "repository", path: rocket.path });
       const view = await mountComposer();
-      const image = new File([new Uint8Array(8)], "login-error.png", { type: "image/png" });
+      const image = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], "login-error.png", { type: "image/png" });
 
       await view.get("[data-testid='new-session-message']").trigger("paste", { clipboardData: { files: [image], getData: () => "" } });
 
