@@ -230,6 +230,28 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     }
 
     /// <summary>
+    /// <see cref="LoadLocationAsync"/>, then the rest of the folder's <see cref="LocationSettleTime"/>. V2 sends its catalog
+    /// events a first time when it has read a folder's config and refreshes them once more a moment later (its
+    /// providers, for one, pick up their sign-in's own endpoint then). A model request that goes out in between can
+    /// reach the provider's wrong address and fail at once with HTTP 404 (provider.invalid-request). So a prompt
+    /// waits out the settle time of a folder that has only just loaded; a folder loaded earlier isn't waited for.
+    /// </summary>
+    public async Task SettleLocationAsync(string directory, CancellationToken ct)
+    {
+        await LoadLocationAsync(directory, ct).ConfigureAwait(false);
+        if (!_loadedAt.TryGetValue(directory, out var loadedAt))
+            return;
+
+        var remaining = LocationSettleTime - Time.GetElapsedTime(loadedAt, Time.GetTimestamp());
+        if (remaining > TimeSpan.Zero)
+            await Task.Delay(remaining, Time, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Marks <paramref name="directory"/> as loaded <paramref name="age"/> ago. For tests that need a folder that is no longer new.</summary>
+    internal void MarkLoadedAgo(string directory, TimeSpan age)
+        => _loadedAt[directory] = Time.GetTimestamp() - (long)(age.TotalSeconds * Time.TimestampFrequency);
+
+    /// <summary>
     /// Notes a folder's catalog events; once V2 has sent them all, the folder counts as loaded. Returns whether this
     /// event finished loading it.
     /// </summary>

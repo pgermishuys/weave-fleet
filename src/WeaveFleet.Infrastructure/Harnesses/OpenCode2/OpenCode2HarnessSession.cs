@@ -1010,6 +1010,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         string? effort,
         CancellationToken ct)
     {
+        // A session in a folder V2 has only just loaded (a quick chat's, always) meets V2 mid-refresh otherwise.
+        await server.SettleLocationAsync(_context.WorkingDirectory, ct).ConfigureAwait(false);
+
         if (!string.IsNullOrWhiteSpace(agent) && agent != _agent)
         {
             await server.Client.SwitchAgentAsync(ResumeToken, agent, ct).ConfigureAwait(false);
