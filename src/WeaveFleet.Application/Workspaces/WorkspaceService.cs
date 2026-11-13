@@ -448,15 +448,22 @@ public sealed partial class WorkspaceService(
         // until pruned, which would make `git worktree add` refuse it.
         await TryRunGitAsync(sourceDir, "worktree", "prune");
 
-        var checkedOutBranches = await GetCheckedOutBranchesAsync(sourceDir);
+        var caseInsensitive = BranchNamesAreCaseInsensitive;
+        var checkedOutBranches = BranchSet(await GetCheckedOutBranchesAsync(sourceDir), caseInsensitive);
+        // Where branch names live in files (macOS, Windows), "Fix/Login" and "fix/login" are one ref to git even
+        // though `show-ref` of one can miss the other when it is packed; the list of branches settles it either way.
+        var localBranches = caseInsensitive ? BranchSet(await ListLocalBranchesAsync(sourceDir), true) : null;
+        async Task<bool> BranchExistsAsync(string name)
+            => (localBranches?.Contains(name) ?? false) || await RefExistsAsync(sourceDir, $"refs/heads/{name}");
+
         var reuseExistingBranch = baseBranch is null
             && !checkedOutBranches.Contains(requestedBranch)
-            && await RefExistsAsync(sourceDir, $"refs/heads/{requestedBranch}");
+            && await BranchExistsAsync(requestedBranch);
 
         var branchName = requestedBranch;
         if (!reuseExistingBranch)
         {
-            for (var n = 2; checkedOutBranches.Contains(branchName) || await RefExistsAsync(sourceDir, $"refs/heads/{branchName}"); n++)
+            for (var n = 2; checkedOutBranches.Contains(branchName) || await BranchExistsAsync(branchName); n++)
                 branchName = $"{requestedBranch}-{n}";
         }
 
@@ -635,14 +642,24 @@ public sealed partial class WorkspaceService(
         return null;
     }
 
-    private static async Task<HashSet<string>> GetCheckedOutBranchesAsync(string sourceDir)
+    /// <summary>Whether this file system folds case in ref and folder names (Windows, macOS).</summary>
+    internal static bool BranchNamesAreCaseInsensitive => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
+    /// <summary>Branch names compared the way the file system will: <c>Fix/Login</c> is <c>fix/login</c> where case folds.</summary>
+    internal static HashSet<string> BranchSet(IEnumerable<string> names, bool caseInsensitive)
+        => names.ToHashSet(caseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    private static async Task<IEnumerable<string>> ListLocalBranchesAsync(string sourceDir)
+        => ParseLines(await RunGitAsync(sourceDir, "for-each-ref", "--format=%(refname:short)", "refs/heads"));
+
+    private static async Task<IEnumerable<string>> GetCheckedOutBranchesAsync(string sourceDir)
     {
         const string branchPrefix = "branch refs/heads/";
         var porcelain = await RunGitAsync(sourceDir, "worktree", "list", "--porcelain");
         return ParseLines(porcelain)
             .Where(line => line.StartsWith(branchPrefix, StringComparison.Ordinal))
             .Select(line => line[branchPrefix.Length..])
-            .ToHashSet(StringComparer.Ordinal);
+            .ToList();
     }
 
     private static async Task<bool> RefExistsAsync(string sourceDir, string refName) =>
