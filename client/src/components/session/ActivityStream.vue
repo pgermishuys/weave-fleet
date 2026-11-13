@@ -16,6 +16,7 @@ import { COMPOSER_SELECTOR, type FindUnit } from "@/lib/conversation-find";
 import { useFileStats, useTurnStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
+import { turnStartedAt as startOfTurn } from "@/lib/running-work";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
 import PagePickCard from "@/components/session/PagePickCard.vue";
@@ -353,15 +354,7 @@ const sessionRetrying = computed(() => {
   const item = sessionsStore.sessionById(props.sessionId);
   return item?.activityStatus === "retry" ? sessionRetry(item) : null;
 });
-const turnStartedAt = computed(() => {
-  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
-    const message = messages.value[index];
-    if (message.role === "user") {
-      return message.createdAt ?? null;
-    }
-  }
-  return null;
-});
+const turnStartedAt = computed(() => startOfTurn(messages.value));
 
 // Reads the agent made in separate steps, with nothing between them, are one row.
 const mergedMessages = computed(() => mergeReadRuns(messages.value));
