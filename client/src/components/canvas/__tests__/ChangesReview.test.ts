@@ -121,6 +121,24 @@ describe("ChangesReview", () => {
     expect(wrapper.findAll(".rline").length).toBeGreaterThan(before);
   });
 
+  it("keeps line numbers in place only in a hunk scrolled sideways", async () => {
+    // A sticky number on every line made each repaint of the page (every keystroke in the composer beside it) lay out
+    // and hit-test thousands of sticky boxes. Unscrolled, a static number sits exactly where a sticky one would.
+    const wrapper = mountReview();
+    await flushPromises();
+    const scroller = wrapper.get(".rscroll");
+    expect(wrapper.findAll(".rscroll--scrolled")).toHaveLength(0);
+
+    scroller.element.scrollLeft = 40;
+    await scroller.trigger("scroll");
+    expect(scroller.classes()).toContain("rscroll--scrolled");
+    expect(wrapper.findAll(".rscroll--scrolled")).toHaveLength(1);
+
+    scroller.element.scrollLeft = 0;
+    await scroller.trigger("scroll");
+    expect(scroller.classes()).not.toContain("rscroll--scrolled");
+  });
+
   it("collapses a file section when its header is clicked", async () => {
     const wrapper = mountReview();
     await flushPromises();
