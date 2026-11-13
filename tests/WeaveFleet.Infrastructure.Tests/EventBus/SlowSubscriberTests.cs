@@ -53,10 +53,12 @@ public sealed class SlowSubscriberTests
         });
         while (bus.SubscriberCount == 0) await Task.Delay(5, cts.Token);
 
+        // The writer never gets more than 50 events ahead of the reader (half the limit), however slow the machine is,
+        // so "keeps up" is a fact of the test, not a matter of timing.
         for (var i = 0; i < 5_000; i++)
         {
+            while (i - Volatile.Read(ref received) >= 50) await Task.Yield();
             await bus.BroadcastAsync("session:s1", "message.part.delta", Payload);
-            if (i % 50 == 0) await Task.Delay(1, cts.Token);
         }
 
         await reader;
