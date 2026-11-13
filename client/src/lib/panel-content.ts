@@ -13,6 +13,8 @@ export interface PanelContentState {
   progress: boolean;
   context: boolean;
   agents: boolean;
+  /** /diffs failed: Changes has an error and Try again to show. */
+  changesFailed?: boolean;
 }
 
 /**
@@ -20,5 +22,5 @@ export interface PanelContentState {
  * default; anything the user should see (changes, a tab the agent shows, a todo list, links, running agents) opens it.
  */
 export function panelHasContent(state: PanelContentState): boolean {
-  return state.changedFiles > 0 || hasExtraTabs(state.canvases) || state.progress || state.context || state.agents;
+  return state.changedFiles > 0 || Boolean(state.changesFailed) || hasExtraTabs(state.canvases) || state.progress || state.context || state.agents;
 }

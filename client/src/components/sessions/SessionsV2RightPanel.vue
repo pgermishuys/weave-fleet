@@ -68,17 +68,18 @@ const sharedDiffs: UseDiffsResult = {
   hasLoaded: computed(() => activeDiffs.value.hasLoaded.value),
   isStale: computed(() => activeDiffs.value.isStale.value),
   error: computed(() => activeDiffs.value.error.value),
-  fetchDiffs: () => activeDiffs.value.fetchDiffs(),
+  fetchDiffs: (options) => activeDiffs.value.fetchDiffs(options),
   markStale: () => activeDiffs.value.markStale(),
 };
 provide('sharedDiffs', sharedDiffs);
 
-// Watch session ID and fetch diffs when it changes to a non-null value
+// Watch session ID and fetch diffs when it changes to a non-null value. The session's page asks for the same list as it
+// opens: the two share one request.
 watch(
   activeSessionId,
   (sessionId) => {
     if (sessionId) {
-      void sharedDiffs.fetchDiffs();
+      void sharedDiffs.fetchDiffs({ join: true });
     }
   },
   { immediate: true },
@@ -152,10 +153,10 @@ watch(
 // until the agent first gives it something; then it opens on its own.
 const sessionTabs = computed(() => (activeSessionId.value ? canvasesStore.sessionCanvases(activeSessionId.value).canvases : []));
 watch(
-  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, sessionTabs, hasProgress, hasContext, hasAgents],
-  ([sessionId, loaded, changedFiles, canvases, progress, context, agents]) => {
+  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, sessionTabs, hasProgress, hasContext, hasAgents, () => Boolean(sharedDiffs.error.value)],
+  ([sessionId, loaded, changedFiles, canvases, progress, context, agents, changesFailed]) => {
     if (sessionId && loaded) {
-      sidebarStore.noteSessionContent(sessionId, panelHasContent({ changedFiles, canvases, progress, context, agents }));
+      sidebarStore.noteSessionContent(sessionId, panelHasContent({ changedFiles, canvases, progress, context, agents, changesFailed }));
     }
   },
   { immediate: true },

@@ -23,6 +23,18 @@ function copyFixCommand(): void {
 const baseLabel = computed(() => diffBaseLabel(base.value));
 
 const hasChanges = computed(() => (sharedDiffs?.diffs.value.length ?? 0) > 0);
+// A /diffs that failed (an HTTP error, the machine out of reach) isn't "no changes": say so, and offer to ask again.
+const loadError = computed(() => sharedDiffs?.error?.value ?? null);
+const retrying = shallowRef(false);
+async function retry(): Promise<void> {
+  if (retrying.value) return;
+  retrying.value = true;
+  try {
+    await sharedDiffs?.fetchDiffs();
+  } finally {
+    retrying.value = false;
+  }
+}
 </script>
 
 <template>
@@ -53,6 +65,27 @@ const hasChanges = computed(() => (sharedDiffs?.diffs.value.length ?? 0) > 0);
     >
       Loading changes…
     </p>
+    <div
+      v-else-if="!hasChanges && loadError"
+      class="changes-canvas__refused"
+      data-testid="changes-load-failed"
+    >
+      <p class="changes-canvas__refused-title">
+        Couldn't load the changes.
+      </p>
+      <p class="changes-canvas__refused-hint">
+        {{ loadError }}
+      </p>
+      <button
+        type="button"
+        class="changes-canvas__refused-copy"
+        data-testid="changes-retry"
+        :disabled="retrying"
+        @click="retry"
+      >
+        {{ retrying ? "Trying…" : "Try again" }}
+      </button>
+    </div>
     <div
       v-else-if="!hasChanges && refusal"
       class="changes-canvas__refused"

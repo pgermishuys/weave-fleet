@@ -26,6 +26,35 @@ function remember(key: string, item: FileDiffItem): void {
 }
 
 /**
+ * At most this many file diffs are asked of one machine at a time. A browser opens six connections to a server, and
+ * a long list (find loads every file) fired at once held up everything else the app asked for (switching session,
+ * sending a message) until the last diff came back.
+ */
+const MAX_IN_FLIGHT = 4;
+const inFlight = new Map<string, number>();
+const queued = new Map<string, Array<() => void>>();
+
+async function withSlot<T>(machineKey: string, run: () => Promise<T>): Promise<T> {
+  if ((inFlight.get(machineKey) ?? 0) >= MAX_IN_FLIGHT) {
+    // Woken with the slot of a fetch that finished: the count stays as it is.
+    await new Promise<void>((resolve) => {
+      const queue = queued.get(machineKey) ?? [];
+      queue.push(resolve);
+      queued.set(machineKey, queue);
+    });
+  } else {
+    inFlight.set(machineKey, (inFlight.get(machineKey) ?? 0) + 1);
+  }
+  try {
+    return await run();
+  } finally {
+    const next = queued.get(machineKey)?.shift();
+    if (next) next();
+    else inFlight.set(machineKey, (inFlight.get(machineKey) ?? 1) - 1);
+  }
+}
+
+/**
  * The contents (before and after) of the files Changes shows, fetched one file at a time from /diffs/file as each
  * section opens. An entry is replaced when its file's counts change (the agent edited it again) or on `reload`.
  */
@@ -53,11 +82,13 @@ export function useFileDiffContents(
       set(path, cached ? { status: "ready", item: cached } : { status: "loading" });
     }
     try {
-      const response = await apiFetchOn(
-        machine.connection,
-        `/api/sessions/${encodeURIComponent(id)}/diffs/file?path=${encodeURIComponent(path)}`,
+      const response = await withSlot(machine.key, async () =>
+        // Replaced while it waited (the agent edited the file again): the newer request asks instead.
+        versions.get(path) !== version
+          ? null
+          : apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(id)}/diffs/file?path=${encodeURIComponent(path)}`),
       );
-      if (versions.get(path) !== version) return;
+      if (!response || versions.get(path) !== version) return;
       if (!response.ok) {
         set(path, { status: "error", message: `HTTP ${response.status}` });
         return;

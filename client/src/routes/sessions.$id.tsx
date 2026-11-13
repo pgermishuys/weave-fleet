@@ -182,7 +182,8 @@ const SessionDetailPage = defineComponent({
       () => params.value.id,
       async (sessionId) => {
         if (sessionId) {
-          await diffState.fetchDiffs();
+          // The right panel asks for the same list as the session opens: the two share one request.
+          await diffState.fetchDiffs({ join: true });
         }
       },
       { immediate: true },

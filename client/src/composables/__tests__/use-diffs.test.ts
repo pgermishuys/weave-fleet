@@ -371,4 +371,32 @@ describe("useDiffs", () => {
       vi.useRealTimers();
     }
   });
+
+  it("asks once when the session's page and the right panel both open the same session, but afresh after an edit", async () => {
+    // Opening a session ran /diffs twice (the panel's own and the page's), each a full git diff of the repository.
+    let resolveFetch: (value: unknown) => void = () => {};
+    apiFetchMock.mockImplementation(() => new Promise((resolve) => { resolveFetch = resolve; }));
+    const { useDiffs } = await import("@/composables/use-diffs");
+    const page = await mountComposable(() => useDiffs(() => "session-join"));
+    const panel = await mountComposable(() => useDiffs(() => "session-join"));
+
+    const first = page.result.fetchDiffs({ join: true });
+    const second = panel.result.fetchDiffs({ join: true });
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+    resolveFetch({ data: { diffs: [{ file: "a.ts", status: "modified", additions: 1, deletions: 0 }], available: true }, error: undefined, response: createJsonResponse({}) });
+    await Promise.all([first, second]);
+    expect(page.result.diffs.value).toHaveLength(1);
+    expect(panel.result.diffs.value).toHaveLength(1);
+
+    // A fetch that isn't joining (after a revert or an edit) never reuses an answer that may predate the change.
+    const again = page.result.fetchDiffs({ join: true });
+    const fresh = panel.result.fetchDiffs();
+    expect(apiFetchMock).toHaveBeenCalledTimes(3);
+    resolveFetch({ data: { diffs: [], available: true }, error: undefined, response: createJsonResponse({}) });
+    void again;
+    void fresh;
+
+    page.wrapper.unmount();
+    panel.wrapper.unmount();
+  });
 });

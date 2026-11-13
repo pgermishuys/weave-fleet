@@ -642,6 +642,49 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task compute_file_diff_with_content_asks_git_about_that_file_only_not_the_whole_repository()
+    {
+        // Changes asks for each file it draws: listing every change in the repository for each one cost seconds a file
+        // in a big repository, so the panel's first diffs took several seconds to come.
+        var tempRoot = CreateTempDirectory();
+        var runner = new RecordingGitRunner(
+            new GitCommandResult(0, "1\t1\tsrc/b.cs\n", string.Empty),
+            new GitCommandResult(0, "M\tsrc/b.cs\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
+            new GitCommandResult(0, "old b\n", string.Empty));
+        var service = new GitDiffService(runner);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(tempRoot, "src"));
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "src", "b.cs"), "new b\n");
+
+            var result = await service.ComputeFileDiffWithContentAsync(tempRoot, "baseline", "src", "src/b.cs", CancellationToken.None);
+
+            result.ShouldNotBeNull().Status.ShouldBe("modified");
+            var listings = runner.Calls.Where(call => call.Arguments[0] is "diff" or "ls-files").ToList();
+            listings.Count.ShouldBe(3);
+            listings.Select(call => call.Arguments[^1]).ShouldAllBe(pathspec => pathspec == ":(literal)src/b.cs");
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task compute_file_diff_with_content_returns_null_for_a_path_outside_the_session_folder_without_running_git()
+    {
+        var runner = new RecordingGitRunner();
+        var service = new GitDiffService(runner);
+
+        (await service.ComputeFileDiffWithContentAsync("/repo/root", "baseline", "app", "other/secrets.txt", CancellationToken.None)).ShouldBeNull();
+        (await service.ComputeFileDiffWithContentAsync("/repo/root", "baseline", "app", "app/../other/secrets.txt", CancellationToken.None)).ShouldBeNull();
+
+        runner.Calls.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task compute_file_diff_with_content_returns_null_for_a_file_that_has_not_changed()
     {
         var runner = new RecordingGitRunner(

@@ -1,0 +1,12 @@
+{
+  "name": "changes-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun run setup.ts",
+    "bench": "bun run bench.ts"
+  },
+  "dependencies": {
+    "playwright-core": "1.51.0"
+  }
+}

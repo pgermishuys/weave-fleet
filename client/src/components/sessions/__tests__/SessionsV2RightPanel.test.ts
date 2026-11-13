@@ -57,6 +57,25 @@ describe("SessionsV2RightPanel diffs", () => {
     wrapper.unmount();
   });
 
+  it("doesn't take a failed /diffs for an empty session, so the panel isn't shut over the error", async () => {
+    const { useSidebarStore } = await import("@/stores/sidebar");
+    const sidebar = useSidebarStore();
+    const note = vi.spyOn(sidebar, "noteSessionContent");
+    const routeDiffs = fakeDiffs();
+    (routeDiffs.hasLoaded as unknown as { value: boolean }).value = true;
+    (routeDiffs.error as unknown as { value: string }).value = "HTTP 502";
+    const Parent = defineComponent({
+      setup() {
+        provideSessionDiffsContext(routeDiffs);
+        return () => h(SessionsV2RightPanel, { sessionId: "s1" });
+      },
+    });
+    const wrapper = mount(Parent, { global: { stubs } });
+
+    expect(note).not.toHaveBeenCalledWith("s1", false);
+    wrapper.unmount();
+  });
+
   it("runs its own diffs instance when no route holds one", () => {
     mount(SessionsV2RightPanel, { props: { sessionId: "s1" }, global: { stubs } });
     const getter = useDiffsMock.mock.calls[0]![0] as () => string | null;

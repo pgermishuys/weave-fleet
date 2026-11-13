@@ -32,6 +32,32 @@ describe("useFileDiffContents", () => {
     expect(second.entries.value["src/a.ts"]?.status).toBe("ready");
   });
 
+  it("asks for at most four files at once, so a long list (find loads every file) can't hold up the app's other requests", async () => {
+    // A browser opens six connections to a server: hundreds of file diffs fired together queued everything else
+    // (switching session, sending a message) behind them for over a minute.
+    const other = { ...machine, key: "limit-test" } as MachineTarget;
+    const waiting: Array<() => void> = [];
+    apiFetchOnMock.mockImplementation(() => new Promise<Response>((resolve) => waiting.push(() => resolve(answer(item)))));
+    const contents = useFileDiffContents(other, () => "s-many");
+    for (let i = 0; i < 10; i++) contents.load(`src/f${i}.ts`, "modified:2:1");
+    await settle();
+    expect(apiFetchOnMock).toHaveBeenCalledTimes(4);
+    expect(contents.entries.value["src/f9.ts"]?.status).toBe("loading");
+
+    waiting.shift()!();
+    await settle();
+    await settle();
+    expect(apiFetchOnMock).toHaveBeenCalledTimes(5);
+
+    while (waiting.length) {
+      waiting.shift()!();
+      await settle();
+      await settle();
+    }
+    expect(apiFetchOnMock).toHaveBeenCalledTimes(10);
+    expect(Object.values(contents.entries.value).every((entry) => entry.status === "ready")).toBe(true);
+  });
+
   it("doesn't show one session's file in another", () => {
     apiFetchOnMock.mockReturnValue(new Promise(() => {}));
     const other = useFileDiffContents(machine, () => "s-other");

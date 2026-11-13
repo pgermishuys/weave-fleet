@@ -21,9 +21,17 @@ export interface UseDiffsResult {
   hasLoaded: Readonly<ShallowRef<boolean>>;
   isStale: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
-  fetchDiffs: () => Promise<void>;
+  /**
+   * Asks /diffs again. `join`: share a request for this session that is already on its way (opening a session, when the
+   * page and the right panel both ask); leave it off after an edit or a revert, so the answer can't predate the change.
+   */
+  fetchDiffs: (options?: { join?: boolean }) => Promise<void>;
   markStale: () => void;
 }
+
+type DiffsAnswer = { data?: unknown; error?: unknown; response: Response };
+/** /diffs requests on their way, by machine and session, for callers that join one. */
+const pendingLists = new Map<string, Promise<DiffsAnswer>>();
 
 function listKey(items: readonly FileDiffItem[]): string {
   return items.map((item) => `${item.file}\u0000${item.status}\u0000${item.additions}\u0000${item.deletions}`).join("\n");
@@ -60,7 +68,7 @@ export function useDiffs(
   let requestId = 0;
   let debounceTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
-  async function fetchDiffs(): Promise<void> {
+  async function fetchDiffs(options: { join?: boolean } = {}): Promise<void> {
     const activeSessionId = currentSessionId.value;
 
     if (!activeSessionId) {
@@ -80,11 +88,22 @@ export function useDiffs(
     error.value = undefined;
 
     try {
-      const { data, error: apiError, response } = await machine.api.GET("/api/sessions/{id}/diffs", {
-        params: {
-          path: { id: activeSessionId },
-        },
-      });
+      const key = `${machine.key}\u0000${activeSessionId}`;
+      let pending = options.join ? pendingLists.get(key) : undefined;
+      if (!pending) {
+        const request: Promise<DiffsAnswer> = machine.api.GET("/api/sessions/{id}/diffs", {
+          params: {
+            path: { id: activeSessionId },
+          },
+        });
+        pending = request;
+        pendingLists.set(key, request);
+        const forget = () => {
+          if (pendingLists.get(key) === request) pendingLists.delete(key);
+        };
+        request.then(forget, forget);
+      }
+      const { data, error: apiError, response } = await pending;
 
       if (apiError || !response.ok) {
         throw new Error(`HTTP ${response.status}`);

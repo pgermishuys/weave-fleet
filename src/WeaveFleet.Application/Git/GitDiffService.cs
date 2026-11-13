@@ -247,7 +247,8 @@ public sealed partial class GitDiffService
 
     /// <summary>
     /// One changed file with its baseline and working-tree contents, or null when <paramref name="path"/> isn't
-    /// among the session's changes.
+    /// among the session's changes. Git is asked about that path only: Changes asks for each file it draws, and listing
+    /// every change in the repository again for each one takes seconds a file in a big repository.
     /// </summary>
     public async Task<FileDiffContent?> ComputeFileDiffWithContentAsync(
         string repoRoot,
@@ -256,11 +257,24 @@ public sealed partial class GitDiffService
         string path,
         CancellationToken ct)
     {
-        var result = await ComputeDiffsWithAvailabilityAsync(repoRoot, baselineRef, workspacePrefix, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(baselineRef) || !IsWithinPrefix(path, NormalizeWorkspacePrefix(workspacePrefix)))
+            return null;
+
+        var result = await ComputeDiffsWithAvailabilityAsync(repoRoot, baselineRef, $":(literal){path}", ct).ConfigureAwait(false);
         var summary = result.Diffs.FirstOrDefault(diff => string.Equals(diff.Path, path, StringComparison.Ordinal));
         return summary is null
             ? null
             : await ToFileDiffContentAsync(repoRoot, baselineRef, summary, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Whether a repository path is a plain path inside the session's folder (no <c>..</c> to climb out of it).</summary>
+    private static bool IsWithinPrefix(string path, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path.Contains('\\', StringComparison.Ordinal) || path.StartsWith('/') || path.StartsWith(':'))
+            return false;
+        if (path.Split('/').Any(segment => segment is "" or "." or ".."))
+            return false;
+        return prefix.Length == 0 || path.StartsWith(prefix + "/", StringComparison.Ordinal);
     }
 
     public Task<string?> GetFileContentAsync(string repoRoot, string @ref, string path) =>
