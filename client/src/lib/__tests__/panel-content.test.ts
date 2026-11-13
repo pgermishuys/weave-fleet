@@ -10,6 +10,10 @@ const base: PanelContentState = {
 };
 
 describe("panelHasContent", () => {
+  it("has something to show when the changes failed to load: the panel opens on the error and Try again, not shut as if empty", () => {
+    expect(panelHasContent({ ...base, changesFailed: true })).toBe(true);
+  });
+
   it("is empty for a fresh session", () => {
     expect(panelHasContent(base)).toBe(false);
   });

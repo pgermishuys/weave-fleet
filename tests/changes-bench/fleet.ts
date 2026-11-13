@@ -48,6 +48,8 @@ if (command === "start") {
     FLEET_HARNESS: "test",
     GIT_TRACE2_EVENT: join(home, "git-trace2.jsonl"),
     GIT_TRACE2_EVENT_NESTING: "1",
+    // A machine added to another scratch Fleet (the remote scenario) needs a known token.
+    ...(process.argv.includes("--token") ? { WEAVE_FLEET_AUTH_TOKEN: arg("token") } : {}),
   };
   const log = openSync(join(home, "fleet.log"), "a");
   const child = spawn("dotnet", [join(bin, "WeaveFleet.Api.dll"), "--harness=test", "--host", "127.0.0.1", "--port", String(port)], {

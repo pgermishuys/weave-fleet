@@ -135,12 +135,12 @@ async function panelState(page: Page) {
 }
 
 /** Polls until `selector` exists; returns ms since t0, or null. Opens the Changes tab if the panel shows another. */
-async function timeTo(page: Page, selector: string, t0: () => number, capMs = 90_000): Promise<number | null> {
+async function timeTo(page: Page, selector: string, t0: () => number, capMs = 90_000, reopenChanges = true): Promise<number | null> {
   const start = performance.now();
   while (performance.now() - start < capMs) {
     const found = await page.evaluate((s) => !!document.querySelector(s), selector).catch(() => false);
     if (found) return Math.round(performance.now() - t0());
-    await page.evaluate(() => {
+    if (reopenChanges) await page.evaluate(() => {
       if (document.querySelector(".changes-canvas")) return;
       const tab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) => /^\s*Changes/.test(t.textContent ?? ""));
       tab?.click();
@@ -157,9 +157,12 @@ async function openFirstDiff(page: Page, t0: () => number): Promise<{ diffAt: nu
   // A text file: the first rows can be a binary or the lockfile.
   await page.evaluate(() => {
     const rows = [...document.querySelectorAll<HTMLElement>(".changes-canvas__change")];
-    (rows.find((r) => /\.(ts|md)\b/.test(r.textContent ?? "")) ?? rows[0])?.click();
+    // ...with added lines: a deleted file has no diff to open.
+    const name = (r: HTMLElement) => r.querySelector(".changes-canvas__change-name")?.textContent ?? "";
+    (rows.find((r) => /\.(ts|md)$/.test(name(r)) && /\+\s*\d/.test(r.textContent ?? "")) ?? rows[0])?.click();
   });
-  const diffAt = await timeTo(page, DIFF_LINE, t0, 60_000);
+  // The diff opens in its own tab: leave it there.
+  const diffAt = await timeTo(page, DIFF_LINE, t0, 60_000, false);
   return { diffAt, clickToDiff: diffAt === null ? null : Math.round(diffAt - clickedAt) };
 }
 
@@ -350,5 +353,8 @@ for (const [name, run] of Object.entries(scenarios)) {
 await browser.close();
 const out = join(import.meta.dir, `results-${label}.json`);
 const previous = existsSync(out) ? JSON.parse(readFileSync(out, "utf8")) : {};
-writeFileSync(out, JSON.stringify({ ...previous, ...results, meta: { label, ui, base, at: new Date().toISOString() } }, null, 2));
+// Runs add up: a bench run in rounds (one run of each build in turn) keeps every run of a scenario.
+const merged: Record<string, unknown> = { ...previous };
+for (const [name, list] of Object.entries(results)) merged[name] = [...((previous[name] as unknown[]) ?? []), ...list];
+writeFileSync(out, JSON.stringify({ ...merged, meta: { label, ui, base, at: new Date().toISOString() } }, null, 2));
 console.log(`wrote ${out}`);

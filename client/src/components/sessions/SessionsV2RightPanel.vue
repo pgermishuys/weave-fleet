@@ -153,10 +153,10 @@ watch(
 // until the agent first gives it something; then it opens on its own.
 const sessionTabs = computed(() => (activeSessionId.value ? canvasesStore.sessionCanvases(activeSessionId.value).canvases : []));
 watch(
-  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, sessionTabs, hasProgress, hasContext, hasAgents],
-  ([sessionId, loaded, changedFiles, canvases, progress, context, agents]) => {
+  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, sessionTabs, hasProgress, hasContext, hasAgents, () => Boolean(sharedDiffs.error.value)],
+  ([sessionId, loaded, changedFiles, canvases, progress, context, agents, changesFailed]) => {
     if (sessionId && loaded) {
-      sidebarStore.noteSessionContent(sessionId, panelHasContent({ changedFiles, canvases, progress, context, agents }));
+      sidebarStore.noteSessionContent(sessionId, panelHasContent({ changedFiles, canvases, progress, context, agents, changesFailed }));
     }
   },
   { immediate: true },
