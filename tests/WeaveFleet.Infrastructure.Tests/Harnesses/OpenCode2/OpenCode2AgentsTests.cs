@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using WeaveFleet.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
@@ -410,6 +411,42 @@ public sealed class OpenCode2AgentsTests
         await session.SendPromptAsync("hi", new PromptOptions { Agent = "plan" }, CancellationToken.None);
 
         api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
+    }
+
+    [Fact]
+    public async Task A_prompt_in_a_folder_V2_has_only_just_loaded_waits_for_the_folders_second_refresh()
+    {
+        // V2 refreshes a new folder's providers a moment after it first sends them; a request in between can reach the
+        // provider's wrong address and fail with HTTP 404 (seen on the first turn of a quick chat).
+        var time = new FakeTimeProvider();
+        var api = Accepting();
+        await using var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance) { Time = time };
+        await using var session = NewSession(server);
+        server.MarkLoadedAgo(Folder, TimeSpan.Zero);
+
+        var sending = session.SendPromptAsync("hi", new PromptOptions { ProviderId = "fakellm", ModelId = "fake-model" }, CancellationToken.None);
+        await Task.Delay(200);
+
+        sending.IsCompleted.ShouldBeFalse();
+        api.Posts().ShouldBeEmpty();
+
+        await Task.Run(() => time.Advance(server.LocationSettleTime));
+        await sending.WaitAsync(TimeSpan.FromSeconds(5));
+
+        api.Posts().Select(r => r.Path).ShouldContain($"/api/session/{Session}/prompt");
+    }
+
+    [Fact]
+    public async Task A_prompt_in_a_folder_loaded_a_while_ago_is_sent_at_once()
+    {
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", new PromptOptions { ProviderId = "fakellm", ModelId = "fake-model" }, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
+        api.Posts().Select(r => r.Path).ShouldContain($"/api/session/{Session}/prompt");
     }
 
     [Fact]

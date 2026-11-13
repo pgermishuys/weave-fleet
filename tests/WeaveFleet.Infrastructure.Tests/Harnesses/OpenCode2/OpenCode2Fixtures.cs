@@ -117,6 +117,8 @@ internal static class OpenCode2Fixtures
             });
         }
 
+        // Loaded a while ago: a prompt doesn't wait out a new folder's settle time.
+        server.MarkLoadedAgo(directory, TimeSpan.FromMinutes(1));
         return server;
     }
 
