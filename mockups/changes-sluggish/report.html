@@ -102,6 +102,7 @@ mark{background:color-mix(in srgb,var(--idle) 35%,transparent);color:inherit;bor
 <div class="card"><ul>
 <li><b>Find still loads every file to search it.</b> With the fix the app stays responsive, but searching all 345 files of the large diff still takes 53 s (80.9 s of git: about 7 git processes per file, 3 of them only to resolve the base again).</li>
 <li><b>Another machine pays a CORS preflight per file.</b> All 7 of 7 <code>/diffs</code> requests to the other machine needed one, because the browser caches preflights per URL and each file has its own <code>?path=</code>. That's an extra network round trip per file over a real network.</li>
+<li><b>The review panel draws every diff line up front</b> (measured by the UI-snappiness session at 4× CPU slowdown, 10 edited files + 1 new): opening a session whose folder has changes went from 1,399 to 1,851 ms (+32%), with about 4,900 review elements against 138 for the old list, mostly browser layout (+371 ms) plus mounting the panel (+103 ms). Typing in the composer was about 4× slower while a diff was open; that session is fixing the typing part (sticky line numbers) on <code>perf/changes-sticky-gutters</code>. The open-session cost remains.</li>
 <li><b>Outside Changes:</b> a fresh page took about 15.6 s to list the other machine's sessions (on the build before #932, which changed exactly that this morning). Not re-measured.</li>
 </ul></div>
 
@@ -128,6 +129,7 @@ mark{background:color-mix(in srgb,var(--idle) 35%,transparent);color:inherit;bor
 <div class="card ask"><ol>
 <li><b>Find:</b> which option, A, B or C (or A + C)? I recommend <b>A + C</b>: the button fixes “there's no find”, and the server search removes the cost of loading every file.</li>
 <li><b>Live updates:</b> should Changes refresh at least every ~2 s while the agent keeps writing (a max wait on the debounce)? Today it waits for a 500 ms pause.</li>
+<li><b>Drawing diffs lazily:</b> should a file draw its diff lines only when it scrolls into view or is opened, so a session first shows the file list (about 30% faster to open with changes)? It changes how the panel fills in as you scroll.</li>
 <li><b>Your build:</b> if your Fleet is older than 12 Nov, it has no find at all. Which version is on the machine where Changes felt slow?</li>
 </ol></div>
 
