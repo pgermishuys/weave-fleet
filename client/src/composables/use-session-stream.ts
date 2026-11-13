@@ -30,6 +30,7 @@ import { publishRunningWork } from "@/composables/use-running-work"
 import { publishSessionContext } from "@/composables/use-session-context"
 import type { RunningWorkItem } from "@/lib/running-work"
 import { useSessionsStore } from "@/stores/sessions"
+import { useMachinesStore } from "@/stores/machines"
 
 export interface UseSessionStreamResult {
   messages: ComputedRef<readonly AccumulatedMessage[]>
@@ -370,6 +371,19 @@ export function useSessionStream(
       unsubscribeActivity = onGlobalEvent(machine, "sessions", (event) => {
         if (event.type !== "activity_status") {
           return
+        }
+
+        // The page-wide feed (use-session-activity-updates) hears the live machine only. A session on another
+        // machine keeps the row it was opened with, busy from the send, unless this stream hears that machine's.
+        if (!machine.isLive && event.payload.sessionId === activeSessionId && event.payload.activityStatus) {
+          const row = sessionsStore.sessionById(activeSessionId)
+          const patch = {
+            activityStatus: event.payload.activityStatus,
+            sessionStatus: deriveSessionStatus(event.payload.activityStatus, row?.sessionStatus),
+          }
+          sessionsStore.patchSession(activeSessionId, patch)
+          useMachinesStore().patchSession(machine.key, activeSessionId, patch)
+          sessionsStore.clearSessionStateOverride(activeSessionId)
         }
 
         if (isLoading.value) {
