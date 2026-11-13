@@ -45,6 +45,7 @@ public sealed class OpenCode2Harness : IHarness
         // A prompt can be delivered as a steer: V2 promotes it at the running turn's next step.
         SupportsSteering = true,
         SteersByDefault = true,
+        SteerDelivery = SteerDeliveries.NextStep,
         // POST /api/session/{id}/shell: a shell message in the history, its output passed to the model next turn.
         SupportsShellCommands = true,
         SupportsCompaction = true,

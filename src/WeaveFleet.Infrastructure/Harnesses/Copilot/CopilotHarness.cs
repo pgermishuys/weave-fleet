@@ -32,6 +32,7 @@ public sealed class CopilotHarness : IHarness
         SupportsSteering = true,
         // Copilot reads a steer at its next step, in the turn that's running.
         SteersByDefault = true,
+        SteerDelivery = SteerDeliveries.NextStep,
         SupportsPermissionLevels = true,
         ReportsFileWrites = true,
         HistoryLivesInHarness = true,

@@ -17,6 +17,9 @@ import { useFileStats, useTurnStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
 import { turnStartedAt as startOfTurn } from "@/lib/running-work";
+import { harnessCapabilities } from "@/composables/use-composer-actions";
+import { useHarnesses } from "@/composables/use-harnesses";
+import { workingOn } from "@/lib/working-on";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
 import PagePickCard from "@/components/session/PagePickCard.vue";
@@ -355,6 +358,9 @@ const sessionRetrying = computed(() => {
   return item?.activityStatus === "retry" ? sessionRetry(item) : null;
 });
 const turnStartedAt = computed(() => startOfTurn(messages.value));
+const { harnesses } = useHarnesses();
+const capabilities = computed(() => harnessCapabilities(selectedSession.value?.harnessType, harnesses.value));
+const workingOnTool = computed(() => workingOn(sessionMessages.value, capabilities.value.steerDelivery));
 
 // Reads the agent made in separate steps, with nothing between them, are one row.
 const mergedMessages = computed(() => mergeReadRuns(messages.value));
@@ -900,6 +906,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
       >
         <WorkingIndicator
           :since="turnStartedAt"
+          :work="workingOnTool"
           :waiting="isWaitingForInput"
           :retry="sessionRetrying"
           :not-answering="quietMachine"

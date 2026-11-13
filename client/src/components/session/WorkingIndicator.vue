@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { elapsedTickMs, formatElapsed } from "@/lib/running-work";
+import { workingOnText, type WorkingOn } from "@/lib/working-on";
 import { describeRetry, type RetryStatus } from "@/lib/retry-status";
 
 const props = defineProps<{
@@ -13,6 +14,8 @@ const props = defineProps<{
   retry?: RetryStatus | null;
   /** The session's machine stopped answering (its name): the turn can't be known to run on. */
   notAnswering?: string | null;
+  /** The tool call the turn is running: named after the time, with a note when your message waits for it. */
+  work?: WorkingOn | null;
 }>();
 
 // Ticks every second in the turn's first minute, then once a minute, as the strip's times do.
@@ -21,17 +24,19 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 function tick(): void {
   now.value = Date.now();
   // A retry counts down to its next attempt in seconds.
-  timer = setTimeout(tick, props.retry || !props.since ? 1_000 : elapsedTickMs(now.value - props.since));
+  const clock = props.work?.since ?? props.since;
+  timer = setTimeout(tick, props.retry || !clock ? 1_000 : elapsedTickMs(now.value - clock));
 }
 tick();
 // A new turn starts counting seconds again at once.
-watch(() => [props.since, props.retry], () => {
+watch(() => [props.since, props.retry, props.work?.since], () => {
   clearTimeout(timer);
   tick();
 });
 onBeforeUnmount(() => clearTimeout(timer));
 
 const elapsed = computed(() => (props.since ? formatElapsed(now.value - props.since) : null));
+const workText = computed(() => (props.work ? workingOnText(props.work, now.value) : null));
 const retrying = computed(() => (props.retry ? describeRetry(props.retry, now.value) : null));
 </script>
 
@@ -95,6 +100,11 @@ const retrying = computed(() => (props.retry ? describeRetry(props.retry, now.va
       v-if="elapsed"
       class="working__elapsed"
     >· {{ elapsed }}</span>
+    <span
+      v-if="workText"
+      class="working__elapsed working__tool"
+      data-testid="working-tool"
+    >· {{ workText }}</span>
   </div>
 </template>
 
