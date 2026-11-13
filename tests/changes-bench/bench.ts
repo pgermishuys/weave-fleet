@@ -130,6 +130,8 @@ async function panelState(page: Page) {
       errorNotes: count("Couldn't load"),
       panelLoading: !!root?.querySelector('[data-testid="changes-loading"]'),
       noChanges: /No changes (in this session|on this branch)/.test(text),
+      // Diff lines drawn in the review (each a row of elements): what drawing up front costs.
+      linesDrawn: root?.querySelectorAll(".rline").length ?? 0,
     };
   }, ROW);
 }
@@ -282,9 +284,11 @@ async function liveScenario() {
     await new Promise((r) => setTimeout(r, 400));
   }
   const writesDoneAt = Math.round(performance.now() - t0);
+  // Did Changes keep up while the writes went on, or only once they stopped?
+  const refreshesDuringWrites = list.slice(before).filter((r) => r.path.endsWith("/diffs") && r.start < writesDoneAt).length;
   const settledAt = await settle(list, () => t0);
   const longTaskMs = Math.round(await page.evaluate(() => (window as any).__longTasks));
-  const result = { saves, writesDoneAt, settledAt, longTaskMs, ...summarize(list.slice(before)), git: gitSince(offset), state: await panelState(page) };
+  const result = { saves, writesDoneAt, refreshesDuringWrites, settledAt, longTaskMs, ...summarize(list.slice(before)), git: gitSince(offset), state: await panelState(page) };
   for (const path of targets) {
     const current = (await (await fetch(`${base}/api/sessions/${id}/files/content?path=${encodeURIComponent(path)}`)).json()) as { hash: string };
     await fetch(`${base}/api/sessions/${id}/files/content`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path, content: originals[path], baseHash: current.hash }) });
