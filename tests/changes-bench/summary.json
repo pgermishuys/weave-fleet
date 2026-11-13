@@ -58,65 +58,6 @@
       "afterWritesMs": null
     }
   },
-  "open-large": {
-    "before-862": {
-      "runs": 3,
-      "firstRow": 1699,
-      "firstDiff": null,
-      "clickToDiff": null,
-      "settledAt": 1661,
-      "diffsRequests": 2,
-      "listRequests": 2,
-      "fileRequests": 0,
-      "kb": 102,
-      "slowestMs": 975,
-      "gitProcesses": 12,
-      "gitMs": 806,
-      "otherRequestMs": null,
-      "errors": 0,
-      "errorNotes": 0,
-      "longTaskMs": null,
-      "afterWritesMs": null
-    },
-    "main": {
-      "runs": 3,
-      "firstRow": 1934,
-      "firstDiff": 2982,
-      "clickToDiff": null,
-      "settledAt": 3192,
-      "diffsRequests": 8,
-      "listRequests": 2,
-      "fileRequests": 6,
-      "kb": 165,
-      "slowestMs": 1264,
-      "gitProcesses": 53,
-      "gitMs": 4539,
-      "otherRequestMs": null,
-      "errors": 0,
-      "errorNotes": 0,
-      "longTaskMs": null,
-      "afterWritesMs": null
-    },
-    "fix": {
-      "runs": 3,
-      "firstRow": 1354,
-      "firstDiff": 1872,
-      "clickToDiff": null,
-      "settledAt": 2343,
-      "diffsRequests": 7,
-      "listRequests": 1,
-      "fileRequests": 6,
-      "kb": 114,
-      "slowestMs": 628,
-      "gitProcesses": 47,
-      "gitMs": 1779,
-      "otherRequestMs": null,
-      "errors": 0,
-      "errorNotes": 0,
-      "longTaskMs": null,
-      "afterWritesMs": null
-    }
-  },
   "open-big": {
     "before-862": {
       "runs": 3,
@@ -326,6 +267,65 @@
       "afterWritesMs": null
     }
   },
+  "open-large": {
+    "before-862": {
+      "runs": 3,
+      "firstRow": 1516,
+      "firstDiff": 2134,
+      "clickToDiff": 618,
+      "settledAt": 2114,
+      "diffsRequests": 3,
+      "listRequests": 2,
+      "fileRequests": 1,
+      "kb": 117,
+      "slowestMs": 874,
+      "gitProcesses": 19,
+      "gitMs": 1037,
+      "otherRequestMs": null,
+      "errors": 0,
+      "errorNotes": 0,
+      "longTaskMs": null,
+      "afterWritesMs": null
+    },
+    "main": {
+      "runs": 3,
+      "firstRow": 1934,
+      "firstDiff": 2982,
+      "clickToDiff": null,
+      "settledAt": 3192,
+      "diffsRequests": 8,
+      "listRequests": 2,
+      "fileRequests": 6,
+      "kb": 165,
+      "slowestMs": 1264,
+      "gitProcesses": 53,
+      "gitMs": 4539,
+      "otherRequestMs": null,
+      "errors": 0,
+      "errorNotes": 0,
+      "longTaskMs": null,
+      "afterWritesMs": null
+    },
+    "fix": {
+      "runs": 3,
+      "firstRow": 1354,
+      "firstDiff": 1872,
+      "clickToDiff": null,
+      "settledAt": 2343,
+      "diffsRequests": 7,
+      "listRequests": 1,
+      "fileRequests": 6,
+      "kb": 114,
+      "slowestMs": 628,
+      "gitProcesses": 47,
+      "gitMs": 1779,
+      "otherRequestMs": null,
+      "errors": 0,
+      "errorNotes": 0,
+      "longTaskMs": null,
+      "afterWritesMs": null
+    }
+  },
   "find": {
     "main": {
       "runs": 3,
@@ -362,6 +362,46 @@
       "otherRequestMs": 15,
       "errors": 0,
       "errorNotes": 0,
+      "longTaskMs": null,
+      "afterWritesMs": null
+    }
+  },
+  "remote": {
+    "main": {
+      "runs": 3,
+      "firstRow": 1704,
+      "firstDiff": 2474,
+      "clickToDiff": null,
+      "settledAt": null,
+      "diffsRequests": 9,
+      "listRequests": null,
+      "fileRequests": null,
+      "kb": 0,
+      "slowestMs": 1251,
+      "gitProcesses": null,
+      "gitMs": null,
+      "otherRequestMs": null,
+      "errors": 0,
+      "errorNotes": null,
+      "longTaskMs": null,
+      "afterWritesMs": null
+    },
+    "fix": {
+      "runs": 3,
+      "firstRow": 846,
+      "firstDiff": 1255,
+      "clickToDiff": null,
+      "settledAt": null,
+      "diffsRequests": 7,
+      "listRequests": null,
+      "fileRequests": null,
+      "kb": 0,
+      "slowestMs": 492,
+      "gitProcesses": null,
+      "gitMs": null,
+      "otherRequestMs": null,
+      "errors": 0,
+      "errorNotes": null,
       "longTaskMs": null,
       "afterWritesMs": null
     }
