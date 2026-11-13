@@ -14,7 +14,7 @@ import { describeSessionDefaults, sessionDefaultModelKey } from "@/lib/agent-mod
 import { useModels } from "@/composables/use-models";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
-import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES } from "@/lib/image-validation";
+import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES, sniffImageMime } from "@/lib/image-validation";
 import { autogrow } from "@/lib/phone/keyboard";
 import { flushHeld, heldFor, hold, removeHeld, type HeldMessage } from "@/lib/phone/outbox";
 import { useEffortMemory } from "@/composables/use-effort-memory";
@@ -166,7 +166,14 @@ async function readPhoto(file: File): Promise<void> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-  photos.value = [...photos.value, { mime: file.type, filename: file.name, data: url.slice(url.indexOf(",") + 1), url }];
+  const data = url.slice(url.indexOf(",") + 1);
+  // What the bytes are, not what the file's name says: a PNG called shot.jpg is sent as a PNG.
+  const mime = sniffImageMime(data);
+  if (!mime) {
+    photoError.value = "That isn't a picture Fleet can send (PNG, JPEG, GIF or WebP).";
+    return;
+  }
+  photos.value = [...photos.value, { mime, filename: file.name, data, url }];
 }
 
 async function onPhotos(event: Event): Promise<void> {

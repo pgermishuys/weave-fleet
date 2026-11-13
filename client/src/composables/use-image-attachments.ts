@@ -1,6 +1,6 @@
 import { onScopeDispose, shallowRef, type Ref } from "vue";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
-import { ALLOWED_IMAGE_MIMES, MAX_ATTACHMENTS_PER_PROMPT, MAX_IMAGE_BYTES } from "@/lib/image-validation";
+import { ALLOWED_IMAGE_MIMES, MAX_ATTACHMENTS_PER_PROMPT, MAX_IMAGE_BYTES, sniffImageMime } from "@/lib/image-validation";
 
 const PASTE_ERROR_MS = 5000;
 
@@ -53,11 +53,18 @@ export function useImageAttachments(key: string, supportsImages: Readonly<Ref<bo
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
+      const data = dataUrl.split(",")[1] ?? "";
+      // The type comes from what the bytes are, not the file's name: a PNG called shot.jpg is sent as a PNG.
+      const mime = sniffImageMime(data);
+      if (!mime) {
+        setPasteError(`${blob.name || "That file"} isn't a PNG, JPEG, GIF or WebP picture.`);
+        return;
+      }
       addAttachment({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        mime: blob.type,
+        mime,
         filename: blob.name || "image.png",
-        data: dataUrl.split(",")[1] ?? "",
+        data,
         previewUrl: URL.createObjectURL(blob),
       });
       clearPasteError();

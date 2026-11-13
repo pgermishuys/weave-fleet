@@ -9,6 +9,25 @@ export const ALLOWED_IMAGE_MIMES = new Set([
   "image/webp",
 ]);
 
+/**
+ * The image type the bytes themselves say, from the file's first bytes (base64 or raw). A file's browser-given type
+ * comes from its name, so a PNG called shot.jpg arrives as image/jpeg and the provider rejects it mid-turn.
+ * Null when the bytes aren't PNG, JPEG, GIF or WebP.
+ */
+export function sniffImageMime(head: Uint8Array | string): string | null {
+  const bytes =
+    typeof head === "string"
+      ? Uint8Array.from(atob(head.slice(0, 24)), (c) => c.charCodeAt(0))
+      : head;
+  const at = (offset: number, text: string): boolean =>
+    [...text].every((c, i) => bytes[offset + i] === c.charCodeAt(0));
+  if (bytes[0] === 0x89 && at(1, "PNG\r\n\x1a\n")) return "image/png";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (at(0, "GIF87a") || at(0, "GIF89a")) return "image/gif";
+  if (at(0, "RIFF") && at(8, "WEBP")) return "image/webp";
+  return null;
+}
+
 /** 5MB — matches Claude's per-image limit */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 

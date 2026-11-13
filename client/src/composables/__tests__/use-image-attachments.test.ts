@@ -2,8 +2,12 @@ import { effectScope, shallowRef } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useImageAttachments } from "../use-image-attachments";
 
+const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
 function png(name = "shot.png", size = 8): File {
-  return new File([new Uint8Array(size)], name, { type: "image/png" });
+  const bytes = new Uint8Array(Math.max(size, PNG_HEAD.length));
+  bytes.set(PNG_HEAD);
+  return new File([bytes], name, { type: "image/png" });
 }
 
 async function settle(): Promise<void> {
@@ -37,6 +41,20 @@ describe("useImageAttachments", () => {
     expect(attachments.value[0]).toMatchObject({ mime: "image/png", filename: "login-error.png" });
     expect(attachments.value[0]?.data).toBeTruthy();
     expect(pasteError.value).toBeUndefined();
+  });
+
+  it("sends a PNG named .jpg as a PNG, and refuses bytes that aren't a picture", async () => {
+    const { attachments, addImage, pasteError } = setup();
+    const mislabelled = new File([new Uint8Array([...PNG_HEAD, 0, 0, 0, 0])], "shot.jpg", { type: "image/jpeg" });
+
+    addImage(mislabelled);
+    await settle();
+    expect(attachments.value[0]).toMatchObject({ mime: "image/png", filename: "shot.jpg" });
+
+    addImage(new File(["<svg/>"], "logo.png", { type: "image/png" }));
+    await settle();
+    expect(attachments.value).toHaveLength(1);
+    expect(pasteError.value).toMatch(/isn't a PNG, JPEG, GIF or WebP/);
   });
 
   it("refuses an image the harness can't take", async () => {
