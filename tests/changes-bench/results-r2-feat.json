@@ -1,0 +1,733 @@
+{
+  "live": [
+    {
+      "saves": 20,
+      "writesDoneAt": 8346,
+      "refreshesDuringWrites": 19,
+      "settledAt": 8774,
+      "longTaskMs": 0,
+      "diffsRequests": 25,
+      "listRequests": 20,
+      "fileRequests": 5,
+      "bytes": 1123563,
+      "slowestMs": 460,
+      "medianMs": 401,
+      "errors": [],
+      "otherApiDuring": 0,
+      "git": {
+        "processes": 155,
+        "totalMs": 5678,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 25,
+            "ms": 413
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 25,
+            "ms": 397
+          },
+          "merge-base HEAD": {
+            "n": 25,
+            "ms": 431
+          },
+          "diff --numstat": {
+            "n": 25,
+            "ms": 2623
+          },
+          "diff --name-status": {
+            "n": 25,
+            "ms": 1282
+          },
+          "ls-files --others": {
+            "n": 25,
+            "ms": 440
+          },
+          "show": {
+            "n": 5,
+            "ms": 92
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 308
+      }
+    },
+    {
+      "saves": 18,
+      "writesDoneAt": 8300,
+      "refreshesDuringWrites": 18,
+      "settledAt": 8699,
+      "longTaskMs": 0,
+      "diffsRequests": 22,
+      "listRequests": 18,
+      "fileRequests": 4,
+      "bytes": 1003171,
+      "slowestMs": 557,
+      "medianMs": 406,
+      "errors": [],
+      "otherApiDuring": 0,
+      "git": {
+        "processes": 136,
+        "totalMs": 5124,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 22,
+            "ms": 349
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 22,
+            "ms": 357
+          },
+          "merge-base HEAD": {
+            "n": 22,
+            "ms": 387
+          },
+          "diff --numstat": {
+            "n": 22,
+            "ms": 2393
+          },
+          "diff --name-status": {
+            "n": 22,
+            "ms": 1160
+          },
+          "ls-files --others": {
+            "n": 22,
+            "ms": 394
+          },
+          "show": {
+            "n": 4,
+            "ms": 84
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 307
+      }
+    },
+    {
+      "saves": 19,
+      "writesDoneAt": 8255,
+      "refreshesDuringWrites": 19,
+      "settledAt": 8617,
+      "longTaskMs": 0,
+      "diffsRequests": 23,
+      "listRequests": 19,
+      "fileRequests": 4,
+      "bytes": 1055347,
+      "slowestMs": 578,
+      "medianMs": 402,
+      "errors": [],
+      "otherApiDuring": 0,
+      "git": {
+        "processes": 142,
+        "totalMs": 5310,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 23,
+            "ms": 361
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 23,
+            "ms": 365
+          },
+          "merge-base HEAD": {
+            "n": 23,
+            "ms": 410
+          },
+          "diff --numstat": {
+            "n": 23,
+            "ms": 2485
+          },
+          "diff --name-status": {
+            "n": 23,
+            "ms": 1203
+          },
+          "ls-files --others": {
+            "n": 23,
+            "ms": 416
+          },
+          "show": {
+            "n": 4,
+            "ms": 70
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 307
+      }
+    }
+  ],
+  "find": [
+    {
+      "settledAt": 1607,
+      "otherRequestWhileFinding": 5,
+      "probeStartedAt": 566,
+      "counter": "1 of 1",
+      "diffsRequests": 1,
+      "listRequests": 0,
+      "fileRequests": 1,
+      "bytes": 16381,
+      "slowestMs": 298,
+      "medianMs": 298,
+      "errors": [],
+      "otherApiDuring": 2,
+      "git": {
+        "processes": 15,
+        "totalMs": 440,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 2,
+            "ms": 32
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 2,
+            "ms": 32
+          },
+          "merge-base HEAD": {
+            "n": 2,
+            "ms": 37
+          },
+          "diff --numstat": {
+            "n": 2,
+            "ms": 142
+          },
+          "diff --name-status": {
+            "n": 2,
+            "ms": 78
+          },
+          "ls-files --others": {
+            "n": 2,
+            "ms": 35
+          },
+          "grep --untracked": {
+            "n": 1,
+            "ms": 41
+          },
+          "grep": {
+            "n": 1,
+            "ms": 26
+          },
+          "show": {
+            "n": 1,
+            "ms": 17
+          }
+        },
+        "failures": 1
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 337
+      }
+    },
+    {
+      "settledAt": 1569,
+      "otherRequestWhileFinding": 15,
+      "probeStartedAt": 386,
+      "counter": "1 of 1",
+      "diffsRequests": 1,
+      "listRequests": 0,
+      "fileRequests": 1,
+      "bytes": 16381,
+      "slowestMs": 286,
+      "medianMs": 286,
+      "errors": [],
+      "otherApiDuring": 2,
+      "git": {
+        "processes": 15,
+        "totalMs": 406,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 2,
+            "ms": 30
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 2,
+            "ms": 30
+          },
+          "merge-base HEAD": {
+            "n": 2,
+            "ms": 32
+          },
+          "diff --numstat": {
+            "n": 2,
+            "ms": 137
+          },
+          "diff --name-status": {
+            "n": 2,
+            "ms": 75
+          },
+          "ls-files --others": {
+            "n": 2,
+            "ms": 34
+          },
+          "grep --untracked": {
+            "n": 1,
+            "ms": 30
+          },
+          "grep": {
+            "n": 1,
+            "ms": 22
+          },
+          "show": {
+            "n": 1,
+            "ms": 16
+          }
+        },
+        "failures": 1
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 337
+      }
+    },
+    {
+      "settledAt": 1592,
+      "otherRequestWhileFinding": 16,
+      "probeStartedAt": 349,
+      "counter": "1 of 1",
+      "diffsRequests": 1,
+      "listRequests": 0,
+      "fileRequests": 1,
+      "bytes": 16381,
+      "slowestMs": 288,
+      "medianMs": 288,
+      "errors": [],
+      "otherApiDuring": 2,
+      "git": {
+        "processes": 15,
+        "totalMs": 415,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 2,
+            "ms": 32
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 2,
+            "ms": 32
+          },
+          "merge-base HEAD": {
+            "n": 2,
+            "ms": 33
+          },
+          "diff --numstat": {
+            "n": 2,
+            "ms": 137
+          },
+          "diff --name-status": {
+            "n": 2,
+            "ms": 76
+          },
+          "ls-files --others": {
+            "n": 2,
+            "ms": 34
+          },
+          "grep --untracked": {
+            "n": 1,
+            "ms": 30
+          },
+          "grep": {
+            "n": 1,
+            "ms": 22
+          },
+          "show": {
+            "n": 1,
+            "ms": 19
+          }
+        },
+        "failures": 1
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 337
+      }
+    }
+  ],
+  "meta": {
+    "label": "r2-feat",
+    "ui": "review",
+    "base": "http://127.0.0.1:6396",
+    "at": "2026-11-13T13:27:47.815Z"
+  },
+  "open-small": [
+    {
+      "firstRow": 689,
+      "firstDiffsRequest": 392,
+      "firstDiff": 1977,
+      "clickToDiff": null,
+      "settledAt": 2002,
+      "diffsRequests": 3,
+      "listRequests": 1,
+      "fileRequests": 2,
+      "bytes": 7325,
+      "slowestMs": 332,
+      "medianMs": 287,
+      "errors": [],
+      "otherApiDuring": 40,
+      "git": {
+        "processes": 19,
+        "totalMs": 366,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 3,
+            "ms": 57
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 3,
+            "ms": 62
+          },
+          "merge-base HEAD": {
+            "n": 3,
+            "ms": 61
+          },
+          "diff --numstat": {
+            "n": 3,
+            "ms": 59
+          },
+          "diff --name-status": {
+            "n": 3,
+            "ms": 54
+          },
+          "ls-files --others": {
+            "n": 3,
+            "ms": 54
+          },
+          "show": {
+            "n": 1,
+            "ms": 19
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 3,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 97
+      }
+    },
+    {
+      "firstRow": 1125,
+      "firstDiffsRequest": 828,
+      "firstDiff": 1384,
+      "clickToDiff": null,
+      "settledAt": 1418,
+      "diffsRequests": 3,
+      "listRequests": 1,
+      "fileRequests": 2,
+      "bytes": 7325,
+      "slowestMs": 304,
+      "medianMs": 271,
+      "errors": [],
+      "otherApiDuring": 40,
+      "git": {
+        "processes": 19,
+        "totalMs": 351,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 3,
+            "ms": 55
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 3,
+            "ms": 60
+          },
+          "merge-base HEAD": {
+            "n": 3,
+            "ms": 56
+          },
+          "diff --numstat": {
+            "n": 3,
+            "ms": 57
+          },
+          "diff --name-status": {
+            "n": 3,
+            "ms": 58
+          },
+          "ls-files --others": {
+            "n": 3,
+            "ms": 48
+          },
+          "show": {
+            "n": 1,
+            "ms": 17
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 3,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 97
+      }
+    },
+    {
+      "firstRow": 706,
+      "firstDiffsRequest": 348,
+      "firstDiff": 986,
+      "clickToDiff": null,
+      "settledAt": 1011,
+      "diffsRequests": 3,
+      "listRequests": 1,
+      "fileRequests": 2,
+      "bytes": 7325,
+      "slowestMs": 344,
+      "medianMs": 305,
+      "errors": [],
+      "otherApiDuring": 40,
+      "git": {
+        "processes": 19,
+        "totalMs": 344,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 3,
+            "ms": 50
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 3,
+            "ms": 55
+          },
+          "merge-base HEAD": {
+            "n": 3,
+            "ms": 58
+          },
+          "diff --numstat": {
+            "n": 3,
+            "ms": 56
+          },
+          "diff --name-status": {
+            "n": 3,
+            "ms": 59
+          },
+          "ls-files --others": {
+            "n": 3,
+            "ms": 49
+          },
+          "show": {
+            "n": 1,
+            "ms": 17
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 3,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 97
+      }
+    }
+  ],
+  "open-large": [
+    {
+      "firstRow": 869,
+      "firstDiffsRequest": 327,
+      "firstDiff": 1225,
+      "clickToDiff": null,
+      "settledAt": 1225,
+      "diffsRequests": 4,
+      "listRequests": 1,
+      "fileRequests": 3,
+      "bytes": 76386,
+      "slowestMs": 435,
+      "medianMs": 349,
+      "errors": [],
+      "otherApiDuring": 40,
+      "git": {
+        "processes": 26,
+        "totalMs": 677,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 4,
+            "ms": 77
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 4,
+            "ms": 78
+          },
+          "merge-base HEAD": {
+            "n": 4,
+            "ms": 86
+          },
+          "diff --numstat": {
+            "n": 4,
+            "ms": 204
+          },
+          "diff --name-status": {
+            "n": 4,
+            "ms": 120
+          },
+          "ls-files --others": {
+            "n": 4,
+            "ms": 74
+          },
+          "show": {
+            "n": 2,
+            "ms": 38
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 140
+      }
+    },
+    {
+      "firstRow": 846,
+      "firstDiffsRequest": 340,
+      "firstDiff": 1380,
+      "clickToDiff": null,
+      "settledAt": 1380,
+      "diffsRequests": 4,
+      "listRequests": 1,
+      "fileRequests": 3,
+      "bytes": 76386,
+      "slowestMs": 418,
+      "medianMs": 354,
+      "errors": [],
+      "otherApiDuring": 40,
+      "git": {
+        "processes": 26,
+        "totalMs": 674,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 4,
+            "ms": 78
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 4,
+            "ms": 82
+          },
+          "merge-base HEAD": {
+            "n": 4,
+            "ms": 82
+          },
+          "diff --numstat": {
+            "n": 4,
+            "ms": 201
+          },
+          "diff --name-status": {
+            "n": 4,
+            "ms": 121
+          },
+          "ls-files --others": {
+            "n": 4,
+            "ms": 72
+          },
+          "show": {
+            "n": 2,
+            "ms": 38
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 140
+      }
+    },
+    {
+      "firstRow": 849,
+      "firstDiffsRequest": 329,
+      "firstDiff": 1270,
+      "clickToDiff": null,
+      "settledAt": 1270,
+      "diffsRequests": 4,
+      "listRequests": 1,
+      "fileRequests": 3,
+      "bytes": 76386,
+      "slowestMs": 428,
+      "medianMs": 361,
+      "errors": [],
+      "otherApiDuring": 40,
+      "git": {
+        "processes": 26,
+        "totalMs": 663,
+        "byCommand": {
+          "symbolic-ref --quiet": {
+            "n": 4,
+            "ms": 78
+          },
+          "for-each-ref --format=%(refname)%09%(symref)": {
+            "n": 4,
+            "ms": 78
+          },
+          "merge-base HEAD": {
+            "n": 4,
+            "ms": 76
+          },
+          "diff --numstat": {
+            "n": 4,
+            "ms": 199
+          },
+          "diff --name-status": {
+            "n": 4,
+            "ms": 120
+          },
+          "ls-files --others": {
+            "n": 4,
+            "ms": 78
+          },
+          "show": {
+            "n": 2,
+            "ms": 34
+          }
+        },
+        "failures": 0
+      },
+      "state": {
+        "rows": 353,
+        "loadingNotes": 0,
+        "errorNotes": 0,
+        "panelLoading": false,
+        "noChanges": false,
+        "linesDrawn": 140
+      }
+    }
+  ]
+}
