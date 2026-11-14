@@ -37,7 +37,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src",
+    "test": "bun test src scripts",
     "tokens": "bun scripts/tokens.ts",
     "tokens:check": "bun scripts/tokens.ts --check"
   },
