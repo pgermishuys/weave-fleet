@@ -252,7 +252,7 @@ function isSafeReturnUrl(value: string): boolean {
 
             <button
               type="submit"
-              class="inline-flex items-center justify-center rounded-btn bg-primary px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              class="inline-flex items-center justify-center rounded-btn bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="isSubmitting"
             >
               {{ isSubmitting ? "Signing in…" : "Continue" }}
@@ -262,7 +262,7 @@ function isSafeReturnUrl(value: string): boolean {
           <template v-else>
             <a
               :href="signInHref"
-              class="inline-flex items-center justify-center rounded-btn bg-primary px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              class="inline-flex items-center justify-center rounded-btn bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
               Sign in
             </a>

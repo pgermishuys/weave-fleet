@@ -73,7 +73,7 @@ const actionLabel = computed(() => {
         <button
           v-if="actionLabel"
           type="button"
-          class="rounded-btn border border-accent bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
+          class="rounded-btn border border-accent bg-accent px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
           @click="install"
         >
           {{ actionLabel }}

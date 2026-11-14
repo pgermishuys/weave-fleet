@@ -457,7 +457,7 @@ onMounted(load);
             <div class="flex gap-2">
               <button
                 type="button"
-                class="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
+                class="rounded-md bg-accent px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
                 :disabled="isSaving || !draft.trim()"
                 @click="saveDraft"
               >
@@ -512,7 +512,7 @@ onMounted(load);
                   >
                     <button
                       type="button"
-                      class="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
+                      class="rounded-md bg-accent px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
                       :disabled="isSaving || !editText.trim()"
                       @click="saveEdit(note)"
                     >

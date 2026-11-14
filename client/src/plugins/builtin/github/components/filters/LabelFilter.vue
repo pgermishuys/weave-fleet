@@ -131,7 +131,7 @@ const open = ref(false);
 .filter-checkbox--checked {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--primary-foreground);
 }
 
 .label-dot {

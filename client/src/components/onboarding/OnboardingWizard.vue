@@ -43,7 +43,7 @@ const providerPresets: readonly ProviderPreset[] = [
   { label: "OpenAI", namespace: "openai", kind: "api-key", placeholder: "sk-proj-..." },
 ] as const;
 
-const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-4 py-2.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2.5 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 

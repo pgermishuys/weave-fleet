@@ -228,11 +228,11 @@ function handleFileClick(event: MouseEvent) {
 
 .file-browser-tree-node__file--selected {
   background-color: var(--primary);
-  color: white;
+  color: var(--primary-foreground);
 }
 
 .file-browser-tree-node__file--selected .file-browser-tree-node__name {
-  color: white;
+  color: var(--primary-foreground);
   font-weight: 600;
 }
 

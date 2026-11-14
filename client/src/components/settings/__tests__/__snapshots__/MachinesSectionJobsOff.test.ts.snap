@@ -17,7 +17,7 @@ exports[`Settings → Machines with Jobs off > renders as it always did and asks
           <!--v-if-->
           <!--v-if-->
         </div>
-        <div class="shrink-0"><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machines-add"><svg data-v-bdf3156a="" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-plus-icon lucide-plus">
+        <div class="shrink-0"><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machines-add"><svg data-v-bdf3156a="" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-plus-icon lucide-plus">
               <path d="M5 12h14"></path>
               <path d="M12 5v14"></path>
             </svg> Add a machine </button></div>

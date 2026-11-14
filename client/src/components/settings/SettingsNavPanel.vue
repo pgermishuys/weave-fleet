@@ -184,7 +184,7 @@ function selectSection(sectionId: SettingsSectionId): void {
               <span
                 v-if="item.id === 'updates' && updatesWaiting"
                 :class="showUpdateDot ? 'ml-1.5' : 'ml-auto'"
-                class="rounded-full bg-accent px-1.5 text-[0.71429rem] font-semibold leading-4 text-white"
+                class="rounded-full bg-accent px-1.5 text-[0.71429rem] font-semibold leading-4 text-primary-foreground"
                 :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
                 data-testid="updates-badge"
               >{{ updatesWaiting }}</span>

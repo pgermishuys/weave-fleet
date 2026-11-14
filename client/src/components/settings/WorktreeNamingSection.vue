@@ -255,7 +255,7 @@ async function resetToDefaults(): Promise<void> {
     <div class="mt-5 flex items-center gap-3">
       <button
         type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+        class="inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         :disabled="isSaving"
         @click="save"
       >

@@ -528,7 +528,7 @@ async function onAllow(provider: string): Promise<void> {
   padding: 3px 12px;
   border-radius: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--primary-foreground);
   font-size: 0.85714rem;
   font-weight: 500;
 }
