@@ -79,21 +79,30 @@ describe("text on the accent", () => {
     expect(contrast(text, accent), `${text} on ${accent}`).toBeGreaterThanOrEqual(4.5);
   });
 
+  // Reads every source file once, and only scans the files that could offend: the line check where "text-white"
+  // appears, the rule check where a background is the accent. Splitting rules on "}" keeps it linear; the old
+  // /[^{}]+\{([^{}]*)\}/g backtracked on every brace-free stretch, took about 3 s and hit the 5 s timeout under load.
   it("is the theme's --primary-foreground, never a hardcoded white", () => {
     const src = resolve(__dirname, "../..");
     const offenders: string[] = [];
     const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
       (f) => /\.(vue|ts|css)$/.test(f) && !/__tests__/.test(f),
     );
+    const accentBackground = /background(-color)?:\s*var\(--(accent|primary)\)/;
     for (const file of files) {
       const text = readFileSync(join(src, file), "utf8");
-      text.split("\n").forEach((line, i) => {
-        if (/\bbg-(accent|primary)\b/.test(line) && /(?<![:\w-])text-white\b/.test(line)) offenders.push(`${file}:${i + 1}`);
-      });
-      for (const rule of text.matchAll(/[^{}]+\{([^{}]*)\}/g)) {
-        const body = rule[1];
-        if (/background(-color)?:\s*var\(--(accent|primary)\)/.test(body) && /(?<![-\w])color:\s*(#fff\b|#ffffff\b|white\b)/i.test(body)) {
-          offenders.push(`${file}: ${rule[0].trim().split("{")[0].trim()}`);
+      if (text.includes("text-white")) {
+        text.split("\n").forEach((line, i) => {
+          if (/\bbg-(accent|primary)\b/.test(line) && /(?<![:\w-])text-white\b/.test(line)) offenders.push(`${file}:${i + 1}`);
+        });
+      }
+      if (!accentBackground.test(text)) continue;
+      for (const chunk of text.split("}")) {
+        const open = chunk.lastIndexOf("{");
+        if (open < 0) continue;
+        const body = chunk.slice(open + 1);
+        if (accentBackground.test(body) && /(?<![-\w])color:\s*(#fff\b|#ffffff\b|white\b)/i.test(body)) {
+          offenders.push(`${file}: ${chunk.slice(0, open).split(/[{};]/).pop()!.trim()}`);
         }
       }
     }
