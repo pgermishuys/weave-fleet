@@ -99,12 +99,18 @@ function handleExpand(): void {
   display: flex;
 }
 
+/* The whole rail is the button: drop size="toolbar"'s 28px box and stack from the top, or the content
+   overflows a short centred box and the sheet clips the chevron. */
 .collapsed-rail__button {
   width: 100%;
+  height: auto;
   min-height: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
+  border-radius: 0;
   gap: 18px;
   padding: 12px 8px;
 }
