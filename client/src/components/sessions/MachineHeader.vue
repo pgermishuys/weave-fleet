@@ -199,7 +199,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
 }
 
 .machine-header__name {
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 .machine-header--button:focus-visible {
@@ -252,6 +252,6 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
 }
 
 .machine-header__note--down {
-  color: var(--error);
+  color: var(--error-text);
 }
 </style>

@@ -282,7 +282,7 @@ async function copyDirectory(): Promise<void> {
   width: 100%;
   margin: 2px 0 0;
   font-size: 10px;
-  color: var(--error);
+  color: var(--error-text);
 }
 
 </style>

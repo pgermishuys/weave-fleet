@@ -665,7 +665,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
 
 .ph-srow__m--error {
   font-weight: 600;
-  color: var(--error);
+  color: var(--error-text);
 }
 
 /* Machine group header: MachineHeader.vue (chevron that folds, dot, name, count) */
@@ -875,7 +875,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
 }
 
 .ph-pcard__note--bad {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .ph-later {
@@ -1288,7 +1288,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
 }
 
 .ph-tool__bad {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .ph-add {
@@ -1394,7 +1394,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
 
 .ph-shead__bad {
   font-weight: 600;
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .ph-shead ~ .ph-scroller {
@@ -1788,7 +1788,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-card {
 }
 
 .ph-foot--bad {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .ph-foot--warn {
@@ -1911,7 +1911,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-card {
 
 .ph-tag--live {
   border-color: color-mix(in srgb, var(--coral) 35%, transparent);
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 /* Switch: ui/switch at touch size (accent when on) */
@@ -2451,7 +2451,7 @@ html[data-phone].ph-kb-open .ph-sheet__foot {
 .ph-banner--bad {
   border-color: color-mix(in srgb, var(--error) 35%, var(--border));
   background: color-mix(in srgb, var(--error) 6%, var(--ph-panel));
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .ph-hero {
@@ -2546,7 +2546,7 @@ html[data-phone].ph-kb-open .ph-sheet__foot {
 .ph-done-mark--bad {
   border-color: color-mix(in srgb, var(--error) 30%, transparent);
   background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 /* screenshots only: a stand-in keyboard where a real phone shows its own */

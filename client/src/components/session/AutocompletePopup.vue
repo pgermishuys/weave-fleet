@@ -521,7 +521,7 @@ function handleSelect(value: string): void {
 }
 
 .autocomplete-popup__state--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 .autocomplete-popup__state-icon {
   width: 16px;

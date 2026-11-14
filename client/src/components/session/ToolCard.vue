@@ -580,7 +580,7 @@ function handleExpandVisual(): void {
 }
 
 .tool-header__removes {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .tool-preview {

@@ -174,7 +174,7 @@ watch(
 </template>
 
 <style scoped>
-.settings-machine-chip { display: inline-block; margin-left: 10px; padding: 1px 6px; border-radius: 4px; vertical-align: middle; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78571rem; font-weight: 600; letter-spacing: 0; color: var(--coral); background: color-mix(in srgb, var(--coral) 14%, transparent); }
+.settings-machine-chip { display: inline-block; margin-left: 10px; padding: 1px 6px; border-radius: 4px; vertical-align: middle; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78571rem; font-weight: 600; letter-spacing: 0; color: var(--coral-text); background: color-mix(in srgb, var(--coral) 14%, transparent); }
 .settings-machine-chip--browser { color: var(--muted); background: color-mix(in srgb, var(--text) 8%, transparent); }
 .settings-machine-pane { animation: settings-machine-fade 180ms ease-out; }
 @keyframes settings-machine-fade { from { opacity: 0; } to { opacity: 1; } }

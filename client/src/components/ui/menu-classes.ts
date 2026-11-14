@@ -14,7 +14,7 @@ export const menuContentClass = `${panel} ${motion}`;
 const row = "relative flex min-h-[30px] cursor-default items-center gap-2 rounded-[calc(var(--radius-btn)-2px)] px-2 py-[5px] text-[13px] outline-hidden select-none transition-colors duration-75 data-[highlighted]:bg-text/7 data-[disabled]:pointer-events-none data-[disabled]:opacity-45 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='text-'])]:text-muted data-[highlighted]:[&_svg:not([class*='text-'])]:text-text";
 
 /** A row. `data-variant="destructive"` turns it red, with a red tint when highlighted. */
-export const menuItemClass = `${row} data-[variant=destructive]:text-destructive data-[variant=destructive]:data-[highlighted]:bg-destructive/12 data-[variant=destructive]:[&_svg]:!text-destructive`;
+export const menuItemClass = `${row} data-[variant=destructive]:text-error-text data-[variant=destructive]:data-[highlighted]:bg-destructive/12 data-[variant=destructive]:[&_svg]:!text-error-text`;
 
 /** A row that opens a submenu; it stays tinted while its submenu is open. */
 export const menuSubTriggerClass = `${row} data-[state=open]:bg-text/7`;

@@ -480,7 +480,7 @@ async function handleRefreshRepos(): Promise<void> {
 
 .github-settings__error {
   margin: 4px 0 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 </style>

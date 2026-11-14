@@ -22,7 +22,7 @@ export const buttonVariants = cva(
         "toolbar-icon":
           "border border-transparent bg-transparent text-muted hover:bg-text/6 hover:text-text [transition:background_var(--transition),color_var(--transition),border-color_var(--transition)]",
         "toolbar-icon-danger":
-          "border border-transparent bg-transparent text-muted hover:bg-error/10 hover:text-error [transition:background_var(--transition),color_var(--transition),border-color_var(--transition)]",
+          "border border-transparent bg-transparent text-muted hover:bg-error/10 hover:text-error-text [transition:background_var(--transition),color_var(--transition),border-color_var(--transition)]",
         filter:
           "bg-transparent text-muted text-[11px] hover:bg-main-bg hover:text-text data-[active=true]:bg-accent-dim data-[active=true]:text-accent-text [transition:background_var(--transition),color_var(--transition)]",
       },

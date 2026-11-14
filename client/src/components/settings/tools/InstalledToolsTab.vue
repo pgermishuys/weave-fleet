@@ -140,7 +140,7 @@ function formatCommand(command: string | null | undefined, args: readonly string
 
             <div
               v-else
-              class="mt-2 flex items-start gap-2 rounded-card border border-coral/30 bg-coral/10 px-2 py-1 text-xs text-coral"
+              class="mt-2 flex items-start gap-2 rounded-card border border-coral/30 bg-coral/10 px-2 py-1 text-xs text-coral-text"
             >
               <AlertTriangle
                 :size="12"

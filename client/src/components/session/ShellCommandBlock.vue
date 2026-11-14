@@ -160,7 +160,7 @@ const stateLabel = computed(() => {
 .shell-block--failed .shell-block__state,
 .shell-block--timeout .shell-block__state,
 .shell-block--killed .shell-block__state {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .shell-block__command,

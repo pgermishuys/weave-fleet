@@ -697,7 +697,7 @@ function openSettings(): void {
 
 .pcard__deny:hover:not(:disabled) {
   background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .pcard__deny:focus-visible,
@@ -708,7 +708,7 @@ function openSettings(): void {
 
 .pcard__error {
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 

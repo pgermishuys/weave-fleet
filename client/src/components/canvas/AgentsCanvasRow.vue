@@ -232,7 +232,7 @@ const label = computed(() => [props.row.name, props.row.task, props.parent ? nul
 }
 
 .agent-row--failed .agent-row__state {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .agent-row__sub {

@@ -865,7 +865,7 @@ onBeforeUnmount(() => {
 .browser-canvas__error {
   margin: 0;
   padding: 16px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
 }
 
@@ -969,7 +969,7 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 
@@ -1022,7 +1022,7 @@ onBeforeUnmount(() => {
 }
 
 .browser-canvas__status--failed {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .browser-canvas__text-btn {

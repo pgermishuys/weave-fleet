@@ -326,7 +326,7 @@ async function endRun(): Promise<void> {
 
 .wf-finish__error {
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 </style>

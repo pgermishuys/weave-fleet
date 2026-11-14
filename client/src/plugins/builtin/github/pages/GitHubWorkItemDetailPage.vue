@@ -778,7 +778,7 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
 
 .gh-item__error {
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 

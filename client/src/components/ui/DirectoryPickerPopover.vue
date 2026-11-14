@@ -233,7 +233,7 @@ function handleSearchUpdate(value: string | number): void {
 
         <p
           v-else-if="browser.error.value"
-          class="px-2 py-4 text-sm text-destructive"
+          class="px-2 py-4 text-sm text-error-text"
         >
           {{ browser.error.value }}
         </p>

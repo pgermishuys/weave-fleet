@@ -947,7 +947,7 @@ onUnmounted(() => {
   padding: 1px 6px;
   border-radius: 5px;
   background: color-mix(in srgb, var(--coral) 14%, transparent);
-  color: var(--coral);
+  color: var(--coral-text);
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
@@ -1027,7 +1027,7 @@ onUnmounted(() => {
 }
 
 .session-detail-header__checkout-error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .session-detail-header__branch-name {

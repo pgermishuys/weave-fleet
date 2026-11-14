@@ -270,7 +270,7 @@ onUnmounted(() => {
 }
 
 .af-action--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .af-action--queued {

@@ -354,7 +354,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 }
 
 .workflow-row__meta--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .workflows-nav-repo-loading {

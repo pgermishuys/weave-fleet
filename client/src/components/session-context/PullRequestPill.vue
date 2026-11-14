@@ -652,7 +652,7 @@ function runState(run: CheckRun) {
 .pr-popover__error {
   margin: 0;
   padding: 8px 14px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 

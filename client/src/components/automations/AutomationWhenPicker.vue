@@ -368,7 +368,7 @@ function applyCron(): void {
 }
 
 .automation-when__error {
-  color: var(--error);
+  color: var(--error-text);
   font-size: 11.5px;
 }
 

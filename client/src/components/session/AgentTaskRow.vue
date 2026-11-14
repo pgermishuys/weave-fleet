@@ -201,7 +201,7 @@ function handleClick(event: MouseEvent): void {
 }
 
 .agent-task--error .agent-task__status {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .agent-task__done {

@@ -764,7 +764,7 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
 .link-card__error {
   margin: 0;
   padding: 0 12px 10px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 11.5px;
 }
 

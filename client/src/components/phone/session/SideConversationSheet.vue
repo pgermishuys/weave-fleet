@@ -148,6 +148,6 @@ async function discard(): Promise<void> {
 .scs__error {
   margin: 0;
   font-size: var(--ph-t-meta);
-  color: var(--error);
+  color: var(--error-text);
 }
 </style>

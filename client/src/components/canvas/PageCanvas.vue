@@ -429,7 +429,7 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
 }
 
 .page-canvas__choice-error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .page-canvas__choice-btn {

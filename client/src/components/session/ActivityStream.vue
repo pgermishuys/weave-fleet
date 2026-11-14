@@ -1324,7 +1324,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
 }
 
 .background-note--error .background-note__state {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 /* Stopped is something you did, not a failure. */
@@ -1354,7 +1354,7 @@ a.peer-from:hover {
 }
 
 .peer-from--failed .peer-from__outcome {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .peer-from__icon {

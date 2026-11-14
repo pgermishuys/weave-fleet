@@ -418,7 +418,7 @@ function showInChat(turn: SessionTurn): void {
 }
 
 .turns-canvas__dels {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .turns-canvas__list {

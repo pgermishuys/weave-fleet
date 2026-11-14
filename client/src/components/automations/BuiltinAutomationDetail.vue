@@ -340,7 +340,7 @@ function openMemorySettings(): void {
   border-radius: var(--radius-card);
   background: color-mix(in srgb, var(--error) 10%, transparent);
   padding: 9px 12px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
   line-height: 1.5;
 }

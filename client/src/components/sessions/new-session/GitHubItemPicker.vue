@@ -167,7 +167,7 @@ function state(item: GitHubItemSummary) {
 }
 
 .gh-picker__note--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .gh-picker__group {

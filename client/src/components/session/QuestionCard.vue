@@ -577,7 +577,7 @@ function answerText(questionIdx: number): string {
 
 .qcard__error {
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 

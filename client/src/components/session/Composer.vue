@@ -1425,7 +1425,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-card);
   padding: 10px 12px;
   background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
   line-height: 1.5;
 }

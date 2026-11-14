@@ -316,7 +316,7 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
 }
 
 .machine-group__error {
-  color: color-mix(in srgb, var(--error) 80%, var(--muted));
+  color: color-mix(in srgb, var(--error-text) 80%, var(--muted));
 }
 
 /* An unreachable machine's rows are the last ones it returned. */

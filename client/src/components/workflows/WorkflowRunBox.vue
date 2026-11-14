@@ -486,7 +486,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .wf-run__warn {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .wf-run__link {

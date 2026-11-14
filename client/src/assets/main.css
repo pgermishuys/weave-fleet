@@ -50,8 +50,11 @@
   --idle: #f59e0b;
   --complete: #3b82f6;
   --error: #ef4444;
-  /* Error words (ErrorNote): --error moved toward --text until it reads at 4.5:1 on the error tint. */
-  --error-text: #EE595A;
+  /* Error words: --error moved toward --text until it reads at 4.5:1 on the error tint (10% in ErrorNote, 14% in chips). */
+  --error-text: #EF5E5F;
+  /* Coral words (a machine's live state, notes): --coral moved toward black or white until 4.5:1 on every surface
+     and on its own tint. */
+  --coral-text: #DE6E52;
   --queued: #8b5cf6;
   /* Status words: each status colour moved toward black or white (keeping its hue) until it reads at 4.5:1 on
      every surface and on its own tint there. The colours themselves are for dots, icons and tints: 3:1. */
@@ -134,7 +137,8 @@
   --idle: #D27306;
   --complete: #2563eb;
   --error: #dc2626;
-  --error-text: #BF2424;
+  --error-text: #B92323;
+  --coral-text: #A7452D;
   --queued: #7c3aed;
   --running-text: #107435;
   --idle-text: #975304;
@@ -171,7 +175,8 @@
   --idle: #f59e0b;
   --complete: #3b82f6;
   --error: #ef4444;
-  --error-text: #F17070;
+  --error-text: #F17171;
+  --coral-text: #E3836B;
   --queued: #8b5cf6;
   --running-text: var(--running);
   --idle-text: var(--idle);
@@ -209,6 +214,7 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --error-text: #EF4444;
+  --coral-text: var(--coral);
   --queued: #8b5cf6;
   --running-text: var(--running);
   --idle-text: var(--idle);
@@ -243,8 +249,10 @@
   --running: #A3BE8C;
   --idle: #EBCB8B;
   --complete: #81A1C1;
-  --error: #BF616A;
-  --error-text: #D7ACB3;
+  --error: #C7767D;
+  --error-text: #D9B1B8;
+  --coral: #DD6B4E;
+  --coral-text: #F0BDB0;
   --queued: #B48EAD;
   --running-text: #B6CCA4;
   --idle-text: var(--idle);
@@ -280,7 +288,8 @@
   --idle: #F1FA8C;
   --complete: #8BE9FD;
   --error: #FF5555;
-  --error-text: #FD8987;
+  --error-text: #FD8D8B;
+  --coral-text: #EAA695;
   --queued: #FF79C6;
   --running-text: var(--running);
   --idle-text: var(--idle);
@@ -317,8 +326,9 @@
   --running: #859900;
   --idle: #B58900;
   --complete: #268BD2;
-  --error: #DC322F;
-  --error-text: #E97C73;
+  --error: #DE3E3B;
+  --error-text: #E97F76;
+  --coral-text: #E6947F;
   --queued: #6D72C5;
   --running-text: #A0AF38;
   --idle-text: #C5A236;
@@ -357,7 +367,8 @@
   --idle: #A87F00;
   --complete: #268BD2;
   --error: #DC322F;
-  --error-text: #AB3333;
+  --error-text: #A63131;
+  --coral-text: #9E422A;
   --queued: #6C71C4;
   --running-text: #586600;
   --idle-text: #795B00;
@@ -392,8 +403,10 @@
   --running: #A6E22E;
   --idle: #E6DB74;
   --complete: #66D9EF;
-  --error: #F92672;
-  --error-text: #F98DB1;
+  --error: #F9337A;
+  --error-text: #F98FB3;
+  --coral: #DB6142;
+  --coral-text: #EFBAAC;
   --queued: #AE81FF;
   --running-text: var(--running);
   --idle-text: var(--idle);
@@ -429,7 +442,8 @@
   --idle: #D29922;
   --complete: #58A6FF;
   --error: #F85149;
-  --error-text: #F85149;
+  --error-text: #F8564E;
+  --coral-text: #E0795F;
   --queued: #BC8CFF;
   --running-text: var(--running);
   --idle-text: var(--idle);
@@ -460,6 +474,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-coral: var(--coral);
+  --color-coral-text: var(--coral-text);
   --color-indigo: var(--indigo);
   --color-running: var(--running);
   --color-running-text: var(--running-text);

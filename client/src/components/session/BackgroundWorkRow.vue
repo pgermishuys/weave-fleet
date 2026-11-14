@@ -465,7 +465,7 @@ async function stop(): Promise<void> {
 
 .work-row__error {
   margin: 0 4px 4px 30px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 
