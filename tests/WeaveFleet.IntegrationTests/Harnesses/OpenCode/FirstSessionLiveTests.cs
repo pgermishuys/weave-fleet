@@ -38,7 +38,7 @@ public sealed class FirstSessionLiveTests
 
         // Ordinary requests wait 3 s here, not 100: the install takes longer than that wherever this runs, so the
         // failure shows on any machine and not only on a slow one.
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath, openCodeRequestTimeout: TimeSpan.FromSeconds(3));
+        var factory = new KestrelFleetFactory(dbPath, openCodeRequestTimeout: TimeSpan.FromSeconds(3));
         try
         {
             try { _ = factory.Services; }

@@ -11,15 +11,14 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Sessions;
 
-namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Proxy for retrieving session messages from either the live harness (if available and it keeps the
 /// history, see <see cref="HarnessCapabilities.HistoryLivesInHarness"/>) or the persisted message store (fallback).
 /// </summary>
-public sealed class OpenCodeSessionMessageProxy(
+public sealed class SessionMessageProxy(
     ISessionRepository sessionRepository,
     InstanceTracker instanceTracker,
     SessionActivityTracker activityTracker,
@@ -27,7 +26,7 @@ public sealed class OpenCodeSessionMessageProxy(
     ISessionSnapshotBuilder fallbackSnapshotBuilder,
     IServiceProvider serviceProvider,
     IHarnessRegistry harnessRegistry,
-    ILogger<OpenCodeSessionMessageProxy> logger,
+    ILogger<SessionMessageProxy> logger,
     IMessageRepository? messageRepository = null,
     StreamingReplies? streaming = null) : ISessionMessageProxy
 {

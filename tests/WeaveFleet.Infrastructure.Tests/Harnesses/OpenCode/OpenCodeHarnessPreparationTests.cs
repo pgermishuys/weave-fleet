@@ -7,6 +7,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -243,7 +244,7 @@ public sealed class OpenCodeHarnessPreparationTests
         using var store = new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(data.Path);
         await store.AddAsync(
             "user-1", "fleet-code-review", "---\nname: fleet-code-review\ndescription: Mine.\n---\n\nMy way.\n",
-            new SkillVersionSource(null, null, null), OpenCodeFleetSkills.ContentOf("fleet-code-review")!);
+            new SkillVersionSource(null, null, null), BuiltInSkillFiles.ContentOf("fleet-code-review")!);
         var harness = CreateHarness(preferences, store: store);
 
         var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
@@ -261,7 +262,7 @@ public sealed class OpenCodeHarnessPreparationTests
         using var store = new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(data.Path);
         await store.AddAsync(
             "user-1", "fleet-code-review", "---\nname: fleet-code-review\ndescription: Mine.\n---\n",
-            new SkillVersionSource(null, null, null), OpenCodeFleetSkills.ContentOf("fleet-code-review")!);
+            new SkillVersionSource(null, null, null), BuiltInSkillFiles.ContentOf("fleet-code-review")!);
         var harness = CreateHarness(preferences, store: store);
 
         var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);

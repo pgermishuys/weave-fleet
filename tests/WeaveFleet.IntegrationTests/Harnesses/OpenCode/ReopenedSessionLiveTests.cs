@@ -45,7 +45,7 @@ public sealed class ReopenedSessionLiveTests
         var processEnvironment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, llm.BaseUrl, WriteDiagramPlugin(root));
         ScriptModel(llm.Queue);
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }

@@ -13,7 +13,6 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Users;
-using WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 
@@ -30,7 +29,7 @@ public sealed class OpenCode2LiveFleet : IAsyncLifetime
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"fleet-oc2-live-{Guid.NewGuid():N}");
     private readonly ConcurrentQueue<Func<string, ScriptedLlmResponse?>> _answers = new();
-    private PooledOpenCodeLiveHost.KestrelFleetFactory? _factory;
+    private KestrelFleetFactory? _factory;
 
     public FakeLlmServerFixture Llm { get; private set; } = null!;
 
@@ -99,7 +98,7 @@ public sealed class OpenCode2LiveFleet : IAsyncLifetime
 
         var dbPath = Path.Combine(_root, "fleet", "fleet.db");
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-        _factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        _factory = new KestrelFleetFactory(dbPath);
         try { _ = _factory.Services; }
         catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
 

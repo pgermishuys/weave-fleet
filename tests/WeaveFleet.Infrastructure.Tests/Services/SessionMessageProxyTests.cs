@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Common;
@@ -11,8 +10,8 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.Copilot;
-using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
@@ -22,7 +21,7 @@ public sealed class OpenCodeSessionMessageProxyTests
 {
     /// <summary>The real harness descriptors: which of them keep their history is what the proxy asks.</summary>
     private static HarnessRegistry Harnesses()
-        => new([new OpenCodeHarness(new FleetOptions()), new OpenCode2Harness(), new ClaudeCodeHarness()], []);
+        => new([new OpenCode2Harness(), new ClaudeCodeHarness()], []);
 
     private static ServiceProvider CreateServiceProvider(ISessionActivator sessionActivator)
     {
@@ -41,7 +40,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -78,7 +77,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -86,7 +85,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -122,7 +121,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = "session-retry",
             InstanceId = "instance-retry",
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Rate limited",
             Status = "active",
             UserId = "user-1",
@@ -137,7 +136,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var activityTracker = new SessionActivityTracker();
         activityTracker.Update("session-retry", tracked, "user-1", retryAttempt: 2);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -145,7 +144,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             new FakeSessionSnapshotBuilder(),
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var snapshot = await proxy.GetSnapshotAsync("session-retry");
 
@@ -184,7 +183,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         activityTracker.Update("child-asks", "waiting_input", "user-1");
         activityTracker.Update("child-works", "busy", "user-1");
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -192,7 +191,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             new FakeSessionSnapshotBuilder(),
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var snapshot = await proxy.GetSnapshotAsync("parent");
 
@@ -233,7 +232,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         activityTracker.RegisterChild("child-background", "parent");
         activityTracker.MoveChildToBackground("child-background");
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -241,7 +240,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             new FakeSessionSnapshotBuilder(),
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var snapshot = await proxy.GetSnapshotAsync("parent");
 
@@ -260,7 +259,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -322,7 +321,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -330,7 +329,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -392,7 +391,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -400,7 +399,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -418,7 +417,6 @@ public sealed class OpenCodeSessionMessageProxyTests
 
     // Whether history is read from the harness is the harness's capability, not a list of names in the proxy.
     [Theory]
-    [InlineData("opencode", true)]
     [InlineData("opencode2", true)]
     [InlineData("claude-code", false)]
     [InlineData("not-registered", false)]
@@ -446,7 +444,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         });
         var fallbackSnapshotBuilder = new FakeSessionSnapshotBuilder();
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             new SessionActivityTracker(),
@@ -454,7 +452,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var snapshot = await proxy.GetSnapshotAsync("session-cap");
 
@@ -465,7 +463,6 @@ public sealed class OpenCodeSessionMessageProxyTests
 
     // Fleet's copy of an OpenCode 2 session is only the prompts it saved, so the page says the history is partial.
     [Theory]
-    [InlineData("opencode", true)]
     [InlineData("opencode2", true)]
     [InlineData("claude-code", false)]
     public async Task GetSnapshotAsync_marks_the_fallback_partial_when_the_history_lives_in_the_harness(string harnessType, bool partial)
@@ -495,7 +492,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             }),
         };
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             new SessionActivityTracker(),
@@ -503,7 +500,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var snapshot = await proxy.GetSnapshotAsync("session-down");
 
@@ -520,7 +517,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -561,7 +558,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -569,7 +566,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var result = await proxy.GetMessagesAsync(sessionId, limit: 50);
@@ -599,7 +596,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -654,7 +651,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -662,7 +659,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var result = await proxy.GetMessagesAsync(sessionId);
@@ -687,7 +684,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -734,7 +731,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -742,7 +739,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -806,7 +803,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -844,7 +841,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -852,7 +849,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -880,7 +877,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Test Session",
             Status = "active",
             UserId = "user-1",
@@ -924,7 +921,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -932,7 +929,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -972,7 +969,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             HarnessResumeToken = "resume-token-123",
             Title = "Test Session",
             Status = "active",
@@ -1015,7 +1012,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         };
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -1023,7 +1020,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -1052,7 +1049,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             HarnessResumeToken = "resume-token-456",
             Title = "Test Session",
             Status = "active",
@@ -1114,7 +1111,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         };
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -1122,7 +1119,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -1151,7 +1148,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             HarnessResumeToken = "resume-token-789",
             Title = "Test Session",
             Status = "active",
@@ -1192,7 +1189,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         };
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -1200,7 +1197,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var result = await proxy.GetMessagesAsync(sessionId);
@@ -1261,7 +1258,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             }
         };
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             new SessionActivityTracker(),
@@ -1269,7 +1266,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             CreateServiceProvider(sessionActivator),
             new HarnessRegistry([new OpenCode2Harness(), new CopilotHarness()], []),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var result = await proxy.GetMessagesAsync(sessionId);
 
@@ -1287,7 +1284,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             HarnessResumeToken = "resume-token-exception",
             Title = "Test Session",
             Status = "active",
@@ -1349,7 +1346,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         };
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -1357,7 +1354,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -1388,7 +1385,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = instanceId,
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             HarnessResumeToken = null, // No resume token
             Title = "Test Session",
             Status = "active",
@@ -1424,7 +1421,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         var sessionActivator = new FakeSessionActivator();
         var serviceProvider = CreateServiceProvider(sessionActivator);
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -1432,7 +1429,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallbackSnapshotBuilder,
             serviceProvider,
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         // Act
         var snapshot = await proxy.GetSnapshotAsync(sessionId);
@@ -1452,7 +1449,7 @@ public sealed class OpenCodeSessionMessageProxyTests
 
     private static readonly DateTimeOffset _promptSentAt = new(2026, 9, 13, 12, 0, 0, TimeSpan.Zero);
 
-    private static OpenCodeSessionMessageProxy CreateLiveProxy(
+    private static SessionMessageProxy CreateLiveProxy(
         IReadOnlyList<HarnessMessage> harnessMessages,
         InMemoryMessageRepository messageRepository)
     {
@@ -1461,7 +1458,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = "session-new",
             InstanceId = "instance-new",
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Untitled",
             Status = "active",
             UserId = "user-1",
@@ -1473,7 +1470,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage(harnessMessages, false)),
         });
 
-        return new OpenCodeSessionMessageProxy(
+        return new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             new SessionActivityTracker(),
@@ -1481,7 +1478,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             new FakeSessionSnapshotBuilder(),
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance,
+            NullLogger<SessionMessageProxy>.Instance,
             messageRepository);
     }
 
@@ -1629,7 +1626,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = "session-long",
             InstanceId = "instance-long",
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Long",
             Status = "active",
             UserId = "user-1",
@@ -1645,7 +1642,7 @@ public sealed class OpenCodeSessionMessageProxyTests
                     : new MessagePage([HarnessMessage("msg_old", "user", _promptSentAt.AddMinutes(-5))], false));
             },
         });
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             new SessionActivityTracker(),
@@ -1653,7 +1650,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             new FakeSessionSnapshotBuilder(),
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var latest = await proxy.GetSnapshotAsync("session-long");
         var older = await proxy.GetSnapshotAsync("session-long", cursor: latest.Cursor);
@@ -1813,7 +1810,7 @@ public sealed class OpenCodeSessionMessageProxyTests
                 ActivityStatus = "idle",
             }),
         };
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             new InstanceTracker(),
             new SessionActivityTracker(),
@@ -1821,7 +1818,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             fallback,
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance,
+            NullLogger<SessionMessageProxy>.Instance,
             repository);
 
         var snapshot = await proxy.GetSnapshotAsync("session-cc");
@@ -1839,7 +1836,7 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = "session-streaming",
             InstanceId = "instance-streaming",
-            HarnessType = "opencode",
+            HarnessType = "opencode2",
             Title = "Rate limit headers",
             Status = "active",
             UserId = "user-1",
@@ -1880,7 +1877,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             });
         }
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessionRepository,
             instanceTracker,
             activityTracker,
@@ -1888,7 +1885,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             new FakeSessionSnapshotBuilder(),
             CreateServiceProvider(new FakeSessionActivator()),
             Harnesses(),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance,
+            NullLogger<SessionMessageProxy>.Instance,
             streaming: streaming);
 
         var snapshot = await proxy.GetSnapshotAsync("session-streaming");

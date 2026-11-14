@@ -1,14 +1,12 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
-using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Testing.Fakes;
@@ -161,9 +159,9 @@ public sealed class CutOffToolCallsTests
                 ActivityStatus = "idle",
             }),
         };
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessions, new InstanceTracker(), activity, new InMemoryDelegationRepository(), builder,
-            new ServiceCollection().BuildServiceProvider(), Harnesses(), NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            new ServiceCollection().BuildServiceProvider(), Harnesses(), NullLogger<SessionMessageProxy>.Instance);
 
         var tools = Tools(await proxy.GetSnapshotAsync(SessionId));
 
@@ -174,9 +172,9 @@ public sealed class CutOffToolCallsTests
         => snapshot.Messages.SelectMany(m => m.Parts).OfType<ToolMessageEventPart>().ToDictionary(p => p.CallId, p => p.State);
 
     private static HarnessRegistry Harnesses()
-        => new([new OpenCodeHarness(new FleetOptions()), new OpenCode2Harness(), new ClaudeCodeHarness()], []);
+        => new([new OpenCode2Harness(), new ClaudeCodeHarness()], []);
 
-    private static OpenCodeSessionMessageProxy LiveProxy(string activity, params ToolUsePart[] tools)
+    private static SessionMessageProxy LiveProxy(string activity, params ToolUsePart[] tools)
     {
         var tracker = new SessionActivityTracker();
         tracker.Update(SessionId, activity, "user-1");
@@ -190,20 +188,20 @@ public sealed class CutOffToolCallsTests
         return tracker;
     }
 
-    private static OpenCodeSessionMessageProxy LiveProxy(
+    private static SessionMessageProxy LiveProxy(
         SessionActivityTracker activity,
         InMemoryDelegationRepository delegations,
         params ToolUsePart[] tools)
         => LiveProxy(activity, delegations, "assistant", tools);
 
-    private static OpenCodeSessionMessageProxy LiveProxy(
+    private static SessionMessageProxy LiveProxy(
         SessionActivityTracker activity,
         InMemoryDelegationRepository delegations,
         string role,
         params ToolUsePart[] tools)
     {
         var sessions = new InMemorySessionRepository();
-        sessions.Seed(new Session { Id = SessionId, InstanceId = InstanceId, HarnessType = "opencode", Title = "t", Status = "active", UserId = "user-1" });
+        sessions.Seed(new Session { Id = SessionId, InstanceId = InstanceId, HarnessType = "opencode2", Title = "t", Status = "active", UserId = "user-1" });
         var instances = new InstanceTracker();
         instances.Register(InstanceId, new FakeHarnessSession(InstanceId)
         {
@@ -212,8 +210,8 @@ public sealed class CutOffToolCallsTests
                 false)),
         });
 
-        return new OpenCodeSessionMessageProxy(
+        return new SessionMessageProxy(
             sessions, instances, activity, delegations, new FakeSessionSnapshotBuilder(),
-            new ServiceCollection().BuildServiceProvider(), Harnesses(), NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            new ServiceCollection().BuildServiceProvider(), Harnesses(), NullLogger<SessionMessageProxy>.Instance);
     }
 }

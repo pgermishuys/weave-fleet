@@ -8,8 +8,8 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses;
-using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
@@ -238,7 +238,7 @@ public sealed class OpenCode2HistoryTests
             GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage(messages, false)),
         });
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessions,
             instances,
             new SessionActivityTracker(),
@@ -246,7 +246,7 @@ public sealed class OpenCode2HistoryTests
             new FakeSessionSnapshotBuilder(),
             new ServiceCollection().BuildServiceProvider(),
             new HarnessRegistry([new OpenCode2Harness()], []),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         var snapshot = await proxy.GetSnapshotAsync(FleetSession);
         snapshot.IsPartial.ShouldBeFalse();

@@ -5,7 +5,7 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Testing.Fakes;
 
-namespace WeaveFleet.Infrastructure.Tests.Services;
+namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 public sealed class OpenCodeWarmupHostedServiceTests
 {

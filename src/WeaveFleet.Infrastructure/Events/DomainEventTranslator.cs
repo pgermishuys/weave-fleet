@@ -596,10 +596,14 @@ internal sealed class DomainEventTranslator
             return false;
 
         return info.TryGetProperty("role", out var role) && role.ValueEquals("assistant")
-            && Harnesses.OpenCode.OpenCodeMapper.IsCompactionSummary(
+            && IsCompactionSummary(
                 info.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : null,
                 info.TryGetProperty("summary", out var summary) ? summary : null);
     }
+
+    /// <summary>The assistant message a compaction writes: its summary, in <c>mode: compaction</c> or with <c>summary: true</c>.</summary>
+    internal static bool IsCompactionSummary(string? mode, JsonElement? summary)
+        => mode == "compaction" || summary is { ValueKind: JsonValueKind.True };
 
     /// <summary>
     /// Reads the harness's own <c>info.error</c> off the raw event. The harness shape does not bind to

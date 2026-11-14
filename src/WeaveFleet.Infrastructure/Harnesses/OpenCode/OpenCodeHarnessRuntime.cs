@@ -524,7 +524,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             preferences,
             scope.ServiceProvider.GetService<ISkillVersionStore>(),
             userId,
-            OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name),
+            BuiltInSkillFiles.BuiltIn.Select(skill => skill.Name),
             scope.ServiceProvider.GetService<ModsFeature>() is { } mods && await mods.IsSwitchedOnAsync().ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -1183,7 +1183,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (environmentVariables.TryGetValue(OpenCodeFleetSkills.BuiltInVariable, out var names)
             && GetBuiltInSkillsPath() is { } builtInSkills)
         {
-            var shipped = OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name).ToHashSet(StringComparer.Ordinal);
+            var shipped = BuiltInSkillFiles.BuiltIn.Select(skill => skill.Name).ToHashSet(StringComparer.Ordinal);
             folders.AddRange(names.Split(',').Where(shipped.Contains).Select(name => Path.Combine(builtInSkills, name)));
         }
 

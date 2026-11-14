@@ -80,7 +80,7 @@ public sealed class FleetAppStartPermissionLiveTests
         });
         llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }
