@@ -1,0 +1,60 @@
+name: Defect record
+
+# A fix PR (its title starts with fix: or fix(…):) carries a defect record in its body: Found by, Cause, Shipped in
+# and Guard. .github/scripts/defect-record.sh says what each line takes and why the title is the only signal.
+#
+# This is its own workflow, not a job in ci.yml, so that fixing the body reruns this check alone, in seconds: ci.yml
+# doesn't run on "edited" and shouldn't (a PR's CI takes minutes, and a new run cancels the last one). Its job,
+# "Defect record", is a required check of its own beside "CI passed". It runs for every base branch, so a stacked PR
+# hears about a missing record before it's retargeted to main (retargeting is an "edited" event too).
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+# Only the newest title and body count: an edit cancels the check of the one before.
+concurrency:
+  group: defect-record-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  defect-record:
+    name: Defect record
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: false
+
+      - name: Check the rule against its cases
+        run: .github/scripts/defect-record.test.sh
+
+      # The title and body come in through the environment, never pasted into the script, so nothing in them runs.
+      - name: Check this PR's title and body
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set +e
+          printf '%s' "$PR_BODY" | .github/scripts/defect-record.sh "$PR_TITLE" > "$RUNNER_TEMP/defect-record.txt"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/defect-record.txt"
+          if [ "$code" -ne 0 ]; then
+            {
+              echo '### This fix PR needs a defect record'
+              echo '```'
+              cat "$RUNNER_TEMP/defect-record.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            # One annotation with the whole message, so the PR's Checks tab shows what to paste.
+            msg="$(sed -e 's/%/%25/g' "$RUNNER_TEMP/defect-record.txt" | awk 'BEGIN { ORS = "%0A" } { print }')"
+            echo "::error title=Defect record missing::$msg"
+          fi
+          exit "$code"
