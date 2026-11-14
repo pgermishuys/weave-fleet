@@ -151,7 +151,7 @@ public sealed class PiHarnessSessionTests
         await using var session = harness.CreateSession();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        var messagesTask = session.GetMessagesAsync(new MessageQuery(1, "assistant-3"), cts.Token);
+        var messagesTask = session.GetMessagesAsync(new MessageQuery(1, "pi-fleet-session-assistant-3000"), cts.Token);
         var command = await harness.ReadCommandAsync(cts.Token);
         command.GetProperty("type").GetString().ShouldBe("get_messages");
         var requestId = command.GetProperty("id").GetString();
@@ -191,9 +191,119 @@ public sealed class PiHarnessSessionTests
 
         page.HasMore.ShouldBeTrue();
         page.Messages.Count.ShouldBe(1);
-        page.Messages[0].Id.ShouldBe("user-1");
+        page.Messages[0].Id.ShouldBe("pi-fleet-session-user-1000");
         page.Messages[0].Role.ShouldBe("user");
         page.Messages[0].TextContent.ShouldBe("question");
+    }
+
+    [Fact]
+    public async Task history_names_messages_and_parts_as_the_live_events_did_and_finishes_each_tool_call()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // A prompt Fleet sent under its own id, and the run that answers it, live.
+        var promptTask = session.SendPromptAsync("Which columns?", new PromptOptions { MessageId = "msg_0000000000000000001" }, cts.Token);
+        (await harness.ReadCommandAsync(cts.Token)).GetProperty("type").GetString().ShouldBe("prompt");
+        await harness.WriteResponseAsync(null, "prompt", true, null, cts.Token);
+        await promptTask;
+
+        var question = new PiMessage { Role = "user", Content = [new PiTextContent { Text = "Which columns?" }], Timestamp = 1000 };
+        var answer = AssistantMessage(2000,
+            new PiTextContent { Text = "Writing the plan." },
+            new PiToolCallContent { Id = "call_write", Name = "write", Arguments = JsonSerializer.SerializeToElement(new { path = "plan.md" }) },
+            new PiToolCallContent { Id = "call_tick", Name = "edit", Arguments = JsonSerializer.SerializeToElement(new { path = "plan.md" }) },
+            new PiToolCallContent { Id = "call_open", Name = "read", Arguments = JsonSerializer.SerializeToElement(new { path = "plan.md" }) });
+        var liveTask = ReadEventsAsync(session, 3, cts.Token);
+        await harness.WriteEventAsync(new PiAgentStartEvent(), cts.Token);
+        await harness.WriteEventAsync(new PiMessageStartEvent { Message = question }, cts.Token);
+        await harness.WriteEventAsync(new PiMessageStartEvent { Message = answer }, cts.Token);
+        var live = await liveTask;
+        var liveAnswerId = MessageId(live[2]);
+
+        var historyTask = session.GetMessagesAsync(null, cts.Token);
+        var command = await harness.ReadCommandAsync(cts.Token);
+        command.GetProperty("type").GetString().ShouldBe("get_messages");
+        await harness.WriteResponseAsync(command.GetProperty("id").GetString(), "get_messages", true, new
+        {
+            messages = new object[]
+            {
+                new { role = "user", content = new object[] { new { type = "text", text = "Which columns?" } }, timestamp = 1000 },
+                new
+                {
+                    role = "assistant",
+                    content = new object[]
+                    {
+                        new { type = "text", text = "Writing the plan." },
+                        new { type = "toolCall", id = "call_write", name = "write", arguments = new { path = "plan.md" } },
+                        new { type = "toolCall", id = "call_tick", name = "edit", arguments = new { path = "plan.md" } },
+                        new { type = "toolCall", id = "call_open", name = "read", arguments = new { path = "plan.md" } },
+                    },
+                    timestamp = 2000,
+                    responseId = "resp-from-the-provider",
+                    model = "fake-model",
+                },
+                new
+                {
+                    role = "toolResult", toolCallId = "call_write", toolName = "write", isError = false, timestamp = 3000,
+                    content = new object[] { new { type = "text", text = "Wrote 12 bytes." } },
+                },
+                new
+                {
+                    role = "toolResult", toolCallId = "call_tick", toolName = "edit", isError = true, timestamp = 4000,
+                    content = new object[] { new { type = "text", text = "No such line." } },
+                    details = new { diff = "-a\n+b" },
+                },
+            },
+        }, cts.Token);
+        var history = (await historyTask).Messages;
+
+        // The prompt keeps Fleet's id, and the reply the id its live events had: a page read mid-run updates them.
+        history.Select(static m => m.Id).ShouldBe(new[]
+        {
+            "msg_0000000000000000001",
+            liveAnswerId,
+            "pi-fleet-session-toolResult-3000-call_write",
+            "pi-fleet-session-toolResult-4000-call_tick",
+        });
+        liveAnswerId.ShouldBe("pi-fleet-session-assistant-2000");
+        var parts = history[1].Parts;
+        parts.OfType<TextPart>().Single().PartId.ShouldBe("pi-fleet-session-assistant-2000-content-0");
+        var calls = parts.OfType<ToolUsePart>().ToList();
+        calls.Select(static c => c.PartId).ShouldBe(Enumerable.Range(1, 3).Select(static i => $"pi-fleet-session-assistant-2000-content-{i}"));
+        calls[0].State.ShouldBe(ToolUseState.Completed);
+        calls[0].Output!.Value.GetString().ShouldBe("Wrote 12 bytes.");
+        calls[1].State.ShouldBe(ToolUseState.Error);
+        calls[1].Error.ShouldBe("No such line.");
+        calls[1].Output!.Value.GetProperty("diff").GetString().ShouldBe("-a\n+b");
+        // No result yet: still running, or cut off if the run is over.
+        calls[2].State.ShouldBe(ToolUseState.Pending);
+        history[1].ModelId.ShouldBe("fake-model");
+        history[2].Agent.ShouldBe("tool:write");
+    }
+
+    [Fact]
+    public async Task pi_084_settle_and_thinking_level_events_end_the_turn_without_an_error()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Pi 0.84.2's lines, as it writes them after a model switch and at the end of a run.
+        await harness.WriteLineAsync("""{"type":"thinking_level_changed","level":"off"}""", cts.Token);
+        await harness.WriteEventAsync(new PiAgentStartEvent(), cts.Token);
+        await harness.WriteEventAsync(new PiAgentEndEvent(), cts.Token);
+        await harness.WriteLineAsync("""{"type":"agent_settled"}""", cts.Token);
+        await harness.WriteLineAsync("""{"type":"a_type_from_a_later_pi","x":1}""", cts.Token);
+        await harness.WriteEventAsync(new PiIdleEvent(), cts.Token);
+
+        var events = await ReadEventsAsync(session, 3, cts.Token);
+        events.Select(static e => e.Type).ShouldBe(new[] { EventTypes.SessionStatus, EventTypes.SessionStatus, EventTypes.SessionStatus });
+        string?[] statuses = ["busy", "idle", "idle"];
+        events.Select(StatusType).ShouldBe(statuses);
+        (await TryReadHarnessEventAsync(session, TimeSpan.FromMilliseconds(200))).ShouldBeNull();
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
     }
 
     [Fact]
@@ -657,6 +767,9 @@ public sealed class PiHarnessSessionTests
             ct.ThrowIfCancellationRequested();
             throw new OperationCanceledException(ct);
         }
+
+        public Task WriteLineAsync(string line, CancellationToken ct)
+            => _clientOutput.WriteLineAsync(line, ct);
 
         public async Task WriteEventAsync(PiEvent evt, CancellationToken ct)
         {

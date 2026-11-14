@@ -142,6 +142,8 @@ internal sealed record PiSwitchSessionCommand : PiCommand
 [JsonDerivedType(typeof(PiResponseEvent), "response")]
 [JsonDerivedType(typeof(PiAgentStartEvent), "agent_start")]
 [JsonDerivedType(typeof(PiAgentEndEvent), "agent_end")]
+[JsonDerivedType(typeof(PiAgentSettledEvent), "agent_settled")]
+[JsonDerivedType(typeof(PiThinkingLevelChangedEvent), "thinking_level_changed")]
 [JsonDerivedType(typeof(PiTurnStartEvent), "turn_start")]
 [JsonDerivedType(typeof(PiTurnEndEvent), "turn_end")]
 [JsonDerivedType(typeof(PiMessageStartEvent), "message_start")]
@@ -279,6 +281,18 @@ internal sealed record PiQueueUpdateEvent : PiEvent
 /// <summary>Pi reported that the session is idle.</summary>
 internal sealed record PiIdleEvent : PiEvent;
 
+/// <summary>
+/// Pi 0.84 and later: the run is over for good, after <c>agent_end</c>, with no retry, compaction retry or queued
+/// follow-up left to run.
+/// </summary>
+internal sealed record PiAgentSettledEvent : PiEvent;
+
+/// <summary>Pi 0.84 and later: Pi's thinking level changed, for example when a model switch clamps it.</summary>
+internal sealed record PiThinkingLevelChangedEvent : PiEvent
+{
+    [JsonPropertyName("level")] public string? Level { get; init; }
+}
+
 /// <summary>Pi emitted a protocol/runtime error event.</summary>
 internal sealed record PiErrorEvent : PiEvent
 {
@@ -396,6 +410,8 @@ internal sealed record PiMessage
     [JsonPropertyName("toolCallId")] public string? ToolCallId { get; init; }
     [JsonPropertyName("toolName")] public string? ToolName { get; init; }
     [JsonPropertyName("isError")] public bool? IsError { get; init; }
+    /// <summary>A tool result's structured details (an edit's diff), as <c>tool_execution_end</c> carries them.</summary>
+    [JsonPropertyName("details")] public JsonElement? Details { get; init; }
 }
 
 /// <summary>Base type for Pi message/tool-result content blocks.</summary>

@@ -28,6 +28,8 @@ public sealed class PiHarness : IHarness
         // Pi's compact command.
         SupportsCompaction = true,
         SupportsResume = true,
+        // Pi keeps the conversation in its session file and answers get_messages from it; Fleet saves none of it.
+        HistoryLivesInHarness = true,
         SupportsImageAttachments = false,
         SupportsStreaming = true,
         SupportsDelegation = false,

@@ -39,6 +39,10 @@ internal sealed class PiJsonlClient : IAsyncDisposable
         LoggerMessage.Define<string, string?, string?, string>(LogLevel.Debug, new EventId(7, "ProtocolErrorRaw"),
             "pi protocol error raw kind={Kind} eventType={EventType} id={CommandId} raw={RawLine}");
 
+    private static readonly Action<ILogger, string?, Exception?> LogUnmodeledEventSkipped =
+        LoggerMessage.Define<string?>(LogLevel.Debug, new EventId(9, "UnmodeledEventSkipped"),
+            "pi stdout: skipping events of type {EventType}, which Fleet doesn't model (a newer Pi's); logged once per type.");
+
     private static readonly Action<ILogger, Exception?> LogReadLoopFaulted =
         LoggerMessage.Define(LogLevel.Warning, new EventId(5, "ReadLoopFaulted"),
             "pi stdout reader loop faulted.");
@@ -59,6 +63,7 @@ internal sealed class PiJsonlClient : IAsyncDisposable
     private readonly ConcurrentDictionary<string, PendingRequest> _pending = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly CancellationTokenSource _readerCts = new();
+    private readonly ConcurrentDictionary<string, byte> _skippedEventTypes = new(StringComparer.Ordinal);
     private readonly Task _readerTask;
     private bool _disposed;
 
@@ -281,11 +286,12 @@ internal sealed class PiJsonlClient : IAsyncDisposable
             return;
         }
 
+        // A newer Pi adds event types (0.84 added agent_settled and thinking_level_changed). One Fleet doesn't know
+        // isn't a broken stream: it's skipped, not reported as an error that fails the turn.
         if (evt.GetType() == typeof(PiEvent))
         {
-            await PublishProtocolErrorAsync("unknown_event_type", eventType, null, null,
-                    "Pi stdout event type is not modeled.", line)
-                .ConfigureAwait(false);
+            if (_skippedEventTypes.TryAdd(eventType ?? string.Empty, 0))
+                LogUnmodeledEventSkipped(_logger, eventType, null);
             return;
         }
 
@@ -555,6 +561,8 @@ internal sealed class PiJsonlClient : IAsyncDisposable
             PiResponseEvent => "response",
             PiAgentStartEvent => "agent_start",
             PiAgentEndEvent => "agent_end",
+            PiAgentSettledEvent => "agent_settled",
+            PiThinkingLevelChangedEvent => "thinking_level_changed",
             PiTurnStartEvent => "turn_start",
             PiTurnEndEvent => "turn_end",
             PiMessageStartEvent => "message_start",

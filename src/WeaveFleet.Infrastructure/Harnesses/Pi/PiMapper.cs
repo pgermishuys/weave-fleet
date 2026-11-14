@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Analytics;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -34,6 +35,9 @@ internal sealed class PiMapper
     // started by itself.
     private string? _nextPromptId;
     private string? _promptId;
+    // The id Fleet gave each prompt Pi recorded, by the time Pi recorded it at: the history names the prompt as Fleet
+    // does, so it isn't shown twice. Written off the pump, read by history requests.
+    private readonly ConcurrentDictionary<long, string> _promptIdsByTimestamp = new();
 
     /// <summary>Creates a mapper for a Fleet session.</summary>
     internal PiMapper(string sessionId)
@@ -74,6 +78,9 @@ internal sealed class PiMapper
         {
             PiAgentStartEvent => MapAgentStart(),
             PiAgentEndEvent agentEnd => MapAgentEnd(agentEnd),
+            // Pi 0.84's settle and thinking level carry nothing the conversation shows: agent_end and turn_end already
+            // ended the run's turn, and Fleet picks the effort itself.
+            PiAgentSettledEvent or PiThinkingLevelChangedEvent => [],
             PiTurnStartEvent => [CreateStatusEvent("busy")],
             PiTurnEndEvent turnEnd => MapTurnEnd(turnEnd),
             PiMessageStartEvent messageStart => MapMessageStart(messageStart),
@@ -156,6 +163,8 @@ internal sealed class PiMapper
 
         var messageId = ResolveMessageId(evt.Message);
         _activeMessageId = messageId;
+        if (IsUser(evt.Message) && evt.Message.Timestamp is { } promptedAt && _promptId is { } promptId)
+            _promptIdsByTimestamp[promptedAt] = promptId;
         if (IsAssistant(evt.Message))
         {
             _activeAssistantMessageId = messageId;
@@ -715,21 +724,109 @@ internal sealed class PiMapper
 
     private string ResolveMessageId(PiMessage message)
     {
-        var timestamp = message.Timestamp?.ToString(CultureInfo.InvariantCulture);
-        if (!string.IsNullOrWhiteSpace(timestamp))
-        {
-            var role = Sanitize(message.Role);
-            var suffix = message.Role.Equals("toolResult", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(message.ToolCallId)
-                ? $"-{Sanitize(message.ToolCallId)}"
-                : string.Empty;
-            return $"pi-{_sessionId}-{role}-{timestamp}{suffix}";
-        }
+        if (StableMessageId(message) is { } stable)
+            return stable;
 
         if (IsAssistant(message) && _activeAssistantMessageId is not null)
             return _activeAssistantMessageId;
 
         return NextSyntheticMessageId(ToFleetRole(message.Role));
     }
+
+    /// <summary>
+    /// A message's id from what Pi keeps of it, its role and the time Pi recorded it, so the live events and the history
+    /// name a message the same way. Null for a message Pi gave no time.
+    /// </summary>
+    private string? StableMessageId(PiMessage message)
+    {
+        if (message.Timestamp is not { } timestamp)
+            return null;
+
+        var role = Sanitize(message.Role);
+        var suffix = IsToolResult(message) && !string.IsNullOrWhiteSpace(message.ToolCallId)
+            ? $"-{Sanitize(message.ToolCallId)}"
+            : string.Empty;
+        return $"pi-{_sessionId}-{role}-{timestamp.ToString(CultureInfo.InvariantCulture)}{suffix}";
+    }
+
+    /// <summary>
+    /// Pi's conversation (<c>get_messages</c>) as the live events showed it: the same message and part ids, a prompt
+    /// Fleet sent under Fleet's id, and each tool call finished with what its result message says it returned. A call
+    /// with no result yet stays pending. Reads no state of the run in progress, so it can run beside the event pump.
+    /// </summary>
+    internal List<HarnessMessage> History(IReadOnlyList<PiMessage> messages)
+    {
+        var results = new Dictionary<string, PiMessage>(StringComparer.Ordinal);
+        foreach (var message in messages)
+        {
+            if (IsToolResult(message) && !string.IsNullOrWhiteSpace(message.ToolCallId))
+                results[message.ToolCallId] = message;
+        }
+
+        var history = new List<HarnessMessage>(messages.Count);
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            if (ShouldSuppressMessage(message))
+                continue;
+
+            var id = IsUser(message) && message.Timestamp is { } promptedAt && _promptIdsByTimestamp.TryGetValue(promptedAt, out var promptId)
+                ? promptId
+                : StableMessageId(message) ?? $"pi-{_sessionId}-{Sanitize(message.Role)}-at-{index.ToString(CultureInfo.InvariantCulture)}";
+            history.Add(new HarnessMessage
+            {
+                Id = id,
+                Role = ToFleetRole(message.Role),
+                Parts = HistoryParts(message, id, results),
+                Timestamp = message.Timestamp is { } timestamp ? DateTimeOffset.FromUnixTimeMilliseconds(timestamp) : DateTimeOffset.UtcNow,
+                Agent = AgentForMessage(message),
+                ModelId = message.ResponseModel ?? message.Model,
+            });
+        }
+
+        return history;
+    }
+
+    private static List<MessagePart> HistoryParts(PiMessage message, string messageId, Dictionary<string, PiMessage> results)
+    {
+        var parts = new List<MessagePart>(message.Content.Count);
+        for (var i = 0; i < message.Content.Count; i++)
+        {
+            var partId = ContentPartId(messageId, i);
+            switch (message.Content[i])
+            {
+                case PiTextContent text:
+                    parts.Add(new TextPart(text.Text ?? string.Empty) { PartId = partId });
+                    break;
+                case PiThinkingContent thinking:
+                    parts.Add(new ReasoningPart(thinking.Thinking ?? string.Empty) { PartId = partId });
+                    break;
+                case PiToolCallContent toolCall:
+                    var callId = toolCall.Id ?? partId;
+                    var arguments = Clone(toolCall.Arguments) ?? TryParseJson(toolCall.PartialArgs) ?? default;
+                    var call = new ToolUsePart(callId, toolCall.Name ?? string.Empty, arguments, ToolUseState.Pending) { PartId = partId };
+                    if (results.TryGetValue(callId, out var result))
+                    {
+                        var returned = new PiToolResult { Content = result.Content, Details = result.Details };
+                        call = result.IsError == true
+                            ? call with { State = ToolUseState.Error, Output = ToolResultToJson(returned), Error = string.Concat(result.Content.OfType<PiTextContent>().Select(static text => text.Text)) }
+                            : call with { State = ToolUseState.Completed, Output = ToolResultToJson(returned), Metadata = ToolResultDetails(returned) };
+                    }
+
+                    parts.Add(call);
+                    break;
+            }
+        }
+
+        if (IsToolResult(message) && parts.Count == 0)
+            parts.Add(new TextPart(message.ErrorMessage ?? string.Empty) { PartId = ContentPartId(messageId, 0) });
+
+        return parts;
+    }
+
+    private static bool IsUser(PiMessage message) => message.Role.Equals(UserRole, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsToolResult(PiMessage message) => message.Role.Equals("toolResult", StringComparison.OrdinalIgnoreCase);
 
     private string NextSyntheticMessageId(string role)
     {
