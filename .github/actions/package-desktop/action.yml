@@ -1,0 +1,100 @@
+name: Package the desktop app
+description: >-
+  Packages the desktop app around an already-built Fleet server, smoke-tests it, checks it ships that server byte for
+  byte, and uploads the installers and update feed as the release-desktop-<rid> artifact. Used by the Release workflow
+  (with the server its build job compiled and smoke-tested) and the Desktop packages workflow. Needs Node and Bun set
+  up and the repository checked out.
+
+inputs:
+  rid:
+    description: The platform (linux-x64, osx-arm64, win-x64, win-arm64)
+    required: true
+  builder-args:
+    description: electron-builder's platform arguments, e.g. --mac --arm64
+    required: true
+  app:
+    description: The packaged app's executable under desktop/, for the smoke test; empty when it can't run here
+    required: false
+    default: ''
+  installers:
+    description: The installer paths to upload, one per line
+    required: true
+  version:
+    description: Version to stamp on the packages, without a leading v
+    required: true
+  server-dir:
+    description: The `dotnet publish` folder of WeaveFleet.Api for this platform
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check the server has the mod host
+      shell: bash
+      env:
+        SERVER_DIR: ${{ inputs.server-dir }}
+      run: test -s "$SERVER_DIR/mods-host/host.js"
+
+    - name: Install desktop dependencies
+      shell: bash
+      working-directory: desktop
+      run: bun install --frozen-lockfile
+
+    - name: Package desktop app
+      shell: bash
+      working-directory: desktop
+      env:
+        FLEET_SERVER_DIR: ${{ inputs.server-dir }}
+        # Ad-hoc signing on macOS needs no secrets, so pull request builds sign the way releases do.
+        CSC_FOR_PULL_REQUEST: 'true'
+        VERSION: ${{ inputs.version }}
+      run: bun run dist -- ${{ inputs.builder-args }} -c.extraMetadata.version="$VERSION"
+
+    - name: Check the app ships the server as built
+      shell: bash
+      working-directory: desktop
+      env:
+        SERVER_DIR: ${{ inputs.server-dir }}
+      run: node scripts/check-bundled-server.mjs "$SERVER_DIR" release
+
+    - name: Smoke test packaged app (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      working-directory: desktop
+      run: xvfb-run -a node scripts/smoke.mjs ${{ inputs.app }} --no-sandbox
+
+    - name: Smoke test packaged app
+      if: runner.os != 'Linux' && inputs.app != ''
+      shell: bash
+      working-directory: desktop
+      run: node scripts/smoke.mjs ${{ inputs.app }}
+
+    - name: Collect release files
+      shell: bash
+      working-directory: desktop/release
+      env:
+        RID: ${{ inputs.rid }}
+      run: |
+        # Both Windows builds write latest.yml; the Release workflow merges them back into one.
+        if [ -f latest.yml ]; then
+          mv latest.yml "latest-win-${RID#win-}.yml"
+        fi
+        for file in Fleet-*.AppImage Fleet-*.deb Fleet-*.dmg Fleet-*.zip Fleet-*-setup.exe; do
+          [ -f "$file" ] || continue
+          node -e 'const f=process.argv[1]; console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(f)).digest("hex") + "  " + f)' "$file" > "$file.sha256"
+        done
+        ls -la
+
+    - name: Upload installers
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-desktop-${{ inputs.rid }}
+        path: |
+          ${{ inputs.installers }}
+          desktop/release/*.sha256
+          desktop/release/latest*.yml
+          desktop/release/*.blockmap
+        if-no-files-found: error
+        retention-days: 7
+        # A re-run of a failed job uploads again.
+        overwrite: true
