@@ -36,12 +36,20 @@ public sealed class DreamingAutomationTests : IDisposable
         _sut = new DreamingAutomation(
             new DreamingFeature(_preferences), _preferences, _runs, _sessions, _store, _starter, new NoUserScope(),
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), _time, NullLogger<DreamingAutomation>.Instance)
-        { PollEvery = TimeSpan.Zero };
+        { PollEvery = TimeSpan.Zero, QuickChats = Path.Combine(_root, "home", ".weave-fleet", "quick-chats") };
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    private string Folder(string name) => Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
+    /// <summary>A git repository's folder (it has a .git folder).</summary>
+    private string Folder(string name)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
+        Directory.CreateDirectory(Path.Combine(folder, ".git"));
+        return folder;
+    }
+
+    private string PlainFolder(string name) => Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
 
     private void Session(string id, string directory, TimeSpan ago, bool hidden = false, params string[] tags)
         => _sessions.Seed(new Session { Id = id, Directory = directory, CreatedAt = (_time.GetUtcNow() - ago).UtcDateTime.ToString("O"), IsHidden = hidden, Tags = [.. tags], UserId = Owner });
@@ -82,6 +90,41 @@ public sealed class DreamingAutomationTests : IDisposable
         var settled = _runs.All.Single();
         settled.SettledState.ShouldBe("done");
         settled.Summary.ShouldBe("alpha: 1 note added · beta: no changes · 1 min, 3k tokens");
+    }
+
+    [Fact]
+    public async Task A_night_dreams_only_git_repositories_never_a_quick_chat_or_a_plain_folder()
+    {
+        var alpha = Folder("alpha");
+        Folder("home"); // the home folder is itself a repository, so a quick chat's folder sits inside one
+        var quickChat = PlainFolder(Path.Combine("home", ".weave-fleet", "quick-chats", "3f9c2a7be1d04c5e8a6b2d4f1e0c9a87"));
+        var otherQuickChat = PlainFolder(Path.Combine("home", ".weave-fleet", "quick-chats", "b51e0d93c7a24f68a1d5e2c3b4f6a7d8"));
+        var notes = PlainFolder("loose-notes");
+        Session("s1", alpha, TimeSpan.FromHours(1));
+        Session("s2", quickChat, TimeSpan.FromHours(2));
+        Session("s3", quickChat, TimeSpan.FromHours(3));
+        Session("s4", otherQuickChat, TimeSpan.FromHours(4));
+        Session("s5", notes, TimeSpan.FromHours(5));
+        var since = _time.GetUtcNow().AddDays(-1);
+        var run = await BeginRunAsync();
+
+        var repositories = await _sut.RepositoriesSinceAsync(since);
+        await _sut.NightAsync(_automation, run.Id, since, repositories);
+
+        repositories.Select(r => r.Repository).ShouldBe([alpha]);
+        _starter.Requests.Select(r => r.Repository).ShouldBe([alpha]);
+        _runs.All.Single().Summary.ShouldBe("alpha: no changes · 1 min, 0 tokens");
+    }
+
+    [Fact]
+    public async Task A_run_with_only_quick_chats_since_the_last_night_is_skipped()
+    {
+        Session("s1", PlainFolder(Path.Combine("home", ".weave-fleet", "quick-chats", "3f9c2a7be1d04c5e8a6b2d4f1e0c9a87")), TimeSpan.FromHours(1));
+
+        var outcome = await _sut.RunAsync(_automation, await BeginRunAsync());
+
+        outcome.Skipped.ShouldBeTrue();
+        _starter.Requests.ShouldBeEmpty();
     }
 
     [Fact]
