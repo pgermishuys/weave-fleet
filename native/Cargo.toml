@@ -1,0 +1,36 @@
+# Weave Fleet's desktop shell, rebuilt in Rune (github.com/anomalyco/rune) as a look-and-feel
+# prototype. Mock data only: it doesn't talk to a Fleet server. See README.md.
+[package]
+name = "fleet-shell"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "f1f54ce8bf485ee3a95804deace315f53a8970f6", features = ["tooling"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+
+# Rune patches these crates, and a dependency's [patch] doesn't reach the app that depends on it,
+# so the app repeats them from the same rev (Rune's README, "Depending on Rune").
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "f1f54ce8bf485ee3a95804deace315f53a8970f6" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "f1f54ce8bf485ee3a95804deace315f53a8970f6" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "f1f54ce8bf485ee3a95804deace315f53a8970f6" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "f1f54ce8bf485ee3a95804deace315f53a8970f6" }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+opt-level = 1
+
+[profile.release]
+codegen-units = 16

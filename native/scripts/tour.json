@@ -1,0 +1,22 @@
+{"events": [
+  {"t": 0.6,  "type": "tap", "key": "session-0-1"},
+  {"t": 1.5,  "type": "tap", "key": "session-1-0"},
+  {"t": 2.4,  "type": "tap", "key": "session-0-0"},
+  {"t": 3.1,  "type": "tap", "key": "composer"},
+  {"t": 3.4,  "type": "type", "text": "Add a test for the rename step too.", "every": 0.04},
+  {"t": 5.2,  "type": "key", "name": "Enter"},
+  {"t": 5.3,  "type": "mark", "name": "sent"},
+  {"t": 8.6,  "type": "mark", "name": "replied"},
+  {"t": 8.8,  "type": "tap", "key": "content-rail"},
+  {"t": 9.6,  "type": "mark", "name": "plan"},
+  {"t": 9.9,  "type": "tap", "key": "close-content"},
+  {"t": 10.5, "type": "drag", "key": "sidebar-gutter", "dx": -80, "dur": 0.5},
+  {"t": 11.4, "type": "mark", "name": "dragged"},
+  {"t": 11.6, "type": "key", "name": "b", "cmd": true},
+  {"t": 12.4, "type": "key", "name": "b", "cmd": true},
+  {"t": 13.0, "type": "tap", "key": "rail-automations"},
+  {"t": 13.8, "type": "tap", "key": "rail-sessions"},
+  {"t": 14.4, "type": "tap", "key": "project-2"},
+  {"t": 15.0, "type": "key", "name": "l", "cmd": true, "shift": true},
+  {"t": 16.2, "type": "mark", "name": "end"}
+]}
