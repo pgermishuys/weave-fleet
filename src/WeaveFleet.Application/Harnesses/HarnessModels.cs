@@ -44,6 +44,13 @@ public sealed record HarnessSpawnOptions
     public required string WorkingDirectory { get; init; }
     public required string OwnerUserId { get; init; }
     public string? InitialPrompt { get; init; }
+
+    /// <summary>
+    /// The agent and model the session was created with, for <see cref="InitialPrompt"/>: a harness that takes the first
+    /// message at spawn sends it with these, as every later prompt is sent with the session's choices.
+    /// </summary>
+    public PromptOptions? InitialPromptOptions { get; init; }
+
     public string? Branch { get; init; }
     public string? ProjectId { get; init; }
     public string? ProjectName { get; init; }

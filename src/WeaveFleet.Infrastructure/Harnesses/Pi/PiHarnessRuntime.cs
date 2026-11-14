@@ -101,7 +101,8 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
 
             if (options.InitialPrompt is not null)
             {
-                await session.SendPromptAsync(options.InitialPrompt, null, ct).ConfigureAwait(false);
+                // On the session's chosen model: Pi starts on its own default, and the prompt switches it first.
+                await session.SendPromptAsync(options.InitialPrompt, options.InitialPromptOptions, ct).ConfigureAwait(false);
             }
 
             LogSpawned(_logger, instanceId, null);
