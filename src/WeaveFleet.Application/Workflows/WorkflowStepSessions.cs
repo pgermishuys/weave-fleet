@@ -20,7 +20,7 @@ public sealed class WorkflowStepSessions(
     ISessionRepository sessions,
     IProjectRepository projects) : IWorkflowStepSessions
 {
-    public async Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
+    public async Task<WorkflowStepSession> CreateAsync(WorkflowRun run, WorkflowAgentStep agentStep, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
     {
         var (providerId, modelId) = model.Split();
         var created = await creation.CreateSessionAsync(new CreateSessionRequest
@@ -44,8 +44,14 @@ public sealed class WorkflowStepSessions(
             return WorkflowStepSession.Failed(created.Error.Description);
 
         var session = created.Value.Session;
+        return new WorkflowStepSession(session.Id, session.Directory, created.Value.Branch, null);
+    }
+
+    public async Task<WorkflowPromptSent> PromptStepAsync(string sessionId, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, CancellationToken ct)
+    {
+        var (providerId, modelId) = model.Split();
         var sent = await prompting.PromptSessionWithReceiptAsync(
-                session.Id,
+                sessionId,
                 prompt,
                 new PromptOptions { Agent = agentStep.Agent, ProviderId = providerId, ModelId = modelId, Effort = model.Effort },
                 userMessageId: null,
@@ -54,8 +60,8 @@ public sealed class WorkflowStepSessions(
             .ConfigureAwait(false);
 
         return sent.IsFailure
-            ? WorkflowStepSession.Failed(sent.Error.Description, session.Id)
-            : new WorkflowStepSession(session.Id, session.Directory, created.Value.Branch, null, sent.Value.MessageId);
+            ? new WorkflowPromptSent(null, sent.Error.Description)
+            : new WorkflowPromptSent(sent.Value.MessageId, null);
     }
 
     public async Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct)

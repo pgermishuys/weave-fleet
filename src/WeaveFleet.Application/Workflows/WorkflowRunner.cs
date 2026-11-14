@@ -14,8 +14,16 @@ namespace WeaveFleet.Application.Workflows;
 /// <summary>Starts the session for an agent step, and talks to it when the user moves on from a step they finish.</summary>
 public interface IWorkflowStepSessions
 {
+    /// <summary>
+    /// Makes the session for an agent step, without prompting it: Fleet records it as the step's session, and watches
+    /// it, before the prompt goes (<see cref="PromptStepAsync"/>), since a quick model can call the step tool or end
+    /// its turn before the send returns.
+    /// </summary>
     /// <param name="userFinishes">The user finishes the step, so its session doesn't get the step tool.</param>
-    Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct);
+    Task<WorkflowStepSession> CreateAsync(WorkflowRun run, WorkflowAgentStep agentStep, WorkflowModelChoice model, bool userFinishes, CancellationToken ct);
+
+    /// <summary>Sends a step's own prompt into the session made for it, with the step's agent and model.</summary>
+    Task<WorkflowPromptSent> PromptStepAsync(string sessionId, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, CancellationToken ct);
 
     /// <summary>Sends Fleet's wrap-up prompt into a step's session.</summary>
     Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct);
@@ -24,12 +32,11 @@ public interface IWorkflowStepSessions
     Task<string?> ReplyToAsync(string sessionId, string messageId, CancellationToken ct);
 }
 
-/// <summary>The session a step started in, or why it couldn't start.</summary>
+/// <summary>The session made for a step, or why it couldn't be made.</summary>
 /// <param name="Directory">Where the session works: the run's worktree.</param>
-/// <param name="PromptMessageId">The id the harness was given for the step's prompt.</param>
-public sealed record WorkflowStepSession(string? SessionId, string? Directory, string? Branch, string? Error, string? PromptMessageId = null)
+public sealed record WorkflowStepSession(string? SessionId, string? Directory, string? Branch, string? Error)
 {
-    public static WorkflowStepSession Failed(string error, string? sessionId = null) => new(sessionId, null, null, error);
+    public static WorkflowStepSession Failed(string error) => new(null, null, null, error);
 }
 
 /// <summary>A prompt Fleet sent into a step's session: the id the harness was given for it, or why it didn't go.</summary>
@@ -668,48 +675,71 @@ public sealed partial class WorkflowRunner(
         await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
 
         var model = state.Options.StepModels.GetValueOrDefault(step.Id) ?? WorkflowModelChoice.Default;
-        WorkflowStepSession started;
+        WorkflowStepSession created;
         try
         {
-            started = await scope.Sessions.StartAsync(run, step, PromptFor(state, step, visit), model, userFinishes, ct).ConfigureAwait(false);
+            created = await scope.Sessions.CreateAsync(run, step, model, userFinishes, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogStartFailed(ex, run.Id, step.Id);
-            started = WorkflowStepSession.Failed(ex.Message);
+            created = WorkflowStepSession.Failed(ex.Message);
         }
 
-        if (started.SessionId is { } sessionId)
+        if (created.SessionId is not { } sessionId)
         {
-            visit.SessionId = sessionId;
-            visit.PromptMessageId = started.PromptMessageId;
+            // Without a session there's nothing for the user to reply to, so the card offers to try again.
+            visit.Status = WorkflowRunStepStatus.Waiting;
             await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
-            if (run.WorktreePath is null && started.Directory is not null)
-            {
-                run.WorktreePath = started.Directory;
-                run.Branch = started.Branch;
-            }
+            await WaitAsync(scope, state, step.Id, $"Fleet couldn't start {step.Title}: {created.Error ?? "no session was made."}").ConfigureAwait(false);
+            return;
         }
 
-        if (started.Error is { } error)
+        // The step's session, and watched, before its prompt goes: a quick model can call the step tool, or end its
+        // turn without it, before the send returns. The tool's call waits on this run's lock and then finds the step;
+        // the turn's end finds the watch.
+        visit.SessionId = sessionId;
+        await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+        if (run.WorktreePath is null && created.Directory is not null)
         {
+            run.WorktreePath = created.Directory;
+            run.Branch = created.Branch;
+        }
+
+        // A step the user finishes is a conversation: a turn ending there is just a turn.
+        var watch = userFinishes ? null : new StepWatch(run.Id, visit.Id, run.UserId, WatchKind.Stall);
+        if (watch is not null)
+            _watches[sessionId] = watch;
+
+        WorkflowPromptSent sent;
+        try
+        {
+            sent = await scope.Sessions.PromptStepAsync(sessionId, step, PromptFor(state, step, visit), model, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogStartFailed(ex, run.Id, step.Id);
+            sent = new WorkflowPromptSent(null, ex.Message);
+        }
+
+        if (sent.Error is { } error)
+        {
+            if (watch is not null)
+                _watches.TryRemove(new KeyValuePair<string, StepWatch>(sessionId, watch));
             visit.Status = WorkflowRunStepStatus.Waiting;
             await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
 
-            // Without a session there's nothing for the user to reply to, so the card offers to try again. With one
-            // (the prompt didn't go through), the user can reply to the agent there instead.
-            await WaitAsync(scope, state, step.Id, visit.SessionId is null
-                ? $"Fleet couldn't start {step.Title}: {error}"
-                : $"{step.Title} started, but its prompt didn't go through: {error} Reply to the agent in its session, or pick an outcome.")
+            // The user can reply to the agent in its session instead.
+            await WaitAsync(scope, state, step.Id,
+                $"{step.Title} started, but its prompt didn't go through: {error} Reply to the agent in its session, or pick an outcome.")
                 .ConfigureAwait(false);
             return;
         }
 
-        // A step the user finishes is a conversation: a turn ending there is just a turn.
-        if (!userFinishes)
-            _watches[started.SessionId!] = new StepWatch(run.Id, visit.Id, run.UserId, WatchKind.Stall);
+        visit.PromptMessageId = sent.MessageId;
+        await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
         await SaveRunAsync(scope, state).ConfigureAwait(false);
-        LogStepStarted(run.Id, step.Id, visit.Visit, started.SessionId!);
+        LogStepStarted(run.Id, step.Id, visit.Visit, sessionId);
     }
 
     /// <summary>
