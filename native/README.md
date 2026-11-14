@@ -21,6 +21,10 @@ cargo run --release
   `sudo apt-get install libxkbcommon-dev libwayland-dev libxkbcommon-x11-0`
   (Fedora: `dnf install libxkbcommon-devel wayland-devel libxkbcommon-x11`).
 
+**Windows without Rust:** every push to this branch builds `fleet-shell.exe` on GitHub (the
+"Rune prototype (Windows)" workflow). Download the `fleet-shell-windows-x64` artifact from the
+latest run, unzip it and run the exe. It isn't signed, so Windows asks once before it runs.
+
 The window opens at the desktop app's size (1360 x 880, no smaller than 720 x 480) and follows the
 system's light or dark theme.
 

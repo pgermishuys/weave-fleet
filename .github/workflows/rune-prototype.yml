@@ -1,0 +1,52 @@
+# Builds the Rune shell prototype (native/) for Windows, so it can be tried without installing Rust.
+# This file lives on the prototype's branch only; it isn't meant for main.
+name: Rune prototype (Windows)
+
+on:
+  push:
+    branches: ['fleet/favor-have-look-rune']
+    paths:
+      - 'native/**'
+      - '.github/workflows/rune-prototype.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: native
+        shell: bash
+    env:
+      # Link the C runtime in, so the exe runs on a machine without the Visual C++ redistributable.
+      RUSTFLAGS: -C target-feature=+crt-static
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Collect the exe
+        run: |
+          mkdir dist
+          cp target/release/fleet-shell.exe dist/
+          cp README.md dist/
+          ls -la dist
+
+      # The runner has no GPU, so this may fail where a real machine wouldn't; the exe is uploaded either way.
+      - name: Draw a picture without a window
+        continue-on-error: true
+        run: |
+          ./dist/fleet-shell.exe --snap dist/snap.png --size 1280x760 --scale 2 --theme dark --at 0.3 2>&1 | cat
+          ls -la dist/snap.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet-shell-windows-x64
+          path: native/dist/
+          if-no-files-found: error
