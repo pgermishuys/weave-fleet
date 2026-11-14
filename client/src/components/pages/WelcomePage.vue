@@ -29,7 +29,7 @@ const commitSha = import.meta.env.VITE_COMMIT_SHA;
         Welcome to Weave Agent Fleet. Select a view from the workspace shell to get started, or open a session to continue recent work.
       </p>
 
-      <p class="text-xs text-muted-foreground/60">
+      <p class="text-xs text-muted-foreground">
         v{{ appVersion }} · {{ commitSha }}
       </p>
     </div>

@@ -84,7 +84,7 @@ onMounted(load);
     <template v-else>
       <div
         v-if="store.safeMode"
-        class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-text"
+        class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-idle/40 bg-idle/10 px-4 py-3 text-sm text-text"
         data-testid="mods-safe-mode"
       >
         <p class="m-0">

@@ -151,19 +151,19 @@ const downloadProgressLabel = computed(() => {
           <CheckCircle2
             v-else-if="statusVariant === 'ok'"
             :size="15"
-            class="text-success"
+            class="text-running"
             aria-hidden="true"
           />
           <Download
             v-else-if="statusVariant === 'warn'"
             :size="15"
-            class="text-warn"
+            class="text-idle"
             aria-hidden="true"
           />
           <AlertCircle
             v-else-if="statusVariant === 'error'"
             :size="15"
-            class="text-danger"
+            class="text-error"
             aria-hidden="true"
           />
           <Download
@@ -178,8 +178,8 @@ const downloadProgressLabel = computed(() => {
             :class="{
               'text-text': statusVariant === 'ok' || statusVariant === 'muted',
               'text-accent': statusVariant === 'info',
-              'text-warn': statusVariant === 'warn',
-              'text-danger': statusVariant === 'error',
+              'text-idle': statusVariant === 'warn',
+              'text-error': statusVariant === 'error',
             }"
           >
             {{ statusLabel }}
@@ -245,9 +245,9 @@ const downloadProgressLabel = computed(() => {
     <!-- Error detail -->
     <div
       v-if="updateStatus?.status === 'error' && updateStatus.error"
-      class="bg-danger/5 px-4 py-3"
+      class="bg-error/5 px-4 py-3"
     >
-      <p class="text-xs text-danger">
+      <p class="text-xs text-error">
         {{ updateStatus.error }}
       </p>
     </div>

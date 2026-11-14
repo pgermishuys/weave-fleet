@@ -52,14 +52,14 @@ async function copyDetails(): Promise<void> {
         <Circle
           v-else
           :size="14"
-          class="mt-0.5 shrink-0 text-text-muted"
+          class="mt-0.5 shrink-0 text-muted"
           aria-hidden="true"
         />
-        <span :class="step.state === 'notChecked' ? 'text-text-muted' : ''">
+        <span :class="step.state === 'notChecked' ? 'text-muted' : ''">
           {{ step.label }}<template v-if="step.state === 'notChecked'"> · not checked</template>
           <span
             v-if="step.detail"
-            class="block text-text-muted"
+            class="block text-muted"
           >{{ step.detail }}</span>
         </span>
       </li>

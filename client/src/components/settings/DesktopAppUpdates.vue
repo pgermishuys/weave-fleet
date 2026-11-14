@@ -105,7 +105,7 @@ const actionLabel = computed(() => {
       <CheckCircle2
         v-else-if="state?.status === 'idle'"
         :size="15"
-        class="text-success"
+        class="text-running"
         aria-hidden="true"
       />
       <Download
@@ -117,12 +117,12 @@ const actionLabel = computed(() => {
       <AlertCircle
         v-else-if="state?.status === 'error'"
         :size="15"
-        class="text-danger"
+        class="text-error"
         aria-hidden="true"
       />
       <p
         class="text-sm"
-        :class="state?.status === 'error' ? 'text-danger' : state?.status === 'ready' || state?.status === 'available' ? 'text-accent' : 'text-text'"
+        :class="state?.status === 'error' ? 'text-error' : state?.status === 'ready' || state?.status === 'available' ? 'text-accent' : 'text-text'"
         data-testid="desktop-app-update-status"
       >
         {{ statusLabel }}
@@ -153,7 +153,7 @@ const actionLabel = computed(() => {
     </p>
     <p
       v-else-if="state?.status === 'error' && state.error"
-      class="text-xs text-danger"
+      class="text-xs text-error"
     >
       {{ state.error }}
     </p>
