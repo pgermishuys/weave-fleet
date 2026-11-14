@@ -1290,26 +1290,20 @@ function removeSessionFromStore(): void {
 }
 
 /* Quiet sessions fade back: after a day without activity, and further after
-   three. Hover and the open session restore full contrast. Each theme sets how far
-   (--row-dim-1/2 in main.css), so a title never drops below 4.5:1. */
-.session-item--dim-1 {
+   three. Hover, the open session and a picked row restore full contrast. Each theme
+   sets how far (--row-dim-1/2 in main.css), so a title never drops below 4.5:1. */
+.session-item--dim-1:where(:not(.session-item--selected)) {
   color: color-mix(in srgb, var(--text) var(--row-dim-1), transparent);
 }
 
-.session-item--dim-2 {
+.session-item--dim-2:where(:not(.session-item--selected)) {
   color: color-mix(in srgb, var(--text) var(--row-dim-2), transparent);
 }
 
-.session-item--dim-1 .session-meta {
-  opacity: 0.75;
-}
-
-.session-item--dim-2 .session-meta {
-  opacity: 0.6;
-}
-
-.session-item:hover .session-meta {
-  opacity: 1;
+/* The quietest rows' age fades with the title, to the same floor: --row-meta is already the least that reads on a
+   hovered or picked row, so there is no room below it. */
+.session-item--dim-2:where(:not(:hover, .session-item--selected)) .session-meta--quiet {
+  color: color-mix(in srgb, var(--text) var(--row-dim-2), transparent);
 }
 
 /* Idle rows show no glyph; the slot keeps titles on one left edge. */
@@ -1346,7 +1340,8 @@ function removeSessionFromStore(): void {
   font-size: 0.85714rem;
   font-weight: 400;
   line-height: 1.3;
-  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  /* Each theme's least share of --text that reads at 4.5:1 on every row background (main.css). */
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1354,7 +1349,8 @@ function removeSessionFromStore(): void {
 /* Under its parent: how the session came from it. */
 .session-kind {
   flex-shrink: 0;
-  color: var(--muted);
+  /* Lineage stays quiet in every state (#573): the row's meta colour, which reads at 4.5:1 on all of them. */
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -1371,7 +1367,7 @@ function removeSessionFromStore(): void {
   padding: 0 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--running) 14%, transparent);
-  color: var(--running);
+  color: color-mix(in srgb, var(--running) var(--row-running), var(--text));
   font-size: 0.78571rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1414,7 +1410,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-meta--retry {
-  color: var(--status-waiting);
+  color: color-mix(in srgb, var(--status-waiting) var(--row-waiting), var(--text));
 }
 
 .session-progress {
@@ -1427,7 +1423,7 @@ function removeSessionFromStore(): void {
 .session-progress__count {
   font-size: 0.85714rem;
   line-height: 1.3;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1436,16 +1432,17 @@ function removeSessionFromStore(): void {
   padding: 1px 7px;
   border-radius: var(--radius-btn);
   background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
-  color: var(--status-waiting);
+  color: color-mix(in srgb, var(--status-waiting) var(--row-waiting), var(--text));
   font-weight: 500;
 }
 
+/* A status colour as row text keeps as much of itself as still reads at 4.5:1 (--row-<colour> in main.css). */
 .session-meta--error {
-  color: var(--error);
+  color: color-mix(in srgb, var(--error) var(--row-error), var(--text));
 }
 
 .session-meta--with {
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) var(--row-accent), var(--text));
 }
 
 .session-title--editing {
@@ -1466,7 +1463,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-title--editing::placeholder {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
 }
 
 .session-title--editing:focus {
