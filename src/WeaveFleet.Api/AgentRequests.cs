@@ -91,3 +91,4 @@ public static class AgentRequests
     private static bool IsLoopback(IPAddress? address)
         => address is not null && IPAddress.IsLoopback(address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address);
 }
+// scratch: trigger proof
