@@ -25,6 +25,7 @@ import type { WorkflowFile } from "@/lib/workflow-draft";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const router = useRouter();
 const nav = useWorkflowsNav();
@@ -234,13 +235,11 @@ function openRun(run: WorkflowRun): void {
       @saved="onSaved"
       @try-it="tryIt"
     />
-    <p
+    <ErrorNote
       v-else-if="showEditor && editor.loadError.value"
-      class="wf-detail__none wf-detail__none--center"
-      role="alert"
-    >
-      {{ editor.loadError.value }}
-    </p>
+      :message="editor.loadError.value"
+      class="m-auto max-w-md"
+    />
     <div
       v-else-if="workflow && !showEditor"
       class="wf-detail__inner"
@@ -451,13 +450,11 @@ function openRun(run: WorkflowRun): void {
       />
     </div>
 
-    <p
+    <ErrorNote
       v-else-if="nav.libraryError.value"
-      class="wf-detail__none wf-detail__none--center"
-      role="alert"
-    >
-      {{ nav.libraryError.value }}
-    </p>
+      :message="nav.libraryError.value"
+      class="m-auto max-w-md"
+    />
 
     <WorkflowCreateDialog
       :open="nav.creating.value !== null"
@@ -775,12 +772,6 @@ function openRun(run: WorkflowRun): void {
   background: var(--idle);
 }
 
-.wf-detail__none {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
 .wf-drafting {
   display: flex;
   max-width: 420px;
@@ -819,8 +810,4 @@ function openRun(run: WorkflowRun): void {
   gap: 8px;
 }
 
-.wf-detail__none--center {
-  align-self: center;
-  padding: 24px;
-}
 </style>

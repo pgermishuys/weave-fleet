@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertCircle, AlertTriangle, Brain, LoaderCircle, RefreshCw, Trash2 } from "lucide-vue-next";
+import { AlertTriangle, Brain, LoaderCircle, RefreshCw, Trash2 } from "lucide-vue-next";
 import { useSkills, type SkillRef } from "@/composables/use-skills";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { targetKey, targetLabel } from "@/lib/install-target";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const { skills, isLoading, error, removeSkill, checkUpdate, updateSkill } = useSkills();
 
@@ -74,18 +75,10 @@ function cancelRemove(): void {
       <span>Loading skills…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="error && !hasSkills"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+    />
 
     <EmptyState
       v-else-if="!hasSkills"
@@ -165,17 +158,11 @@ function cancelRemove(): void {
               <span>Not in any folder a harness reads. Remove it and install it again.</span>
             </div>
 
-            <div
+            <ErrorNote
               v-if="skill.updateCheckError"
-              class="mt-2 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-200"
-            >
-              <AlertCircle
-                :size="12"
-                class="mt-0.5 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{{ skill.updateCheckError }}</span>
-            </div>
+              :message="skill.updateCheckError"
+              class="mt-2"
+            />
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -257,17 +244,9 @@ function cancelRemove(): void {
       </article>
     </div>
 
-    <div
+    <ErrorNote
       v-if="error && hasSkills"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+    />
   </div>
 </template>

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { shallowRef } from "vue";
-import { AlertCircle, Download, LoaderCircle } from "lucide-vue-next";
+import { Download, LoaderCircle } from "lucide-vue-next";
 import { useSkills } from "@/composables/use-skills";
 import { Button } from "@/components/ui/button";
 import type { InstallTarget } from "@/lib/install-target";
 import InstallTargetPicker from "../InstallTargetPicker.vue";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const target = defineModel<InstallTarget>("target", { required: true });
 
@@ -68,18 +69,10 @@ async function submitInstall(): Promise<void> {
           >
         </label>
 
-        <div
+        <ErrorNote
           v-if="formError"
-          class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-          role="alert"
-        >
-          <AlertCircle
-            :size="16"
-            class="mt-0.5 shrink-0"
-            aria-hidden="true"
-          />
-          <span>{{ formError }}</span>
-        </div>
+          :message="formError"
+        />
 
         <Button
           type="submit"

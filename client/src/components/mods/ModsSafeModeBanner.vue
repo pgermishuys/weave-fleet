@@ -55,7 +55,7 @@ async function turnBackOn(): Promise<void> {
       <span>Fleet started without mods. They start again when Fleet restarts or you turn them back on.</span>
       <span
         v-if="error"
-        class="!text-error"
+        class="!text-error-text"
         role="alert"
         data-testid="mods-safe-mode-error"
       >{{ error }}</span>

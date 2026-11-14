@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle, Sparkles } from "lucide-vue-next";
+import { LoaderCircle, Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +28,7 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 import { useNoticesStore } from "@/stores/notices";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Improve a built-in skill from the session it was used in. The user says what should change and picks what the
@@ -267,15 +268,11 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
           </p>
         </fieldset>
 
-        <div
+        <ErrorNote
           v-if="error"
-          class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          role="alert"
+          :message="error"
           data-testid="improve-skill-error"
-        >
-          <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{{ error }}</p>
-        </div>
+        />
 
         <DialogFooter>
           <Button
@@ -330,14 +327,10 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
           </template>.
         </p>
 
-        <div
+        <ErrorNote
           v-if="error"
-          class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          role="alert"
-        >
-          <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{{ error }}</p>
-        </div>
+          :message="error"
+        />
 
         <DialogFooter class="flex-wrap gap-2">
           <Button

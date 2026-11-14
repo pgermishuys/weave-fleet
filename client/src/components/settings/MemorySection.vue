@@ -26,6 +26,7 @@ import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import DreamNightly from "@/components/settings/memory/DreamNightly.vue";
 import DreamingPanel from "@/components/settings/memory/DreamingPanel.vue";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // Memory belongs to a machine: the one Settings shows.
 const target = useMachineTarget();
@@ -292,13 +293,12 @@ onMounted(load);
         </div>
       </div>
 
-      <p
+      <ErrorNote
         v-if="error"
-        class="mt-3 text-xs text-red-300"
-        role="alert"
-      >
-        {{ error }}
-      </p>
+        :message="error"
+        compact
+        class="mt-3"
+      />
 
       <div
         v-if="!enabled"
@@ -766,7 +766,7 @@ onMounted(load);
             <span class="text-xs text-muted">Clear every note, in every repository and for this machine.</span>
             <button
               type="button"
-              class="rounded-md border border-red-400/40 px-3 py-1 text-xs font-medium text-red-400"
+              class="rounded-md border border-error/40 px-3 py-1 text-xs font-medium text-error-text"
               data-testid="memory-clear-all"
               @click="confirmingClear = true"
             >
@@ -775,7 +775,7 @@ onMounted(load);
           </template>
           <div
             v-else
-            class="flex w-full flex-col gap-2 rounded-card border border-red-400/40 bg-red-500/5 p-3 text-xs text-muted"
+            class="flex w-full flex-col gap-2 rounded-card border border-error/40 bg-error/5 p-3 text-xs text-muted"
             role="alertdialog"
             aria-label="Clear all memory"
           >
@@ -783,7 +783,7 @@ onMounted(load);
             <div class="flex gap-2">
               <button
                 type="button"
-                class="rounded-md bg-red-500 px-3 py-1 font-medium text-white disabled:opacity-60"
+                class="rounded-md bg-destructive px-3 py-1 font-medium text-destructive-foreground disabled:opacity-60"
                 :disabled="isSaving"
                 data-testid="memory-clear-all-confirm"
                 @click="clearAll"
@@ -836,13 +836,12 @@ onMounted(load);
       </div>
     </template>
 
-    <p
+    <ErrorNote
       v-else-if="error"
-      class="mt-3 text-xs text-red-300"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      :message="error"
+      compact
+      class="mt-3"
+    />
   </section>
 </template>
 

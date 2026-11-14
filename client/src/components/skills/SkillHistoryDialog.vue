@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle } from "lucide-vue-next";
+import { LoaderCircle } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/skill-versions";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * A skill's history: each of the user's versions with why it was made, newest first, then Fleet's. Any of them can be
@@ -196,14 +197,10 @@ function exactly(createdAt: string): string {
         </li>
       </ol>
 
-      <div
+      <ErrorNote
         v-if="error"
-        class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        role="alert"
-      >
-        <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-        <p>{{ error }}</p>
-      </div>
+        :message="error"
+      />
     </DialogContent>
   </Dialog>
 </template>

@@ -406,7 +406,7 @@ function folderName(directory: string): string {
         >
           <p
             class="flex items-center gap-1.5 font-semibold"
-            :class="result.check.ok ? 'text-running' : 'text-error'"
+            :class="result.check.ok ? 'text-running' : 'text-error-text'"
           >
             <Check
               v-if="result.check.ok"

@@ -13,6 +13,7 @@ import { useSelectedJobId } from "@/composables/use-jobs-menu";
 import { useJobsStore } from "@/stores/jobs";
 import { useMachinesStore } from "@/stores/machines";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** The Jobs screen: what's queued, running and finished across the machines, and each machine's seats. */
 const store = useJobsStore();
@@ -110,14 +111,12 @@ async function cancel(job: Job): Promise<void> {
       </Button>
     </header>
 
-    <p
+    <ErrorNote
       v-if="store.error"
-      class="px-5 py-2 text-sm text-red-400"
-      role="alert"
+      :message="store.error"
+      class="mx-5 my-2"
       data-testid="jobs-error"
-    >
-      {{ store.error }}
-    </p>
+    />
 
     <div class="flex min-h-0 flex-1">
       <template v-if="tab === 'queue'">
@@ -156,13 +155,11 @@ async function cancel(job: Job): Promise<void> {
       />
     </div>
 
-    <p
+    <ErrorNote
       v-if="actionError"
-      class="px-5 py-2 text-sm text-red-400"
-      role="alert"
-    >
-      {{ actionError }}
-    </p>
+      :message="actionError"
+      class="mx-5 my-2"
+    />
     <NewJobDialog
       v-model:open="isNewOpen"
       :machines="store.machines"

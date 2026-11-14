@@ -5,6 +5,7 @@ import ChangesReview from "@/components/canvas/ChangesReview.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { diffBaseLabel } from "@/lib/diff-base";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 defineProps<{
   sessionId: string;
@@ -66,27 +67,15 @@ async function retry(): Promise<void> {
     >
       Loading changes…
     </p>
-    <div
+    <ErrorNote
       v-else-if="!hasChanges && loadError"
-      class="changes-canvas__refused"
+      message="Couldn't load the changes."
+      :reason="loadError"
+      :retrying="retrying"
+      class="m-3"
       data-testid="changes-load-failed"
-    >
-      <p class="changes-canvas__refused-title">
-        Couldn't load the changes.
-      </p>
-      <p class="changes-canvas__refused-hint">
-        {{ loadError }}
-      </p>
-      <button
-        type="button"
-        class="changes-canvas__refused-copy"
-        data-testid="changes-retry"
-        :disabled="retrying"
-        @click="retry"
-      >
-        {{ retrying ? "Trying…" : "Try again" }}
-      </button>
-    </div>
+      @retry="retry"
+    />
     <div
       v-else-if="!hasChanges && refusal"
       class="changes-canvas__refused"

@@ -26,6 +26,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { agentWorkLevelName, useMachinesStore, type MachineAgentWork } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Settings → What agents can do: every "can agents…?" answer on one page. Each row has one setting, says which value is
@@ -403,13 +404,12 @@ onUnmounted(() => stopPolling?.());
             @click="setActiveSection('machines')"
           >Add one in Machines</button>
         </p>
-        <p
+        <ErrorNote
           v-if="machineError"
-          class="reach-row__note text-error"
-          role="alert"
-        >
-          {{ machineError }}
-        </p>
+          :message="machineError"
+          compact
+          class="reach-row__note"
+        />
       </section>
 
       <!-- When nobody is watching -->

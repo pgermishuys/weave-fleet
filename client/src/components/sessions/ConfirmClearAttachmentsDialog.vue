@@ -9,6 +9,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ErrorNote } from "@/components/ui/error-note";
 
 defineProps<{
   sessionTitle: string;
@@ -32,14 +33,11 @@ const open = defineModel<boolean>("open", { default: false });
           <span class="font-medium text-foreground">{{ sessionTitle }}</span>.
           The agent can't read them again. The conversation stays.
         </AlertDialogDescription>
-        <p
+        <ErrorNote
           v-if="error"
-          class="text-sm text-destructive"
-          role="alert"
+          :message="error"
           data-testid="clear-attachments-error"
-        >
-          {{ error }}
-        </p>
+        />
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel :disabled="isClearing">

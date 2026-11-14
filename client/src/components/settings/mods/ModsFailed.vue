@@ -25,7 +25,7 @@ const hint = computed(() => {
   >
     <h4
       id="mods-failed-heading"
-      class="text-sm font-medium text-error"
+      class="text-sm font-medium text-error-text"
     >
       <span aria-hidden="true">⚠</span> Couldn't download Bun
     </h4>

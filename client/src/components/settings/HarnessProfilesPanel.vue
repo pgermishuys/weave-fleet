@@ -8,6 +8,7 @@ import { profileSummary } from "@/lib/harness-profile";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** A harness's profiles in Settings: list, default, and an editor that opens in place. */
 const props = defineProps<{
@@ -100,13 +101,11 @@ function usage(profile: HarnessProfile): string {
     >
       {{ notice }}
     </p>
-    <p
+    <ErrorNote
       v-if="listError"
-      class="text-xs text-error"
-      role="alert"
-    >
-      {{ listError }}
-    </p>
+      :message="listError"
+      compact
+    />
 
     <EmptyState
       v-if="profiles.length === 0 && !editing"

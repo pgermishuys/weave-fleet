@@ -142,7 +142,7 @@ async function remove(): Promise<void> {
     <div
       v-if="result"
       class="rounded-card border px-3 py-2 text-xs"
-      :class="result.ok ? 'border-running/30 bg-running/10 text-running' : 'border-error/30 bg-error/10 text-error'"
+      :class="result.ok ? 'border-running/30 bg-running/10 text-running' : 'border-error/30 bg-error/10 text-error-text'"
       role="status"
       data-testid="harness-profile-result"
     >
@@ -178,7 +178,7 @@ async function remove(): Promise<void> {
           <Button
             variant="ghost"
             size="sm"
-            class="text-error"
+            class="text-error-text"
             data-testid="harness-profile-delete"
             :disabled="busy !== null"
             @click="remove"

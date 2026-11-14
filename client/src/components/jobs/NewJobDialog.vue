@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle } from "lucide-vue-next";
+import { LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { parseLabels, type JobMachine, type JobRepository } from "@/lib/jobs";
 import { useJobsStore } from "@/stores/jobs";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const props = defineProps<{ machines: readonly JobMachine[] }>();
 const open = defineModel<boolean>("open", { default: false });
@@ -161,14 +162,10 @@ async function submit(): Promise<void> {
           </div>
         </div>
 
-        <p
+        <ErrorNote
           v-if="errorMessage"
-          class="flex items-center gap-2 text-sm text-red-400"
-          role="alert"
-        >
-          <AlertCircle :size="16" />
-          {{ errorMessage }}
-        </p>
+          :message="errorMessage"
+        />
 
         <DialogFooter>
           <Button

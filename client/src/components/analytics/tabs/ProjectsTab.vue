@@ -3,6 +3,8 @@ import { computed } from "vue";
 import { Card, CardContent } from "@/components/ui/card";
 import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters";
 import { formatAnalyticsCost } from "@/lib/format-utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface ProjectCard extends AnalyticsProjectOption {
   relativeCostWidth: number;
@@ -13,10 +15,12 @@ interface ProjectCard extends AnalyticsProjectOption {
 interface Props {
   topProjects: readonly AnalyticsProjectOption[];
   emptyMessage?: string;
+  error?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   emptyMessage: "No project analytics available for the selected filters.",
+  error: null,
 });
 
 const integerFormatter = new Intl.NumberFormat("en-US");
@@ -113,14 +117,17 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
       </Card>
     </div>
 
-    <div
+    <ErrorNote
+      v-else-if="props.error"
+      message="Unable to load analytics."
+      :reason="props.error"
+    />
+    <EmptyState
       v-else
-      class="projects-tab__empty"
-    >
-      <p class="projects-tab__empty-text">
-        {{ props.emptyMessage }}
-      </p>
-    </div>
+      :title="props.emptyMessage"
+      bordered
+      class="min-h-45"
+    />
   </section>
 </template>
 
@@ -241,24 +248,6 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
   border-radius: 999px;
   background: var(--accent);
   transition: width 0.2s ease;
-}
-
-.projects-tab__empty {
-  display: flex;
-  min-height: 180px;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-card);
-  padding: 24px;
-  text-align: center;
-}
-
-.projects-tab__empty-text {
-  max-width: 32rem;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
 }
 
 @media (max-width: 640px) {

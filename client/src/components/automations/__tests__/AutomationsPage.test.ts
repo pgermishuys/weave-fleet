@@ -365,7 +365,7 @@ describe("Automations screen", () => {
     expect(wrapper.get("[data-testid='automation-load-error']").text()).toContain("Couldn't load automations");
 
     list = [weekly];
-    await wrapper.get("[data-testid='automations-load-retry']").trigger("click");
+    await wrapper.get("[data-testid='automations-load-error'] button").trigger("click");
     await flushPromises();
 
     expect(wrapper.find("[data-testid='automations-load-error']").exists()).toBe(false);

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertCircle, AlertTriangle, LoaderCircle, Trash2, Wrench } from "lucide-vue-next";
+import { AlertTriangle, LoaderCircle, Trash2, Wrench } from "lucide-vue-next";
 import { useTools, type ToolRef } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { targetKey, targetLabel } from "@/lib/install-target";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const { tools, isLoading, error, removeTool } = useTools();
 
@@ -60,18 +61,10 @@ function formatCommand(command: string | null | undefined, args: readonly string
       <span>Loading tools…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="error && !hasTools"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+    />
 
     <EmptyState
       v-else-if="!hasTools"
@@ -165,7 +158,7 @@ function formatCommand(command: string | null | undefined, args: readonly string
             <Button
               variant="outline"
               size="sm"
-              class="text-red-400 hover:text-red-300 hover:border-red-500/50"
+              class="text-error-text hover:text-error-text hover:border-error/50"
               :disabled="removingKey === keyOf(tool)"
               @click="confirmRemoveKey === keyOf(tool) ? handleRemove(tool) : confirmRemove(tool)"
             >
@@ -198,17 +191,9 @@ function formatCommand(command: string | null | undefined, args: readonly string
       </article>
     </div>
 
-    <div
+    <ErrorNote
       v-if="error && hasTools"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+    />
   </div>
 </template>

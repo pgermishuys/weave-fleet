@@ -15,6 +15,7 @@ import {
   type ExportOptions,
   type ExportToolMode,
 } from "@/lib/export-markdown";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const props = defineProps<{
   open: boolean;
@@ -224,7 +225,7 @@ async function share(): Promise<void> {
             v-if="built && built.keyLines > 0"
             role="note"
             data-testid="export-key-lines"
-            class="rounded-md border border-error/40 p-2 text-xs text-error"
+            class="rounded-md border border-error/40 p-2 text-xs text-error-text"
           >
             {{ built.keyLines }} {{ built.keyLines === 1 ? "line looks" : "lines look" }} like a key. This is a hint, not a check.
             Read the file before you share it.
@@ -265,22 +266,12 @@ async function share(): Promise<void> {
           </div>
 
           <div class="min-h-0 flex-1 overflow-auto p-3">
-            <p
+            <ErrorNote
               v-if="loadError"
-              role="alert"
+              :message="loadError"
               data-testid="export-error"
-              class="text-sm text-error"
-            >
-              {{ loadError }}
-              <Button
-                variant="outline"
-                size="sm"
-                class="ml-2"
-                @click="load"
-              >
-                Try again
-              </Button>
-            </p>
+              @retry="load"
+            />
             <p
               v-else-if="!built"
               class="flex items-center gap-2 text-sm text-muted"
@@ -298,7 +289,7 @@ async function share(): Promise<void> {
               :key="index"
             ><mark
               v-if="line.key"
-              class="bg-error/20 text-error"
+              class="bg-error/20 text-error-text"
             >{{ line.text }}</mark><template v-else>{{ line.text }}</template>{{ index < lines.length - 1 ? "\n" : "" }}</template></pre>
             <MarkdownRenderer
               v-else
@@ -309,11 +300,11 @@ async function share(): Promise<void> {
 
           <div class="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
             <span class="truncate font-mono text-xs text-muted">{{ fileName }}</span>
-            <span
+            <ErrorNote
               v-if="actionError"
-              role="alert"
-              class="text-xs text-error"
-            >{{ actionError }}</span>
+              :message="actionError"
+              compact
+            />
             <span class="flex-1" />
             <Button
               variant="outline"

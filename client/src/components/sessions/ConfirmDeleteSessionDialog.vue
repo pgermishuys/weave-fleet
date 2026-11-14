@@ -42,7 +42,7 @@ function handleConfirm(): void {
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle class="flex items-center gap-2">
-          <AlertTriangle class="h-4 w-4 text-destructive" />
+          <AlertTriangle class="h-4 w-4 text-error-text" />
           Are you sure?
         </AlertDialogTitle>
         <AlertDialogDescription>

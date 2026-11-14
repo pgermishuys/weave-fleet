@@ -9,6 +9,7 @@ import { checkDraft } from "@/lib/mods/kept-api";
 import { useMachinesStore } from "@/stores/machines";
 import { useModsStore } from "@/stores/mods";
 import { useSessionsStore } from "@/stores/sessions";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * "Keep {name}?": what the check read from the draft, in plain words, before it's kept for all the user's sessions.
@@ -150,14 +151,13 @@ const labelOf = (key: string) => LABELS[key.replace(/-\d+$/, "")] ?? key;
         </p>
 
         <template v-else>
-          <p
+          <ErrorNote
             v-if="problems.error"
-            class="mb-2 text-sm text-error"
-            role="alert"
+            class="mb-2"
             data-testid="mod-review-error"
           >
             Fix this first: {{ problems.error.message }}<template v-if="problems.error.where"> (line {{ problems.error.where }})</template>
-          </p>
+          </ErrorNote>
           <p
             v-if="problems.warnings > 0"
             class="mb-2 text-sm text-muted"
@@ -196,14 +196,12 @@ const labelOf = (key: string) => LABELS[key.replace(/-\d+$/, "")] ?? key;
         />
       </label>
 
-      <p
+      <ErrorNote
         v-if="refused"
-        class="mt-2 text-sm text-error"
-        role="alert"
+        :message="refused"
+        class="mt-2"
         data-testid="mod-review-refused"
-      >
-        {{ refused }}
-      </p>
+      />
     </div>
 
     <template #foot>

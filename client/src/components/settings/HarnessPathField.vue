@@ -5,6 +5,7 @@ import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** Where Fleet finds the program a harness runs, for when it isn't on PATH: the path, a Check button, and what Fleet found. */
 const props = defineProps<{
@@ -83,13 +84,12 @@ async function check(): Promise<void> {
         Check
       </button>
     </div>
-    <p
+    <ErrorNote
       v-if="error"
-      class="mt-2 text-xs text-red-300"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      :message="error"
+      compact
+      class="mt-2"
+    />
     <p
       v-else-if="harness.available && found"
       class="mt-2 break-all font-mono text-[11px] text-muted"

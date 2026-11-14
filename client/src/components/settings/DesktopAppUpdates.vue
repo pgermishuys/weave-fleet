@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useDesktopUpdates } from "@/composables/use-desktop-updates";
 import { useWhatsNew } from "@/composables/use-whats-new";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const { state, isChecking, check, install } = useDesktopUpdates();
 const { openWhatsNew } = useWhatsNew();
@@ -117,12 +118,12 @@ const actionLabel = computed(() => {
       <AlertCircle
         v-else-if="state?.status === 'error'"
         :size="15"
-        class="text-error"
+        class="text-error-text"
         aria-hidden="true"
       />
       <p
         class="text-sm"
-        :class="state?.status === 'error' ? 'text-error' : state?.status === 'ready' || state?.status === 'available' ? 'text-accent' : 'text-text'"
+        :class="state?.status === 'error' ? 'text-error-text' : state?.status === 'ready' || state?.status === 'available' ? 'text-accent' : 'text-text'"
         data-testid="desktop-app-update-status"
       >
         {{ statusLabel }}
@@ -151,11 +152,10 @@ const actionLabel = computed(() => {
     >
       This copy of Fleet can't install updates itself yet. Download the new version and install it over this one.
     </p>
-    <p
+    <ErrorNote
       v-else-if="state?.status === 'error' && state.error"
-      class="text-xs text-error"
-    >
-      {{ state.error }}
-    </p>
+      :message="state.error"
+      compact
+    />
   </div>
 </template>

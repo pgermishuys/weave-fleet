@@ -34,6 +34,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // The machine the view shows (MachineScope in AutomationsPage): the list, runs and every change are its.
 const target = useMachineTarget();
@@ -558,24 +559,15 @@ const firstRunHint = computed(() => {
       v-else
       class="automation-page__body"
     >
-      <div
+      <ErrorNote
         v-if="loadFailed"
-        class="automation-page__empty"
-        role="alert"
+        message="Couldn't load automations."
+        :reason="loadError ?? 'Trying again…'"
+        :retrying="retryingLoad"
+        class="m-auto w-full max-w-md"
         data-testid="automation-load-error"
-      >
-        <strong>Couldn't load automations</strong>
-        {{ loadError ?? "Trying again…" }}
-        <Button
-          size="sm"
-          variant="outline"
-          class="mx-auto mt-4 flex"
-          :disabled="retryingLoad"
-          @click="retryLoad"
-        >
-          Try again
-        </Button>
-      </div>
+        @retry="retryLoad"
+      />
       <EmptyState
         v-else
         :icon="Zap"

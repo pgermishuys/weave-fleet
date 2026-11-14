@@ -53,7 +53,7 @@ describe("ChangesCanvas", () => {
 
     expect(wrapper.text()).not.toContain("No changes");
     expect(wrapper.get('[data-testid="changes-load-failed"]').text()).toContain("Couldn't load the changes");
-    await wrapper.get('[data-testid="changes-retry"]').trigger("click");
+    await wrapper.get('[data-testid="changes-load-failed"] button').trigger("click");
     expect(sharedDiffs.fetchDiffs).toHaveBeenCalledTimes(1);
   });
 

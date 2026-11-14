@@ -7,6 +7,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** Settings → Skills & tools → Mods: the mods the user kept, with on/off and Undo, and Fleet's sample mods to add. */
 const store = useModsStore(useMachineTarget());
@@ -114,24 +115,13 @@ onMounted(load);
         Loading your mods…
       </div>
 
-      <div
+      <ErrorNote
         v-else-if="error"
-        class="mt-5 flex flex-wrap items-center gap-3 text-sm text-error"
-        role="alert"
+        :message="error"
+        class="mt-5"
         data-testid="mods-error"
-      >
-        <p class="m-0">
-          {{ error }}
-        </p>
-        <button
-          type="button"
-          class="rounded-btn border border-border px-3 py-1.5 text-xs font-medium text-text hover:bg-main-bg"
-          data-testid="mods-retry"
-          @click="load"
-        >
-          Try again
-        </button>
-      </div>
+        @retry="load"
+      />
 
       <EmptyState
         v-else-if="mods.length === 0"

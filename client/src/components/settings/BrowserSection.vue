@@ -2,6 +2,7 @@
 import { onMounted } from "vue";
 import { Info, LoaderCircle } from "lucide-vue-next";
 import { useAgentBrowserSettings, type BrowserPages as Pages } from "@/composables/use-agent-browser-settings";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Settings → Permissions → Browser: whether agents can use a browser of their own, which pages it may open, and whether
@@ -43,13 +44,11 @@ onMounted(() => void load());
       />
     </div>
 
-    <p
+    <ErrorNote
       v-if="error"
-      class="mt-3 text-sm text-error"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      :message="error"
+      class="mt-3"
+    />
 
     <div class="browser-settings mt-5">
       <div class="browser-row">

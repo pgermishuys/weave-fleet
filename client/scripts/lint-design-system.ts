@@ -7,6 +7,9 @@
 //   HARDCODED_TIMING  a transition or animation duration that isn't a var(--transition…) token
 //   AD_HOC_EMPTY_STATE an element with its own empty-state class (`x__empty`, `x-empty`, `empty-message`, …)
 //                     where <EmptyState> would do
+//   RAW_ERROR_RED     error red written by hand: Tailwind's red palette (`text-red-300`, `bg-red-500/10`) or
+//                     `text-error` / `text-destructive` for words, which miss 4.5:1 in most themes. Use <ErrorNote>,
+//                     or `text-error-text` for an error word that isn't a note
 //
 // The counts are compared with design-lint-baseline.json. A count above its baseline fails (the output names
 // the files that grew); a count below it passes and asks you to lower the baseline, so it only ever goes down.
@@ -18,7 +21,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE"] as const;
+export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED"] as const;
 export type Rule = (typeof RULES)[number];
 
 export interface Violation {
@@ -162,6 +165,23 @@ export function checkEmptyStates(file: string, template: Block[]): Violation[] {
   return out;
 }
 
+// Error red outside the design system: the raw red palette in any class, and the --error / --destructive colours
+// used as a text colour (`text-error-text` is the AA one). Template and script both, so class strings built in
+// code count too. `bg-destructive` and `border-error/30` (a destructive button, a tint) are fine.
+const ERROR_RED = /(?<![\w-])(?:[a-z-]+:)*(?:text|bg|border|ring|outline|fill|stroke|from|to|via)-red-\d{2,3}(?:\/\d+)?(?![\w-])|(?<![\w-])(?:[a-z-]+:)*!?text-(?:error|destructive)(?:\/\d+)?(?![\w-])/g;
+
+export function checkErrorRed(file: string, content: string): Violation[] {
+  const out: Violation[] = [];
+  const style = content.search(/^<style[\s>]/m);
+  const text = style >= 0 ? content.slice(0, style) : content;
+  text.split("\n").forEach((line, i) => {
+    for (const m of line.matchAll(ERROR_RED)) {
+      out.push({ rule: "RAW_ERROR_RED", file, line: i + 1, detail: `${m[0]}; use <ErrorNote> or text-error-text` });
+    }
+  });
+  return out;
+}
+
 export function lintFile(file: string, content: string): Violation[] {
   const { template, style } = extractBlocks(content);
   return [
@@ -169,6 +189,7 @@ export function lintFile(file: string, content: string): Violation[] {
     ...checkBorderRadius(file, style),
     ...checkTransitionTimings(file, style),
     ...checkEmptyStates(file, template),
+    ...checkErrorRed(file, content),
   ];
 }
 

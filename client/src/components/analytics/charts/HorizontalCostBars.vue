@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface HorizontalCostBarItem {
   name: string
@@ -18,8 +20,10 @@ interface RankedHorizontalCostBarItem extends HorizontalCostBarItem {
 const props = withDefaults(defineProps<{
   items: readonly HorizontalCostBarItem[]
   emptyMessage?: string
+  error?: string | null
 }>(), {
   emptyMessage: "No cost data available.",
+  error: null,
 })
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -100,12 +104,16 @@ function formatCurrency(amount: number): string {
       </li>
     </ol>
 
-    <p
+    <ErrorNote
+      v-else-if="props.error"
+      message="Unable to load analytics."
+      :reason="props.error"
+    />
+    <EmptyState
       v-else
-      class="cost-bars__empty"
-    >
-      {{ props.emptyMessage }}
-    </p>
+      :title="props.emptyMessage"
+      compact
+    />
   </section>
 </template>
 
@@ -173,12 +181,6 @@ function formatCurrency(amount: number): string {
   border-radius: 999px;
   background: var(--accent);
   transition: width 300ms ease-out;
-}
-
-.cost-bars__empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
 }
 
 @media (prefers-reduced-motion: reduce) {

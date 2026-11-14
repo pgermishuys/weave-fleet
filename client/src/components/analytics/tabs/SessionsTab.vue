@@ -3,6 +3,8 @@ import { computed, shallowRef, watch } from "vue";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-vue-next";
 import type { SessionAnalytics } from "@/api/client";
 import { formatAnalyticsCost } from "@/lib/format-utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 export type SessionsTabSortBy =
   | "title"
@@ -84,11 +86,6 @@ const sortedSessions = computed<SessionAnalytics[]>(() => {
   return [...props.sessions].sort((left, right) => compareSessions(left, right, activeSortBy.value, activeSortDir.value));
 });
 
-const emptyStateMessage = computed(() => {
-  return props.error
-    ? `Unable to load session analytics (${props.error}).`
-    : "No sessions matched the current analytics filters.";
-});
 
 function handleSort(column: SessionsTabColumn): void {
   const nextSortDir = activeSortBy.value === column.key
@@ -239,12 +236,16 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
       Loading session analytics…
     </div>
 
-    <div
+    <ErrorNote
+      v-else-if="sortedSessions.length === 0 && props.error"
+      message="Unable to load session analytics."
+      :reason="props.error"
+    />
+    <EmptyState
       v-else-if="sortedSessions.length === 0"
-      class="sessions-tab__state"
-    >
-      {{ emptyStateMessage }}
-    </div>
+      title="No sessions matched the current analytics filters"
+      class="min-h-70"
+    />
 
     <div
       v-else

@@ -40,7 +40,7 @@ describe("FilesChangedView", () => {
 
     expect(loadingWrapper.get(".files-changed-view__state").attributes("aria-busy")).toBe("true");
     expect(loadingWrapper.text()).toContain("Loading changed files");
-    expect(errorWrapper.get(".files-changed-view__state--error").text()).toContain(
+    expect(errorWrapper.get("[data-testid=files-changed-error]").text()).toContain(
       "Changed files could not be loaded.",
     );
     expect(errorWrapper.text()).toContain("HTTP 500");
@@ -49,7 +49,7 @@ describe("FilesChangedView", () => {
       "Diffs are unavailable for this session",
     );
 
-    await errorWrapper.get(".files-changed-view__retry-button").trigger("click");
+    await errorWrapper.get("[data-testid=files-changed-error] button").trigger("click");
 
     expect(errorWrapper.emitted("retry")).toEqual([[]]);
   });

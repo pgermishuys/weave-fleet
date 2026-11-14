@@ -1,7 +1,7 @@
 {
   "rules": {
     "RAW_BUTTON": {
-      "total": 689,
+      "total": 686,
       "files": {
         "src/components/analytics/AnalyticsFilters.vue": 1,
         "src/components/analytics/AnalyticsNavPanel.vue": 1,
@@ -23,7 +23,7 @@
         "src/components/canvas/BrowserCanvas.vue": 11,
         "src/components/canvas/BrowserOpenDialog.vue": 1,
         "src/components/canvas/CanvasHost.vue": 3,
-        "src/components/canvas/ChangesCanvas.vue": 2,
+        "src/components/canvas/ChangesCanvas.vue": 1,
         "src/components/canvas/ChangesFindBar.vue": 3,
         "src/components/canvas/ChangesReview.vue": 15,
         "src/components/canvas/FileCanvas.vue": 9,
@@ -111,7 +111,7 @@
         "src/components/session/EffortToggle.vue": 1,
         "src/components/session/FileBrowserPanel.vue": 7,
         "src/components/session/FilesChangedFileList.vue": 1,
-        "src/components/session/FilesChangedView.vue": 2,
+        "src/components/session/FilesChangedView.vue": 1,
         "src/components/session/FindInFilesResults.vue": 3,
         "src/components/session/ImageAttachmentChips.vue": 2,
         "src/components/session/ImageLightbox.vue": 1,
@@ -164,7 +164,7 @@
         "src/components/settings/MachineUpdatesStrip.vue": 4,
         "src/components/settings/MachinesSection.vue": 18,
         "src/components/settings/MemorySection.vue": 20,
-        "src/components/settings/ModsSection.vue": 4,
+        "src/components/settings/ModsSection.vue": 3,
         "src/components/settings/PermissionsSection.vue": 2,
         "src/components/settings/PluginPage.vue": 1,
         "src/components/settings/PluginsOverview.vue": 2,
@@ -218,7 +218,7 @@
       }
     },
     "HARDCODED_RADIUS": {
-      "total": 286,
+      "total": 285,
       "files": {
         "src/components/analytics/AnalyticsSectionStrip.vue": 1,
         "src/components/analytics/charts/HorizontalCostBars.vue": 2,
@@ -283,7 +283,7 @@
         "src/components/session/ConversationFindBar.vue": 4,
         "src/components/session/ConversationPage.vue": 1,
         "src/components/session/DiffsTray.vue": 1,
-        "src/components/session/FileBrowserPanel.vue": 4,
+        "src/components/session/FileBrowserPanel.vue": 3,
         "src/components/session/FileBrowserTreeNode.vue": 2,
         "src/components/session/FilesChangedView.vue": 1,
         "src/components/session/FindInFilesResults.vue": 5,
@@ -407,14 +407,10 @@
       }
     },
     "AD_HOC_EMPTY_STATE": {
-      "total": 24,
+      "total": 16,
       "files": {
-        "src/components/analytics/charts/HorizontalCostBars.vue": 1,
-        "src/components/analytics/tabs/DailyTab.vue": 1,
-        "src/components/analytics/tabs/OverviewTab.vue": 1,
-        "src/components/analytics/tabs/ProjectsTab.vue": 1,
-        "src/components/automations/AutomationDetailPanel.vue": 2,
-        "src/components/automations/AutomationsNavPanel.vue": 3,
+        "src/components/automations/AutomationDetailPanel.vue": 1,
+        "src/components/automations/AutomationsNavPanel.vue": 1,
         "src/components/board/BoardSourceConfig.vue": 1,
         "src/components/board/KanbanColumn.vue": 1,
         "src/components/canvas/AgentTabView.vue": 1,
@@ -426,9 +422,13 @@
         "src/components/session/ToolCard.vue": 1,
         "src/components/sessions/NewSessionComposer.vue": 1,
         "src/components/sessions/ProjectGroup.vue": 1,
-        "src/components/workflows/WorkflowsNavPanel.vue": 2,
+        "src/components/workflows/WorkflowsNavPanel.vue": 1,
         "src/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue": 1
       }
+    },
+    "RAW_ERROR_RED": {
+      "total": 0,
+      "files": {}
     }
   }
 }

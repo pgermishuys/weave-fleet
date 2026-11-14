@@ -47,6 +47,8 @@
   --idle: #f59e0b;
   --complete: #3b82f6;
   --error: #ef4444;
+  /* Error words (ErrorNote): --error moved toward --text until it reads at 4.5:1 on the error tint. */
+  --error-text: #EE595A;
   --queued: #8b5cf6;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -113,6 +115,7 @@
   --idle: #d97706;
   --complete: #2563eb;
   --error: #dc2626;
+  --error-text: #BF2424;
   --queued: #7c3aed;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -144,6 +147,7 @@
   --idle: #f59e0b;
   --complete: #3b82f6;
   --error: #ef4444;
+  --error-text: #F17070;
   --queued: #8b5cf6;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -175,6 +179,7 @@
   --idle: #f59e0b;
   --complete: #3b82f6;
   --error: #ef4444;
+  --error-text: #EF4444;
   --queued: #8b5cf6;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
@@ -205,6 +210,7 @@
   --idle: #EBCB8B;
   --complete: #81A1C1;
   --error: #BF616A;
+  --error-text: #D7ACB3;
   --queued: #B48EAD;
   --destructive: #BF616A;
   --destructive-foreground: #ECEFF4;
@@ -235,6 +241,7 @@
   --idle: #F1FA8C;
   --complete: #8BE9FD;
   --error: #FF5555;
+  --error-text: #FD8987;
   --queued: #FF79C6;
   --destructive: #FF5555;
   --destructive-foreground: #282A36;
@@ -266,6 +273,7 @@
   --idle: #B58900;
   --complete: #268BD2;
   --error: #DC322F;
+  --error-text: #E97C73;
   --queued: #6C71C4;
   --destructive: #DC322F;
   --destructive-foreground: #FDF6E3;
@@ -298,6 +306,7 @@
   --idle: #B58900;
   --complete: #268BD2;
   --error: #DC322F;
+  --error-text: #AB3333;
   --queued: #6C71C4;
   --destructive: #DC322F;
   --destructive-foreground: #FDF6E3;
@@ -328,6 +337,7 @@
   --idle: #E6DB74;
   --complete: #66D9EF;
   --error: #F92672;
+  --error-text: #F98DB1;
   --queued: #AE81FF;
   --destructive: #F92672;
   --destructive-foreground: #F8F8F2;
@@ -358,6 +368,7 @@
   --idle: #D29922;
   --complete: #58A6FF;
   --error: #F85149;
+  --error-text: #F85149;
   --queued: #BC8CFF;
   --destructive: #F85149;
   --destructive-foreground: #E6EDF3;
@@ -388,6 +399,7 @@
   --color-idle: var(--idle);
   --color-complete: var(--complete);
   --color-error: var(--error);
+  --color-error-text: var(--error-text);
   --color-queued: var(--queued);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);

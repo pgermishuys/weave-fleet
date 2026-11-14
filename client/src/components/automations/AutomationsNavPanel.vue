@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import { Loader2, Pencil, Plus } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import MachineSwitch from "@/components/layout/MachineSwitch.vue";
 import { useAutomations } from "@/composables/use-automations";
@@ -13,6 +12,7 @@ import { automationRowStatus } from "@/lib/automations";
 import type { Automation } from "@/stores/automations";
 import { useMachinesStore } from "@/stores/machines";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface Props {
   modelValue: string | null;
@@ -192,31 +192,15 @@ function handleCreate(): void {
       <span class="sr-only">Loading automations…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="error || retrying"
-      class="automations-nav-empty automations-nav-error"
-      role="alert"
+      message="Couldn't load automations."
+      :reason="error"
+      :retrying="retrying"
+      class="m-3"
       data-testid="automations-load-error"
-    >
-      <p class="empty-message">
-        Couldn't load automations.
-      </p>
-      <p
-        v-if="error"
-        class="automations-nav-error__detail"
-      >
-        {{ error }}
-      </p>
-      <Button
-        size="sm"
-        variant="outline"
-        :disabled="retrying"
-        data-testid="automations-load-retry"
-        @click="retry"
-      >
-        Try again
-      </Button>
-    </div>
+      @retry="retry"
+    />
 
     <EmptyState
       v-else
@@ -416,25 +400,6 @@ function handleCreate(): void {
   to {
     transform: rotate(360deg);
   }
-}
-
-.automations-nav-error {
-  flex-direction: column;
-  gap: 8px;
-  text-align: center;
-}
-
-.automations-nav-error__detail {
-  margin: 0;
-  font-size: 0.78571rem;
-  color: var(--error);
-  overflow-wrap: anywhere;
-}
-
-.empty-message {
-  margin: 0;
-  font-size: 0.85714rem;
-  color: var(--muted);
 }
 
 .sr-only {

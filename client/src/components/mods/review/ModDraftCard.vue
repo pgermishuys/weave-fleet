@@ -6,6 +6,7 @@ import ModReviewDialog from "@/components/mods/review/ModReviewDialog.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 import type { ModDraft } from "@/lib/mods/kept";
 import { useModsStore } from "@/stores/mods";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** A draft the agent wrote, in the conversation: where it runs, and the way to stop it. */
 const props = defineProps<{ draft: ModDraft; phone?: boolean }>();
@@ -83,12 +84,12 @@ async function toggle(): Promise<void> {
       <span class="mod-draft-card__status">{{ status }}</span>
     </div>
 
-    <p
+    <ErrorNote
       v-if="draft.off?.by === 'strikes' && draft.off.error"
-      class="mod-draft-card__line text-error"
-    >
-      {{ draft.off.error }}
-    </p>
+      :message="draft.off.error"
+      compact
+      class="mod-draft-card__line"
+    />
     <p
       v-if="stillWriting"
       class="mod-draft-card__line mod-draft-card__line--muted"
@@ -107,21 +108,20 @@ async function toggle(): Promise<void> {
     >
       Replaces your kept v{{ draft.kept }} in this session
     </p>
-    <p
+    <ErrorNote
       v-if="problem"
-      class="mod-draft-card__line text-error"
+      :message="problem"
+      compact
+      class="mod-draft-card__line"
       data-testid="mod-draft-check"
-    >
-      {{ problem }}
-    </p>
-    <p
+    />
+    <ErrorNote
       v-if="actionError"
-      class="mod-draft-card__line text-error"
-      role="alert"
+      :message="actionError"
+      compact
+      class="mod-draft-card__line"
       data-testid="mod-draft-action-error"
-    >
-      {{ actionError }}
-    </p>
+    />
 
     <div class="mod-draft-card__actions">
       <!-- The agent's request already offers Review…, which opens the same dialog. -->

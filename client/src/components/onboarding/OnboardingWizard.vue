@@ -1,19 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import {
-  AlertCircle,
-  ArrowRight,
-  Check,
-  CheckCircle2,
-  KeyRound,
-  LoaderCircle,
-  Rocket,
-  Sparkles,
-} from "lucide-vue-next";
+import { ArrowRight, Check, CheckCircle2, KeyRound, LoaderCircle, Rocket, Sparkles } from "lucide-vue-next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/api/client";
 import type { StoreCredentialRequest } from "@/api/client";
+import { ErrorNote } from "@/components/ui/error-note";
 
 type WizardStep = "welcome" | "credentials" | "ready";
 
@@ -223,18 +215,10 @@ async function finishOnboarding(): Promise<void> {
               >
             </label>
 
-            <div
+            <ErrorNote
               v-if="errorMessage"
-              class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-              role="alert"
-            >
-              <AlertCircle
-                :size="16"
-                class="mt-0.5 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{{ errorMessage }}</span>
-            </div>
+              :message="errorMessage"
+            />
 
             <div class="flex flex-wrap gap-2">
               <button

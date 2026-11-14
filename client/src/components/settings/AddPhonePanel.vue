@@ -6,6 +6,7 @@ import QrCode from "@/components/settings/QrCode.vue";
 import { createPairingCode, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
 import { choosePhoneBaseUrl, supportsInstall } from "@/lib/pairing";
 import { phoneReadiness } from "@/lib/phone-readiness";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Settings → Machines → This machine → Add a phone: a one-time QR code (and a code to type) a phone scans to get
@@ -376,7 +377,7 @@ onUnmounted(stopTimer);
           </p>
           <p
             class="mt-2 text-xs"
-            :class="secondsLeft > 0 ? 'text-muted' : 'text-error'"
+            :class="secondsLeft > 0 ? 'text-muted' : 'text-error-text'"
           >
             <template v-if="secondsLeft > 0">
               Expires in {{ countdown }}
@@ -466,13 +467,11 @@ onUnmounted(stopTimer);
       </div>
     </div>
 
-    <p
+    <ErrorNote
       v-if="error"
-      class="mt-2 text-sm text-error"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      :message="error"
+      class="mt-2"
+    />
   </div>
 </template>
 

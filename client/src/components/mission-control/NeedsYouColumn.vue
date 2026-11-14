@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { Tile } from "@/lib/mission-control";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 defineProps<{ items: readonly Tile[]; wide?: boolean }>();
 const emit = defineEmits<{
@@ -142,13 +143,12 @@ function answerPermission(tile: Tile, reply: PermissionReply): void {
         </Button>
       </template>
 
-      <p
+      <ErrorNote
         v-if="errors[tile.key]"
-        class="mt-2 text-xs text-destructive"
-        role="alert"
-      >
-        {{ errors[tile.key] }}
-      </p>
+        :message="errors[tile.key]"
+        compact
+        class="mt-2"
+      />
     </article>
   </aside>
 </template>

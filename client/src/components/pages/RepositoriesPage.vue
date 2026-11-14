@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { FolderGit2, LoaderCircle, RefreshCw, Settings2, TriangleAlert } from "lucide-vue-next";
+import { FolderGit2, LoaderCircle, RefreshCw, Settings2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/api/client";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const router = useRouter();
 
@@ -132,22 +133,11 @@ function goToSettings(): void {
       <span>Loading repositories…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="errorMessage"
-      class="flex items-start gap-3 border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
-      role="alert"
-    >
-      <TriangleAlert
-        :size="18"
-        class="mt-0.5 shrink-0"
-      />
-      <div class="space-y-2">
-        <p class="font-medium">
-          Unable to load repositories
-        </p>
-        <p>{{ errorMessage }}</p>
-      </div>
-    </div>
+      message="Unable to load repositories"
+      :reason="errorMessage"
+    />
 
     <EmptyState
       v-else-if="sortedRepositories.length === 0"

@@ -3,6 +3,8 @@ import { computed } from "vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
 import type { ModelAnalytics } from "@/api/client"
 import { formatAnalyticsCost } from "@/lib/format-utils"
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface CostBarItem {
   name: string
@@ -72,11 +74,6 @@ const tableRows = computed<ModelTableRow[]>(() => {
   }))
 })
 
-const emptyStateMessage = computed(() => {
-  return props.error
-    ? `Unable to load model analytics (${props.error}).`
-    : props.tableEmptyMessage
-})
 </script>
 
 <template>
@@ -91,12 +88,17 @@ const emptyStateMessage = computed(() => {
       Loading model analytics…
     </div>
 
-    <div
+    <ErrorNote
+      v-else-if="!hasModels && props.error"
+      message="Unable to load model analytics."
+      :reason="props.error"
+    />
+    <EmptyState
       v-else-if="!hasModels"
-      class="models-tab__state"
-    >
-      {{ emptyStateMessage }}
-    </div>
+      :title="props.tableEmptyMessage"
+      bordered
+      class="min-h-70"
+    />
 
     <div
       v-else

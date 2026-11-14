@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, shallowRef } from "vue";
-import { AlertCircle, Check, KeyRound, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-vue-next";
+import { Check, KeyRound, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-vue-next";
 import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // API keys belong to a machine: the one Settings shows.
 const { api } = useMachineTarget();
@@ -21,7 +22,7 @@ const commonProviders: readonly ProviderPreset[] = [
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-2 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
-const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-error/40 bg-error/10 px-3 py-2 text-sm font-medium text-error-text transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const credentials = ref<CredentialSummary[]>([]);
@@ -308,18 +309,10 @@ async function removeCredential(id: string): Promise<void> {
             >
           </label>
 
-          <div
+          <ErrorNote
             v-if="formError"
-            class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-            role="alert"
-          >
-            <AlertCircle
-              :size="16"
-              class="mt-0.5 shrink-0"
-              aria-hidden="true"
-            />
-            <span>{{ formError }}</span>
-          </div>
+            :message="formError"
+          />
 
           <div class="flex flex-wrap gap-2">
             <button
@@ -361,18 +354,11 @@ async function removeCredential(id: string): Promise<void> {
       <span>Loading credentials…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="loadError"
-      class="mt-5 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ loadError }}</span>
-    </div>
+      :message="loadError"
+      class="mt-5"
+    />
 
     <EmptyState
       v-else-if="!hasCredentials && !showAddForm"
@@ -433,18 +419,10 @@ async function removeCredential(id: string): Promise<void> {
             >
           </label>
 
-          <div
+          <ErrorNote
             v-if="actionError"
-            class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-            role="alert"
-          >
-            <AlertCircle
-              :size="16"
-              class="mt-0.5 shrink-0"
-              aria-hidden="true"
-            />
-            <span>{{ actionError }}</span>
-          </div>
+            :message="actionError"
+          />
 
           <div class="flex flex-wrap gap-2">
             <button
@@ -521,17 +499,10 @@ async function removeCredential(id: string): Promise<void> {
       </article>
     </div>
 
-    <div
+    <ErrorNote
       v-if="actionError && editingId === null"
-      class="mt-4 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ actionError }}</span>
-    </div>
+      :message="actionError"
+      class="mt-4"
+    />
   </section>
 </template>
