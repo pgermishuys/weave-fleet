@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, shallowRef } from "vue";
 import { AlertCircle, Check, KeyRound, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-vue-next";
 import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
 import { useMachineTarget } from "@/lib/machine-target";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // API keys belong to a machine: the one Settings shows.
 const { api } = useMachineTarget();
@@ -373,22 +374,14 @@ async function removeCredential(id: string): Promise<void> {
       <span>{{ loadError }}</span>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="!hasCredentials && !showAddForm"
-      class="mt-5 rounded-card border border-dashed border-border p-6 text-center"
-    >
-      <KeyRound
-        :size="28"
-        class="mx-auto text-muted"
-        aria-hidden="true"
-      />
-      <p class="mt-3 text-sm font-medium text-text">
-        No API keys stored
-      </p>
-      <p class="mt-1 text-xs text-muted">
-        Add a credential to unlock provider-backed sessions and integrations.
-      </p>
-    </div>
+      :icon="KeyRound"
+      title="No API keys stored"
+      description="Add a credential to unlock provider-backed sessions and integrations."
+      bordered
+      class="mt-5"
+    />
 
     <div
       v-else-if="hasCredentials"

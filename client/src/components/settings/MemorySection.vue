@@ -25,6 +25,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import DreamNightly from "@/components/settings/memory/DreamNightly.vue";
 import DreamingPanel from "@/components/settings/memory/DreamingPanel.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // Memory belongs to a machine: the one Settings shows.
 const target = useMachineTarget();
@@ -664,12 +665,13 @@ onMounted(load);
                 </div>
               </li>
             </ul>
-            <p
+            <EmptyState
               v-else-if="adding !== group.list || section.key === 'search'"
-              class="mt-2 rounded-card border border-dashed border-border p-3 text-xs text-muted"
-            >
-              {{ search ? "No notes match." : section.key === 'all' ? group.empty : section.empty }}
-            </p>
+              :title="search ? 'No notes match' : section.key === 'all' ? group.empty : section.empty"
+              bordered
+              compact
+              class="mt-2"
+            />
           </template>
         </template>
 

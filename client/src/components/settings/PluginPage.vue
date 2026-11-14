@@ -6,6 +6,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { setPluginEnabledEverywhere } from "@/plugins/use-plugin-switch";
 import { usePluginRuntime } from "@/plugins/composable";
 import { describeContributions, getConfigPage, isPluginEnabled } from "@/plugins/slots";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const props = defineProps<{ pluginId: string }>();
 
@@ -54,13 +55,13 @@ const name = computed(() => descriptor.value?.displayName ?? props.pluginId);
       <span class="text-text">{{ name }}</span>
     </nav>
 
-    <p
+    <EmptyState
       v-if="!manifest"
-      class="rounded-card border border-dashed border-border bg-card-bg p-6 text-sm text-muted"
+      :icon="Puzzle"
+      :title="`No plugin called &quot;${pluginId}&quot; is installed`"
+      bordered
       data-testid="plugin-not-found"
-    >
-      No plugin called "{{ pluginId }}" is installed.
-    </p>
+    />
 
     <template v-else>
       <header class="flex items-start gap-3">

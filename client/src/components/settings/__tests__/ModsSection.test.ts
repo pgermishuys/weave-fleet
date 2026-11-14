@@ -126,7 +126,8 @@ describe("ModsSection", () => {
   it("says so when nothing is kept yet", async () => {
     setKept([]);
     const wrapper = await mountSection();
-    expect(wrapper.get("[data-testid=mods-empty]").text()).toContain("No kept mods yet. When an agent writes a mod in a session, you can keep it from there, or add one from the Showcase below.");
+    expect(wrapper.get("[data-testid=mods-empty]").text()).toContain("No kept mods yet");
+    expect(wrapper.get("[data-testid=mods-empty]").text()).toContain("When an agent writes a mod in a session, you can keep it from there, or add one from the Showcase below.");
     expect(wrapper.find("[data-testid=mods-showcase]").exists()).toBe(true);
   });
 
