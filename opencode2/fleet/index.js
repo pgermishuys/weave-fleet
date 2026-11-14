@@ -638,12 +638,122 @@ function readMemoryNotes(directory) {
   return ""
 }
 
+/*
+ * matchesWildcard is OpenCode's Wildcard.match (packages/core/src/util/wildcard.ts, OpenCode 2.2.7), in JavaScript, so
+ * an agent's rules match here exactly as they do in OpenCode 2. Its license:
+ *
+ * MIT License
+ *
+ * Copyright (c) 2025 opencode
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+function matchesWildcard(input, pattern) {
+  const normalized = input.replaceAll("\\", "/")
+  let escaped = pattern
+    .replaceAll("\\", "/")
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".")
+
+  if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?"
+
+  return new RegExp("^" + escaped + "$", process.platform === "win32" ? "si" : "s").test(normalized)
+}
+
+/**
+ * What an agent's own rules say about `action` on `resource`: the last rule that matches, as OpenCode 2 decides
+ * (Permission.evaluate), or undefined when none does.
+ */
+function agentRule(rules, action, resource) {
+  return rules.findLast((rule) => matchesWildcard(action, rule.action) && matchesWildcard(resource, rule.resource))
+}
+
+/** Whether an agent's own rules deny `action` for every resource, which is when OpenCode 2 drops a tool (Tool.snapshot). */
+function agentDeniesAll(rules, action) {
+  const rule = rules.findLast((rule) => matchesWildcard(action, rule.action))
+  return rule?.resource === "*" && rule.effect === "deny"
+}
+
+/**
+ * An agent's own denies hold, whatever the session's rules say. OpenCode 2 decides a call from the agent's rules
+ * followed by the session's, and the last rule that matches wins (Permission.merge and evaluate in its permission.ts).
+ * Fleet gives every session rules that start with a rule for every action (allow at Allow everything, ask below it,
+ * so Fleet answers for the session's level), and a subagent's session inherits them, so on their own they would
+ * override what an agent denies: an agent that may only read could still edit, run commands, and run them through
+ * fleet_app_start. An agent's rules include the user's own config, so a deny there holds too.
+ *
+ * Two hooks put the agent's denies back on top and change nothing else: the session's rules still decide everything the
+ * agent doesn't deny, so Fleet's levels mean what they did. "context" drops from each model request the tools the
+ * agent denies outright, as OpenCode 2 drops a tool its rules deny (a call to a tool the request didn't offer comes to
+ * nothing). "evaluate" turns any check the agent's rules deny into a deny, for a denied command or path and for a tool
+ * Code Mode runs. An agent this server can't name or find is left to the session's rules.
+ */
+async function holdAgentDenies(ctx) {
+  if (!ctx.agent?.get) return
+
+  const rulesOf = async (agentID, sessionID) => {
+    let id = agentID
+    if (!id && sessionID && ctx.session?.get) {
+      const session = await ctx.session.get({ sessionID }).catch(() => undefined)
+      id = (session?.data ?? session)?.agent
+    }
+    if (!id) return []
+    const agent = await ctx.agent.get({ agentID: id }).catch(() => undefined)
+    const rules = (agent?.data ?? agent)?.permissions
+    return Array.isArray(rules) ? rules : []
+  }
+
+  if (ctx.session?.hook) {
+    await ctx.session.hook("context", async (input) => {
+      const rules = await rulesOf(input.agent, input.sessionID)
+      if (!rules.some((rule) => rule.effect === "deny") || !input.tools) return
+      // A tool's permission is its own name unless it names another (fleet_app_start's is shell), as in OpenCode 2.
+      const registered = ctx.tool?.list ? await ctx.tool.list().catch(() => []) : []
+      const permissionOf = new Map((registered ?? []).map((tool) => [tool.id, tool.options?.permission ?? tool.id]))
+      for (const name of Object.keys(input.tools)) {
+        if (agentDeniesAll(rules, permissionOf.get(name) ?? name)) delete input.tools[name]
+      }
+    })
+  }
+
+  if (ctx.permission?.hook) {
+    await ctx.permission.hook("evaluate", async (event) => {
+      if (event.effect === "deny") return
+      const rules = await rulesOf(event.agent, event.sessionID)
+      if (!rules.some((rule) => rule.effect === "deny")) return
+      const resources = event.resources?.length ? event.resources : ["*"]
+      if (!resources.some((resource) => agentRule(rules, event.action, resource)?.effect === "deny")) return
+      event.effect = "deny"
+      event.message = `The ${event.agent ?? "session's"} agent may not use ${event.action} here: its own permissions deny it.`
+    })
+  }
+}
+
 export default {
   id: "fleet",
   async setup(ctx) {
     await ctx.tool.transform((editor) => {
       for (const tool of tools) editor.add(tool)
     })
+
+    await holdAgentDenies(ctx)
 
     // With memory on, every model request carries the notes for this folder's repository and this machine, as they
     // were at the session's first request: a system prompt that changes mid-session can't reuse the prompt cache. Fleet
