@@ -375,6 +375,26 @@ public sealed class PiHarnessSessionTests
         Payload(reply).GetProperty("info").GetProperty("parentID").GetString().ShouldBe("msg_asked");
     }
 
+    [Fact]
+    public async Task a_file_pi_writes_by_a_relative_path_is_the_file_in_the_folder_pi_runs_in()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var args = JsonDocument.Parse("""{"path":"docs/PLAN.md","content":"- [ ] One"}""");
+
+        await harness.WriteEventAsync(new PiToolExecutionStartEvent { ToolCallId = "call_1", ToolName = "write", Args = args.RootElement.Clone() }, cts.Token);
+        await harness.WriteEventAsync(new PiToolExecutionEndEvent
+        {
+            ToolCallId = "call_1",
+            ToolName = "write",
+            Result = new PiToolResult { Content = [new PiTextContent { Text = "Successfully wrote 9 bytes" }] },
+        }, cts.Token);
+
+        var written = await ReadUntilAsync(session, EventTypes.FilesWritten, cts.Token);
+        Payload(written).GetProperty("paths").EnumerateArray().Select(p => p.GetString()).ShouldBe([Path.GetFullPath("/work/demo/docs/PLAN.md")]);
+    }
+
     private static async Task<HarnessEvent> ReadUntilAsync(PiHarnessSession session, string type, CancellationToken ct)
     {
         await foreach (var evt in session.SubscribeAsync(ct).WithCancellation(ct))

@@ -12,6 +12,7 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Progress;
 using WeaveFleet.Testing.Fakes.Repositories;
 
@@ -61,6 +62,32 @@ public sealed partial class SessionProgressServiceTests
             new JsonObject { ["path"] = fixture.PlanPath, ["old_str"] = $"- [ ] {TickedStep}", ["new_str"] = $"- [x] {TickedStep}" },
             oldText: $"- [ ] {TickedStep}", newText: $"- [x] {TickedStep}")));
         events.AddRange(mapper.Update(AcpDone("c2", "File updated")));
+
+        await ShouldShowTheWriteThenTheTickAsync(fixture, Written(events, fixture.SessionId));
+    }
+
+    [Fact]
+    public async Task A_plan_Pi_writes_and_ticks_back_to_back_shows_the_write_then_the_tick()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+        var mapper = new PiMapper(fixture.SessionId, null, fixture.Directory);
+        var events = new List<HarnessEvent>();
+
+        // As Pi reports a write (a path relative to where it runs) and an edit, one JSON line each: the result says only
+        // that it worked.
+        foreach (var line in new[]
+        {
+            """{"type":"message_start","message":{"role":"assistant","content":[],"timestamp":1000}}""",
+            PiToolStart("call_write", "write", new JsonObject { ["path"] = Path.GetRelativePath(fixture.Directory, fixture.PlanPath), ["content"] = PlanText }),
+            PiToolEnd("call_write", "write", $"Successfully wrote {PlanText.Length} bytes"),
+            PiToolStart("call_tick", "edit", new JsonObject
+            {
+                ["path"] = fixture.PlanPath,
+                ["edits"] = new JsonArray(new JsonObject { ["oldText"] = $"- [ ] {TickedStep}", ["newText"] = $"- [x] {TickedStep}" }),
+            }),
+            PiToolEnd("call_tick", "edit", "Successfully replaced 1 block(s)"),
+        })
+            events.AddRange(mapper.Map(JsonSerializer.Deserialize(line, PiJsonContext.Default.PiEvent).ShouldNotBeNull()));
 
         await ShouldShowTheWriteThenTheTickAsync(fixture, Written(events, fixture.SessionId));
     }
@@ -154,6 +181,17 @@ public sealed partial class SessionProgressServiceTests
         ["parent_tool_use_id"] = null,
         ["session_id"] = "claude-session",
         ["tool_use_result"] = result,
+    }.ToJsonString();
+
+    private static string PiToolStart(string id, string tool, JsonObject args) => new JsonObject
+    {
+        ["type"] = "tool_execution_start", ["toolCallId"] = id, ["toolName"] = tool, ["args"] = args,
+    }.ToJsonString();
+
+    private static string PiToolEnd(string id, string tool, string text) => new JsonObject
+    {
+        ["type"] = "tool_execution_end", ["toolCallId"] = id, ["toolName"] = tool, ["isError"] = false,
+        ["result"] = new JsonObject { ["content"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }) },
     }.ToJsonString();
 
     private static JsonElement AcpCall(string id, string path, JsonObject rawInput, string? oldText, string newText) => JsonSerializer.SerializeToElement(new JsonObject

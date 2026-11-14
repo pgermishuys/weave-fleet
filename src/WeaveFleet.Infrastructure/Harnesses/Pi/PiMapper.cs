@@ -19,6 +19,7 @@ internal sealed class PiMapper
 
     private readonly string _sessionId;
     private readonly string? _agent;
+    private readonly string? _workingDirectory;
     private readonly Dictionary<int, string> _contentPartText = [];
     private readonly Dictionary<int, string> _contentPartReasoning = [];
     private readonly Dictionary<string, PiToolPartState> _toolsByCallId = [];
@@ -40,11 +41,15 @@ internal sealed class PiMapper
     {
     }
 
-    /// <summary>Creates a mapper for a Fleet session and selected agent.</summary>
-    internal PiMapper(string sessionId, string? agent)
+    /// <summary>
+    /// Creates a mapper for a Fleet session and selected agent, whose Pi runs in <paramref name="workingDirectory"/> (what
+    /// the paths its file tools are given are relative to).
+    /// </summary>
+    internal PiMapper(string sessionId, string? agent, string? workingDirectory = null)
     {
         _sessionId = sessionId;
         _agent = agent;
+        _workingDirectory = workingDirectory;
         _subagents = new PiSubagentWork(sessionId);
     }
 
@@ -286,9 +291,16 @@ internal sealed class PiMapper
 
         var toolResultEvent = CreateEvent(EventTypes.MessagePartUpdated, toolResultPayload);
 
-        return finalState.ToolName == PiSubagentWork.ToolName
-            ? [toolStateEvent, toolResultEvent, .. _subagents.End(evt.ToolCallId, finalState.Input, evt.Result, evt.IsError)]
-            : [toolStateEvent, toolResultEvent];
+        if (finalState.ToolName == PiSubagentWork.ToolName)
+            return [toolStateEvent, toolResultEvent, .. _subagents.End(evt.ToolCallId, finalState.Input, evt.Result, evt.IsError)];
+
+        // Pi has no file watcher and says nothing else about the files its tools write: a finished write or edit is
+        // Fleet's files.written (what tracks a plan's progress, with what this call did to the file, so a plan ticked
+        // by the very next call still shows this call's state) and files.changed.
+        if (!evt.IsError && PiFileTools.WrittenFile(finalState.ToolName, finalState.Input, _workingDirectory) is { } written)
+            return [toolStateEvent, toolResultEvent, .. FileEvents.Written(_sessionId, finalState.MessageId, written, PiFileTools.Changes(finalState.ToolName, finalState.Input, written))];
+
+        return [toolStateEvent, toolResultEvent];
     }
 
     private IReadOnlyList<HarnessEvent> MapResponse(PiResponseEvent evt)

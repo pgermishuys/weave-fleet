@@ -464,30 +464,11 @@ internal static class ClaudeCodeMapper
     };
 
     /// <summary>
-    /// A file tool's finished call as Fleet's two file events: <c>files.written</c> (what progress tracking reads, with
-    /// what the call did to the file, <paramref name="changes"/>, so a plan ticked by the very next call still shows this
-    /// call's state) and <c>file.watcher.updated</c> (which Fleet turns into <c>files.changed</c>, so open files and the
-    /// Changes panel reload). Claude Code has no file watcher of its own to say the second.
+    /// A file tool's finished call as Fleet's two file events (<see cref="FileEvents.Written"/>). Claude Code has no file
+    /// watcher of its own to say the second.
     /// </summary>
-    internal static IReadOnlyList<HarnessEvent> CreateFileWrittenEvents(string sessionId, string? messageId, string path, IReadOnlyList<FileChange> changes) =>
-    [
-        new()
-        {
-            Type = EventTypes.FilesWritten,
-            SessionId = sessionId,
-            Timestamp = DateTimeOffset.UtcNow,
-            Payload = JsonSerializer.SerializeToElement(
-                new FilesWrittenPayload { SessionId = sessionId, MessageId = messageId, Paths = [path], Changes = changes },
-                InfrastructureJsonContext.Default.FilesWrittenPayload),
-        },
-        new()
-        {
-            Type = EventTypes.FileWatcherUpdated,
-            SessionId = sessionId,
-            Timestamp = DateTimeOffset.UtcNow,
-            Payload = ClaudeCodeTools.FileChanged(path),
-        },
-    ];
+    internal static IReadOnlyList<HarnessEvent> CreateFileWrittenEvents(string sessionId, string? messageId, string path, IReadOnlyList<FileChange> changes)
+        => FileEvents.Written(sessionId, messageId, path, changes);
 
     /// <summary>The agent's whole todo list, as Fleet's <c>todos.reported</c>.</summary>
     internal static HarnessEvent CreateTodosReportedEvent(string sessionId, IReadOnlyList<TodoEntry> items) => new()
