@@ -13,8 +13,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Nothing is built or published unless CI (ci.yml) passed on the tagged commit. The release commit is usually
+  # tagged as soon as it's pushed, so this waits for its CI run (about 8 minutes) and blocks on a red, cancelled or
+  # missing one, saying how to recover. See RELEASE.md and scripts/release-ci-gate.sh.
+  ci-gate:
+    name: CI passed on this commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The gate walks back past commits ci.yml skips (docs only), up to 20 of them.
+          fetch-depth: 25
+          sparse-checkout: |
+            scripts
+            .github/workflows
+
+      - name: Test the gate
+        run: bash scripts/test-release-ci-gate.sh
+
+      - name: Wait for CI to pass on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/release-ci-gate.sh HEAD "${{ github.ref_name }}"
+
   build:
     name: Build ${{ matrix.rid }}
+    needs: ci-gate
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 30
     strategy:
@@ -319,6 +350,7 @@ jobs:
 
   desktop:
     name: Desktop app
+    needs: ci-gate
     uses: ./.github/workflows/desktop-packages.yml
     with:
       version: ${{ github.ref_name }}

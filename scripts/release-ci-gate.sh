@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# Release guard: a tag publishes only if CI (ci.yml) passed on the very commit it points at.
+#
+# Waits while ci.yml is still running on the commit, then passes only when a push or workflow_dispatch run of it on
+# that commit succeeded and, when the run has a "CI passed" job, that job succeeded too. Pull request runs don't
+# count: they test the PR merged into main, not this commit. A red or cancelled run fails at once, and so does a
+# commit CI never ran on (after a few minutes' grace for the run to show up). Each failure says how to recover.
+#
+# ci.yml skips pushes that only change '**/*.md' or '.weave/**', so a tag on such a commit is judged by the nearest
+# ancestor CI ran on, as long as everything since it is in those paths.
+#
+# Usage: release-ci-gate.sh <commit-ish> [<tag>]   (run inside a clone that has the commit and its recent history)
+# Env:   GH_REPO (owner/name, required), GH_TOKEN (for gh), GATE_TIMEOUT_SECONDS (default 3600),
+#        GATE_NO_RUN_GRACE_SECONDS (default 300), GATE_POLL_SECONDS (default 30), GATE_CI_WORKFLOW (default ci.yml),
+#        GATE_REQUIRED_JOB (default "CI passed"), GATE_RETRY_SECONDS (API retry back-off step, default 5).
+set -euo pipefail
+# Command substitutions fail the script too, so an API error is never read as "no runs".
+shopt -s inherit_errexit
+
+# A tag name or a short SHA works too: the API only matches a full commit SHA.
+sha="$(git rev-parse --verify "${1:?usage: release-ci-gate.sh <commit-ish> [<tag>]}^{commit}")"
+tag="${2:-}"
+repo="${GH_REPO:?GH_REPO must be owner/name}"
+workflow="${GATE_CI_WORKFLOW:-ci.yml}"
+required_job="${GATE_REQUIRED_JOB:-CI passed}"
+timeout_seconds="${GATE_TIMEOUT_SECONDS:-3600}"
+grace_seconds="${GATE_NO_RUN_GRACE_SECONDS:-300}"
+poll_seconds="${GATE_POLL_SECONDS:-30}"
+max_ancestors=20
+retry_seconds="${GATE_RETRY_SECONDS:-5}"
+
+# The paths ci.yml's push trigger ignores (its paths-ignore); scripts/test-release-ci-gate.sh checks they still match.
+is_ci_ignored_path() {
+  case "$1" in
+    *.md | .weave/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+summary() {
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    echo "$*" >> "$GITHUB_STEP_SUMMARY"
+  fi
+}
+
+fail() {
+  echo "::error title=Release blocked::$1"
+  summary "**Release blocked:** $1"
+  shift
+  for line in "$@"; do
+    echo "$line"
+    summary "$line"
+  done
+  exit 1
+}
+
+# $1: how to get CI to pass on the commit.
+recovery() {
+  local ref="${tag:-<tag>}"
+  echo "To recover, without moving the tag:"
+  echo "  1. ${1}:"
+  echo "       gh workflow run ${workflow} --repo ${repo} --ref ${ref}"
+  echo "  2. When it's green, re-run this Release run's failed jobs: gh run rerun <release run id> --failed"
+}
+
+# gh api with a few retries, so one blip of GitHub's API doesn't block a release; still failing, it exits non-zero.
+api() {
+  local attempt
+  for attempt in 1 2 3 4; do
+    if gh api "$@"; then
+      return 0
+    fi
+    echo "gh api $1 failed (attempt ${attempt}); retrying." >&2
+    sleep $(( attempt * retry_seconds ))
+  done
+  gh api "$@"
+}
+
+# Prints "<id> <status> <conclusion> <event>" for each push or workflow_dispatch run of the CI workflow on a commit.
+ci_runs() {
+  api "repos/${repo}/actions/workflows/${workflow}/runs?head_sha=$1&per_page=100" \
+    --jq '.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")
+          | "\(.id) \(.status) \(.conclusion // "none") \(.event)"'
+}
+
+# Prints the conclusion of the required job in a run, or nothing when the run has no such job.
+required_job_conclusion() {
+  api "repos/${repo}/actions/runs/$1/jobs?filter=latest&per_page=100" --paginate \
+    --jq ".jobs[] | select(.name == \"${required_job}\") | (.conclusion // .status)"
+}
+
+# Finds the commit whose CI run stands for $sha: $sha itself, or its nearest first-parent ancestor with a CI run when
+# every file changed since then is one ci.yml ignores. Prints nothing when there's no such commit (yet).
+# Every call's output is assigned before it's tested, so a failed API call fails the script instead of reading as "no run".
+ci_commit_for() {
+  local runs ancestor ancestors changed path
+  runs="$(ci_runs "$sha")"
+  if [ -n "$runs" ]; then
+    echo "$sha"
+    return
+  fi
+  ancestors="$(git rev-list --first-parent --max-count="$max_ancestors" "${sha}~1" 2>/dev/null || true)"
+  for ancestor in $ancestors; do
+    runs="$(ci_runs "$ancestor")"
+    if [ -n "$runs" ]; then
+      changed="$(git diff --name-only "$ancestor" "$sha")"
+      while IFS= read -r path; do
+        [ -z "$path" ] && continue
+        is_ci_ignored_path "$path" || return 0
+      done <<< "$changed"
+      echo "$ancestor"
+      return
+    fi
+  done
+}
+
+start="$(date +%s)"
+announced=""
+while :; do
+  elapsed=$(( $(date +%s) - start ))
+  ci_sha="$(ci_commit_for)"
+
+  if [ -z "$ci_sha" ]; then
+    if [ "$elapsed" -ge "$grace_seconds" ]; then
+      fail "${workflow} never ran on ${sha}${tag:+ (${tag})}, so nothing shows it passed." \
+        "Only push and workflow_dispatch runs on this exact commit count (pull request runs test a merge commit)." \
+        "$(recovery "Run CI on the tag")"
+    fi
+    echo "No ${workflow} run on ${sha} yet (${elapsed}s); waiting up to ${grace_seconds}s for one to start."
+    sleep "$poll_seconds"
+    continue
+  fi
+
+  if [ "$ci_sha" != "$sha" ] && [ -z "$announced" ]; then
+    echo "::notice::${sha} only changes paths ${workflow} ignores; judging it by its CI run on ${ci_sha}."
+    announced=1
+  fi
+
+  runs="$(ci_runs "$ci_sha")"
+  passed_run=""
+  pending=""
+  verdicts=""
+  while read -r id status conclusion event; do
+    [ -z "$id" ] && continue
+    if [ "$status" != "completed" ]; then
+      pending=1
+      verdicts+="  run ${id} (${event}): ${status}"$'\n'
+      continue
+    fi
+    if [ "$conclusion" = "success" ]; then
+      job="$(required_job_conclusion "$id")"
+      if [ -z "$job" ] || [ "$job" = "success" ]; then
+        passed_run="$id"
+        break
+      fi
+      verdicts+="  run ${id} (${event}): success, but its \"${required_job}\" job is ${job}"$'\n'
+      continue
+    fi
+    verdicts+="  run ${id} (${event}): ${conclusion}"$'\n'
+  done <<< "$runs"
+
+  if [ -n "$passed_run" ]; then
+    url="https://github.com/${repo}/actions/runs/${passed_run}"
+    echo "${workflow} passed on ${ci_sha}: ${url}"
+    summary "CI passed on \`${ci_sha}\`${tag:+ (${tag})}: ${url}"
+    exit 0
+  fi
+
+  if [ -z "$pending" ]; then
+    fail "${workflow} didn't pass on ${ci_sha}${tag:+ (${tag})}." "${verdicts%$'\n'}" \
+      "$(recovery "Fix it on main and release a new version, or, for a flaky failure or a cancelled run, re-run that run's failed jobs (gh run rerun <id> --failed) or run CI on the tag")"
+  fi
+
+  if [ "$elapsed" -ge "$timeout_seconds" ]; then
+    fail "${workflow} on ${ci_sha} was still running after ${timeout_seconds}s." "${verdicts%$'\n'}" \
+      "$(recovery "Wait for that run to finish green, or run CI on the tag")"
+  fi
+
+  echo "${workflow} on ${ci_sha} is still running (${elapsed}s):"
+  printf '%s' "$verdicts"
+  sleep "$poll_seconds"
+done
