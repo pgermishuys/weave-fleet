@@ -285,7 +285,6 @@ function selectSection(sectionId: SettingsSectionId): void {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  opacity: 0.8;
 }
 
 .settings-nav__item {

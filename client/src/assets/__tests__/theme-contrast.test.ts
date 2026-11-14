@@ -20,6 +20,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import prBadgeSource from "../../components/github/PrBadge.vue?raw";
 import sessionItemSource from "../../components/sessions/SessionItem.vue?raw";
+import draftRowSource from "../../components/sessions/DraftSessionRow.vue?raw";
 
 const css = readFileSync(resolve(__dirname, "../main.css"), "utf8");
 
@@ -184,9 +185,10 @@ function colours(source: string): { selector: string; value: string }[] {
   return out;
 }
 
-const ROW_SOURCES = { "SessionItem.vue": sessionItemSource, "PrBadge.vue": prBadgeSource };
+// The draft row stands in the session list with the same backgrounds, so it keeps the same text.
+const ROW_SOURCES = { "SessionItem.vue": sessionItemSource, "PrBadge.vue": prBadgeSource, "DraftSessionRow.vue": draftRowSource };
 // Icons and the picker's tick (non-text, 3:1), not text.
-const ROW_ICONS = /^\.session-(caret|row-action|check)\b/;
+const ROW_ICONS = /^\.(session-(caret|row-action|check)|draft-row__icon)\b/;
 // Shares of --text a resting row's title takes; hover, the open row and a picked row restore --text itself.
 const RESTING_ONLY = new Set(["86%", "var(--row-dim-1)", "var(--row-dim-2)"]);
 
@@ -211,6 +213,7 @@ describe("session row text", () => {
       ".session-item--dim-1:where(:not(.session-item--selected))",
       ".session-item--dim-2:where(:not(.session-item--selected))",
       ".session-item--dim-2:where(:not(:hover, .session-item--selected)) .session-meta--quiet",
+      ".draft-row",
     ]);
   });
 
@@ -259,6 +262,16 @@ describe("session row text", () => {
     expect(meta, "--row-meta under a resting title's 86%").toBeLessThan(86);
     expect(dim2, "the quietest row's age fades with it").toBeLessThanOrEqual(meta);
     expect(dim2).toBeLessThan(dim1);
+  });
+});
+
+describe("muted text", () => {
+  it.each(Object.entries(themes()))("reaches 4.5:1 on every surface in the %s theme", (_name, vars) => {
+    const muted = resolveVar(vars, vars.muted);
+    for (const surface of ["main-bg", "panel-bg", "card-bg"]) {
+      const bg = resolveVar(vars, vars[surface]);
+      expect(contrast(muted, bg), `--muted ${muted} on --${surface} ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 

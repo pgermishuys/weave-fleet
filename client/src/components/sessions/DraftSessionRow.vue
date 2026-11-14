@@ -111,13 +111,14 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
   line-height: 1.3;
 }
 
+/* Like a session row's age and labels: --row-meta of --text reads at 4.5:1 on every row background. */
 .draft-row__title--empty {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
 }
 
 .draft-row__meta {
   flex-shrink: 0;
-  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
   font-size: 0.85714rem;
   font-weight: 400;
   line-height: 1.3;
