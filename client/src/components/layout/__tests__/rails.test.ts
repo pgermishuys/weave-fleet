@@ -1,13 +1,14 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, ref } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
 import { usePluginRuntime } from "@/plugins/composable";
 import { useStaleRailRedirect } from "@/composables/use-context-panel";
 import { useSidebarStore } from "@/stores/sidebar";
 import githubPluginManifest from "@/plugins/builtin/github";
-import { rails } from "@/lib/rails";
+import { railPoint, rails } from "@/lib/rails";
+import iconRailSource from "@/components/layout/IconRail.vue?raw";
 
 const { navigate, pathname, boardOn, workflowsOn, missionOn, jobsOn } = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -67,16 +68,17 @@ describe("the icon rail", () => {
     navigate.mockClear();
   });
 
-  it("lists every rail icon-only, Workflows included while it's off", () => {
+  it("lists every rail icon-only, and no Labs feature while it's off", () => {
     const wrapper = mount(IconRail);
 
     expect(railLabels(wrapper)).toEqual([
-      "Sessions", "Workflows", "Automations", "Analytics", "GitHub", "Settings", "Help",
+      "Sessions", "Automations", "Analytics", "GitHub", "Settings", "Help",
     ]);
     expect(wrapper.find("nav.rail-nav .rail-label").exists()).toBe(false);
     expect(wrapper.findAll("nav.rail-nav [data-tooltip]").map((b) => b.attributes("data-tooltip"))).toEqual([
-      "Sessions", "Workflows · switched off", "Automations", "Analytics", "GitHub", "Settings", "Help",
+      "Sessions", "Automations", "Analytics", "GitHub", "Settings", "Help",
     ]);
+    expect(wrapper.find("[data-off=true]").exists()).toBe(false);
   });
 
   it("puts Fleet first once Mission control is on, and opens it", async () => {
@@ -84,17 +86,9 @@ describe("the icon rail", () => {
 
     const wrapper = mount(IconRail);
 
-    expect(railLabels(wrapper).slice(0, 3)).toEqual(["Fleet", "Sessions", "Workflows"]);
+    expect(railLabels(wrapper).slice(0, 3)).toEqual(["Fleet", "Sessions", "Automations"]);
     await wrapper.find("[aria-label=Fleet]").trigger("click");
     expect(navigate).toHaveBeenLastCalledWith({ to: "/fleet" });
-  });
-
-  it("marks only the switched-off rails", () => {
-    const wrapper = mount(IconRail);
-
-    expect(wrapper.findAll("[data-off=true]").map((button) => button.attributes("aria-label"))).toEqual(["Workflows"]);
-    expect(wrapper.find("[aria-label=Workflows] .rail-off-dot").exists()).toBe(true);
-    expect(wrapper.find("[aria-label=Sessions] .rail-off-dot").exists()).toBe(false);
   });
 
   it("adds Board after Sessions, unmarked, once it's on", () => {
@@ -102,25 +96,71 @@ describe("the icon rail", () => {
 
     const wrapper = mount(IconRail);
 
-    expect(railLabels(wrapper).slice(0, 3)).toEqual(["Sessions", "Board", "Workflows"]);
+    expect(railLabels(wrapper).slice(0, 3)).toEqual(["Sessions", "Board", "Automations"]);
     expect(wrapper.find("[aria-label=Board]").attributes("data-off")).toBeUndefined();
   });
 
-  it("drops the marker from Workflows once it's on", () => {
-    boardOn.value = true;
-    workflowsOn.value = true;
+  // Every Labs feature acts the same while it's off: out of the rail, back in it once on, never dimmed.
+  describe.each([
+    ["Fleet", "/fleet", missionOn],
+    ["Board", "/board", boardOn],
+    ["Workflows", "/workflows", workflowsOn],
+    ["Jobs", "/jobs", jobsOn],
+  ] as const)("the Labs feature %s", (label, to, on) => {
+    const id = label.toLowerCase();
 
-    const wrapper = mount(IconRail);
+    it("leaves the rail while it's off", () => {
+      expect(railLabels(mount(IconRail))).not.toContain(label);
+    });
 
-    expect(wrapper.find("[data-off=true]").exists()).toBe(false);
-    expect(wrapper.find(".rail-off-dot").exists()).toBe(false);
+    it("is in the rail, unmarked, while it's on, and opens its page", async () => {
+      on.value = true;
+      const wrapper = mount(IconRail);
+
+      expect(railLabels(wrapper)).toContain(label);
+      expect(wrapper.find(`[aria-label=${label}]`).attributes("data-off")).toBeUndefined();
+      await wrapper.find(`[aria-label=${label}]`).trigger("click");
+      expect(navigate).toHaveBeenLastCalledWith({ to });
+    });
+
+    it("still owns its address while it's off, so its notice fills the context area", () => {
+      pathname.value = to;
+      mount(IconRail);
+
+      expect(useSidebarStore().activeRail).toBe(id);
+      expect(mount(ContextPanel).find("[data-testid^=panel-]").exists()).toBe(false);
+    });
   });
 
-  it("still opens a switched-off rail's page", async () => {
-    const wrapper = mount(IconRail);
+  describe("a rail marked off", () => {
+    let remove: () => void = () => {};
+    beforeEach(() => {
+      remove = railPoint.contribute("test", [
+        { id: "dimmed", label: "Dimmed", icon: defineComponent({ render: () => null }), to: "/dimmed", placement: "top", order: 50, panel: defineComponent({ render: () => null }), off: () => true },
+      ]);
+    });
+    afterEach(() => remove());
 
-    await wrapper.find("[aria-label=Workflows]").trigger("click");
-    expect(navigate).toHaveBeenLastCalledWith({ to: "/workflows" });
+    it("is drawn dimmed with a dot, and only it is marked", () => {
+      const wrapper = mount(IconRail);
+
+      expect(wrapper.findAll("[data-off=true]").map((button) => button.attributes("aria-label"))).toEqual(["Dimmed"]);
+      expect(wrapper.find("[aria-label=Dimmed] .rail-off-dot").exists()).toBe(true);
+      expect(wrapper.find("[aria-label=Sessions] .rail-off-dot").exists()).toBe(false);
+      expect(wrapper.find("[aria-label=Dimmed]").attributes("data-tooltip")).toBe("Dimmed · switched off");
+    });
+
+    it("has a muted dot, not amber: off is a state, not something that needs attention", () => {
+      const dot = /\.rail-off-dot\s*\{([^}]*)\}/.exec(iconRailSource)?.[1] ?? "";
+      expect(dot).toMatch(/background:\s*var\(--muted\)/);
+    });
+
+    it("still opens its page", async () => {
+      const wrapper = mount(IconRail);
+
+      await wrapper.find("[aria-label=Dimmed]").trigger("click");
+      expect(navigate).toHaveBeenLastCalledWith({ to: "/dimmed" });
+    });
   });
 
   it("makes a clicked rail active and navigates when it has a path", async () => {
