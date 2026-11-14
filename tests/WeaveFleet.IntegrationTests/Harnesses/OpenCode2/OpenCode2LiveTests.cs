@@ -286,14 +286,25 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
             if (LlmRequest.Continues(request, childPrompt))
                 return new ScriptedLlmResponse { Text = "B it is." };
             if (LlmRequest.Starts(request, prompt))
-                return ToolCall("call_sub", "subagent", new { description = "Pick a database", prompt = childPrompt, agent = "general", subagent_type = "general" });
+                return ToolCall("call_sub", "subagent", new { description = "Pick a database", prompt = childPrompt, agent = "helper", subagent_type = "helper" });
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "The helper says: B." };
             return null;
         });
 
         using var cts = new CancellationTokenSource(Timeout);
-        var id = await fleet.CreateSessionAsync(fleet.NewFolder("subagent"), "Subagent", cts.Token);
+        // The folder's own subagent: V2's general one may not ask the user (its rules deny question), and an agent's
+        // denies hold in Fleet (OpenCode2AgentPermissionLiveTests).
+        var folder = fleet.NewFolder("subagent");
+        Directory.CreateDirectory(Path.Combine(folder, ".opencode", "agents"));
+        File.WriteAllText(Path.Combine(folder, ".opencode", "agents", "helper.md"), """
+            ---
+            description: Helps with one part of a task
+            mode: subagent
+            ---
+            You help with one part of a task.
+            """);
+        var id = await fleet.CreateSessionAsync(folder, "Subagent", cts.Token);
         var events = fleet.Watch(cts.Token, id);
 
         await PromptAsync(id, prompt, options: null, cts.Token);
