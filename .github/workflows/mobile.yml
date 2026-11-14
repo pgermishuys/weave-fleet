@@ -444,12 +444,12 @@ jobs:
               fi
               return
             fi
-            local why="it ended \`$result\`"
-            [ "$result" = skipped ] && why="it didn't run: Check ended \`$CHECK\`"
+            local why="it ended \`$result\`" files="
+          Screenshots and logs: the run's \`$artifact\` artifact."
+            if [ "$result" = skipped ]; then why="it didn't run, because Check ended \`$CHECK\`"; files=""; fi
             local text="The nightly $walk walk-through of \`$REF\` at ${SHA::7} is red: $why.
 
-          Run: $RUN_URL
-          Screenshots and logs: the run's \`$artifact\` artifact.
+          Run: $RUN_URL$files
 
           This issue closes itself after the next green night."
             if [ -n "$open" ]; then
