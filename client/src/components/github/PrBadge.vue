@@ -52,11 +52,13 @@ const showChecks = computed(() => props.checks !== "none" && (props.state === "o
   white-space: nowrap;
 }
 
-.pr-badge[data-pr="open"] { color: var(--pr-open); }
-.pr-badge[data-pr="draft"] { color: var(--pr-draft); }
-.pr-badge[data-pr="blocked"] { color: var(--pr-blocked); }
-.pr-badge[data-pr="merged"] { color: var(--pr-merged); }
-.pr-badge[data-pr="closed"] { color: var(--pr-closed); }
+/* Row text: each state's colour keeps as much of itself as still reads at 4.5:1 on every session row background,
+   the rest is --text (--row-* in main.css); a draft is the row's quiet meta colour. */
+.pr-badge[data-pr="open"] { color: color-mix(in srgb, var(--pr-open) var(--row-running), var(--text)); }
+.pr-badge[data-pr="draft"] { color: color-mix(in srgb, var(--text) var(--row-meta), transparent); }
+.pr-badge[data-pr="blocked"] { color: color-mix(in srgb, var(--pr-blocked) var(--row-waiting), var(--text)); }
+.pr-badge[data-pr="merged"] { color: color-mix(in srgb, var(--pr-merged) var(--row-queued), var(--text)); }
+.pr-badge[data-pr="closed"] { color: color-mix(in srgb, var(--pr-closed) var(--row-error), var(--text)); }
 
 .pr-badge__checks {
   width: 6px;

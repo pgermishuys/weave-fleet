@@ -5,9 +5,14 @@
 //   the default #6366f1 was 4.46:1, and components wrote text-white on the accent instead of the theme's foreground.
 // - Age-dimmed session titles: a quiet session's row keeps --row-dim-1 / --row-dim-2 of --text, 4.5:1 on the surfaces
 //   the session list sits on (1.4.3). A fixed 40% was 3.34:1 in the default theme and 2.26:1 in solarized-light.
+// - Every other text in a session row (its age, labels, status, PR number): --row-meta of --text, or a status colour
+//   that keeps --row-<colour> of itself and takes the rest from --text, 4.5:1 on every background a row can have
+//   (resting, hovered, open, picked, and a chip's own tint). A quiet row's age was --muted at 60%: 2.24:1 in dark,
+//   and the open row's age 3.47:1 on its highlight.
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import prBadgeSource from "../../components/github/PrBadge.vue?raw";
 import sessionItemSource from "../../components/sessions/SessionItem.vue?raw";
 
 const css = readFileSync(resolve(__dirname, "../main.css"), "utf8");
@@ -119,8 +124,120 @@ describe("age-dimmed session titles", () => {
   it("are dimmed by those tokens in SessionItem, not a fixed percentage", () => {
     const style = sessionItemSource.slice(sessionItemSource.indexOf("<style"));
     for (const level of [1, 2]) {
-      const rule = new RegExp(`\\.session-item--dim-${level}\\s*\\{([^}]*)\\}`).exec(style)?.[1] ?? "";
+      const rule = new RegExp(`\\.session-item--dim-${level}[^{,]*\\{([^}]*)\\}`).exec(style)?.[1] ?? "";
       expect(rule).toMatch(new RegExp(`color:\\s*color-mix\\(in srgb, var\\(--text\\) var\\(--row-dim-${level}\\), transparent\\)`));
     }
+  });
+});
+
+type Rgba = [number, number, number, number];
+
+/** A theme value (hex, rgba() or a var() chain) as channels and alpha. */
+function rgba(vars: Vars, value: string): Rgba {
+  const v = resolveVar(vars, value).trim();
+  const fn = v.match(/^rgba?\(([^)]+)\)$/);
+  if (fn) {
+    const [r, g, b, a = 1] = fn[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    return [r, g, b, a];
+  }
+  const h = v.replace("#", "");
+  return [...[0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)), 1] as Rgba;
+}
+
+const hex = (c: Rgba) => `#${c.slice(0, 3).map((x) => Math.round(x).toString(16).padStart(2, "0")).join("")}`;
+/** `c` at `alpha` drawn on the opaque `bg`, rounded to whole channels as the browser does. */
+const paint = (c: Rgba, alpha: number, bg: Rgba): Rgba =>
+  [0, 1, 2].map((i) => Math.round(c[i] * c[3] * alpha + bg[i] * (1 - c[3] * alpha))).concat(1) as Rgba;
+/** color-mix(in srgb, a p%, b) for opaque a and b. */
+const mix = (a: Rgba, percent: number, b: Rgba): Rgba =>
+  [0, 1, 2].map((i) => Math.round(a[i] * percent / 100 + b[i] * (1 - percent / 100))).concat(1) as Rgba;
+
+/** Every `color:` a component's style sets, with its selector. */
+function colours(source: string): { selector: string; value: string }[] {
+  const style = source.slice(source.indexOf("<style"));
+  const out: { selector: string; value: string }[] = [];
+  for (const rule of style.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const decl of rule[2].matchAll(/(?<![-\w])color:\s*([^;]+);/g)) {
+      out.push({ selector: rule[1].replace(/\/\*[\s\S]*?\*\//g, "").trim(), value: decl[1].trim() });
+    }
+  }
+  return out;
+}
+
+const ROW_SOURCES = { "SessionItem.vue": sessionItemSource, "PrBadge.vue": prBadgeSource };
+// Icons and the picker's tick (non-text, 3:1), not text.
+const ROW_ICONS = /^\.session-(caret|row-action|check)\b/;
+// Shares of --text a resting row's title takes; hover, the open row and a picked row restore --text itself.
+const RESTING_ONLY = new Set(["86%", "var(--row-dim-1)", "var(--row-dim-2)"]);
+
+describe("session row text", () => {
+  const rowColours = Object.entries(ROW_SOURCES).flatMap(([file, src]) =>
+    colours(src).filter((c) => !ROW_ICONS.test(c.selector)).map((c) => ({ file, ...c })),
+  );
+  const shareOfText = (value: string) => /^color-mix\(in srgb, var\(--text\) ([^,]+), transparent\)$/.exec(value)?.[1];
+  const statusMix = (value: string) => /^color-mix\(in srgb, var\(--([a-z-]+)\) var\(--(row-[a-z]+)\), var\(--text\)\)$/.exec(value);
+
+  it("uses only colours this test checks: --text, a share of it, or a status colour mixed with it", () => {
+    const offenders = rowColours
+      .filter(({ value }) => value !== "var(--text)" && !shareOfText(value) && !statusMix(value))
+      .map(({ file, selector, value }) => `${file} ${selector}: ${value}`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("dims a title or an age only where the row rests: never hovered or picked", () => {
+    const resting = rowColours.filter(({ value }) => RESTING_ONLY.has(shareOfText(value) ?? ""));
+    expect(resting.map((c) => c.selector)).toEqual([
+      ".session-item",
+      ".session-item--dim-1:where(:not(.session-item--selected))",
+      ".session-item--dim-2:where(:not(.session-item--selected))",
+      ".session-item--dim-2:where(:not(:hover, .session-item--selected)) .session-meta--quiet",
+    ]);
+  });
+
+  it("draws the row backgrounds this test measures", () => {
+    const style = sessionItemSource.slice(sessionItemSource.indexOf("<style"));
+    expect(style).toMatch(/\.session-item:hover \{[^}]*background: color-mix\(in srgb, var\(--text\) 5%, transparent\)/);
+    expect(style).toMatch(/\.session-item\.active \{[^}]*background: color-mix\(in srgb, var\(--text\) 9%, transparent\)/);
+    expect(style).toMatch(/\.session-item--selected\.active \{[^}]*background: var\(--accent-dim\)/);
+  });
+
+  it.each(Object.entries(themes()))("reaches 4.5:1 on every row background in the %s theme", (_name, vars) => {
+    const text = rgba(vars, vars.text);
+    const failures: string[] = [];
+    for (const surface of ["main-bg", "panel-bg"]) {
+      const resting = rgba(vars, vars[surface]);
+      const backgrounds: Record<string, Rgba> = {
+        resting,
+        hovered: paint(text, 0.05, resting),
+        open: paint(text, 0.09, resting),
+        picked: paint(rgba(vars, vars["accent-dim"]), 1, resting),
+      };
+      for (const { file, selector, value } of rowColours) {
+        const share = shareOfText(value);
+        const status = statusMix(value);
+        for (const [state, bg] of Object.entries(backgrounds)) {
+          if (share && RESTING_ONLY.has(share) && state !== "resting") continue;
+          // A status colour's chip sits on its own 14% tint.
+          const grounds = status ? [bg, paint(rgba(vars, `var(--${status[1]})`), 0.14, bg)] : [bg];
+          for (const ground of grounds) {
+            const shown = value === "var(--text)"
+              ? text
+              : share
+                ? paint(text, parseFloat(share.startsWith("var(") ? vars[share.slice(6, -1)] : share) / 100, ground)
+                : mix(rgba(vars, `var(--${status![1]})`), parseFloat(vars[status![2]]), text);
+            const ratio = contrast(hex(shown), hex(ground));
+            if (ratio < 4.5) failures.push(`${file} ${selector} on a ${state} row (--${surface}): ${ratio.toFixed(2)}`);
+          }
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it.each(Object.entries(themes()))("keeps a quiet row's age quieter than its title in the %s theme", (_name, vars) => {
+    const [meta, dim1, dim2] = ["row-meta", "row-dim-1", "row-dim-2"].map((k) => parseFloat(vars[k]));
+    expect(meta, "--row-meta under a resting title's 86%").toBeLessThan(86);
+    expect(dim2, "the quietest row's age fades with it").toBeLessThanOrEqual(meta);
+    expect(dim2).toBeLessThan(dim1);
   });
 });

@@ -25,6 +25,15 @@
      least that still reads at 4.5:1 on --main-bg and --panel-bg, so each theme sets its own. */
   --row-dim-1: 66%;
   --row-dim-2: 51%;
+  /* A session row's other text: its age and labels take --row-meta of --text, the least that reads at 4.5:1 on
+     every row background (resting, hovered, open, picked); a status colour keeps --row-<colour> of itself and
+     takes the rest from --text, the most that still reads at 4.5:1 there. */
+  --row-meta: 53%;
+  --row-error: 71%;
+  --row-waiting: 100%;
+  --row-accent: 67%;
+  --row-running: 100%;
+  --row-queued: 69%;
   --coral: #D95A3A;
   --indigo: #6366f1;
   /* #6366f1 nudged one step so white text on it reaches 4.5:1. */
@@ -90,6 +99,12 @@
   --muted: #6E6A65;
   --row-dim-1: 77%;
   --row-dim-2: 62%;
+  --row-meta: 63%;
+  --row-error: 71%;
+  --row-waiting: 55%;
+  --row-accent: 69%;
+  --row-running: 56%;
+  --row-queued: 80%;
   --accent: #5B6EC7;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
@@ -114,6 +129,12 @@
   --muted: #94A3B8;
   --row-dim-1: 65%;
   --row-dim-2: 50%;
+  --row-meta: 56%;
+  --row-error: 57%;
+  --row-waiting: 86%;
+  --row-accent: 56%;
+  --row-running: 80%;
+  --row-queued: 56%;
   --accent: #A855F7;
   --primary: var(--accent);
   /* White on this purple is 3.96:1; the rail colour on it reaches 4.5:1, and the accent keeps its colour as link text. */
@@ -139,6 +160,12 @@
   --muted: #A1A1AA;
   --row-dim-1: 62%;
   --row-dim-2: 47%;
+  --row-meta: 48%;
+  --row-error: 83%;
+  --row-waiting: 100%;
+  --row-accent: 82%;
+  --row-running: 100%;
+  --row-queued: 80%;
   --accent: #A855F7;
   --primary: var(--accent);
   /* White on this purple is 3.96:1; black on it reaches 4.5:1, and the accent keeps its colour as link text. */
@@ -164,6 +191,12 @@
   --muted: #D8DEE9;
   --row-dim-1: 79%;
   --row-dim-2: 64%;
+  --row-meta: 75%;
+  --row-error: 27%;
+  --row-waiting: 40%;
+  --row-accent: 32%;
+  --row-running: 31%;
+  --row-queued: 29%;
   --accent: #88C0D0;
   --primary: var(--accent);
   --primary-foreground: #2E3440;
@@ -188,6 +221,12 @@
   --muted: #BFBFBF;
   --row-dim-1: 71%;
   --row-dim-2: 56%;
+  --row-meta: 63%;
+  --row-error: 45%;
+  --row-waiting: 100%;
+  --row-accent: 54%;
+  --row-running: 100%;
+  --row-queued: 53%;
   --accent: #BD93F9;
   --primary: var(--accent);
   --primary-foreground: #282A36;
@@ -212,6 +251,12 @@
   --muted: #839496;
   --row-dim-1: 69%;
   --row-dim-2: 54%;
+  --row-meta: 60%;
+  --row-error: 48%;
+  --row-waiting: 58%;
+  --row-accent: 50%;
+  --row-running: 57%;
+  --row-queued: 50%;
   --accent: #268BD2;
   --primary: var(--accent);
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
@@ -238,6 +283,12 @@
   --muted: #657B83;
   --row-dim-1: 82%;
   --row-dim-2: 67%;
+  --row-meta: 70%;
+  --row-error: 72%;
+  --row-waiting: 52%;
+  --row-accent: 52%;
+  --row-running: 49%;
+  --row-queued: 62%;
   --accent: #268BD2;
   --primary: var(--accent);
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
@@ -263,6 +314,12 @@
   --muted: #B3B3A6;
   --row-dim-1: 73%;
   --row-dim-2: 58%;
+  --row-meta: 70%;
+  --row-error: 32%;
+  --row-waiting: 67%;
+  --row-accent: 53%;
+  --row-running: 53%;
+  --row-queued: 38%;
   --accent: #A6E22E;
   --primary: var(--accent);
   --primary-foreground: #272822;
@@ -287,6 +344,12 @@
   --muted: #8B949E;
   --row-dim-1: 66%;
   --row-dim-2: 51%;
+  --row-meta: 55%;
+  --row-error: 70%;
+  --row-waiting: 92%;
+  --row-accent: 89%;
+  --row-running: 91%;
+  --row-queued: 91%;
   --accent: #58A6FF;
   --primary: var(--accent);
   --primary-foreground: #0D1117;
