@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Brain, Download, LoaderCircle } from "lucide-vue-next";
+import { Brain, Download } from "lucide-vue-next";
 import { useSkillCatalog } from "@/composables/use-skill-catalog";
 import { useSkills } from "@/composables/use-skills";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-targ
 import InstallTargetPicker from "../InstallTargetPicker.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 function mapSourceToNumber(source: "GitHub" | "Local" | "Bundled"): number {
   switch (source) {
@@ -80,11 +81,7 @@ async function handleInstall(skillName: string): Promise<void> {
       v-if="isLoading"
       class="flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading catalog…</span>
     </div>
 
@@ -197,12 +194,7 @@ async function handleInstall(skillName: string): Promise<void> {
               :disabled="installingSkillName === skill.name"
               @click="handleInstall(skill.name)"
             >
-              <LoaderCircle
-                v-if="installingSkillName === skill.name"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="installingSkillName === skill.name" />
               <Download
                 v-else
                 :size="16"

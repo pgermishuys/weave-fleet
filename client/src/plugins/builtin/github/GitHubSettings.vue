@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { CheckCircle2, ChevronDown, Copy, ExternalLink, Github, LoaderCircle, PlugZap, RefreshCw, Unplug } from "lucide-vue-next";
+import { CheckCircle2, ChevronDown, Copy, ExternalLink, Github, PlugZap, RefreshCw, Unplug } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { useGitHubRepos } from "./composables/use-github-repos";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-border bg-transparent px-3 text-[13px] font-medium text-text transition-colors hover:bg-text/6 disabled:cursor-not-allowed disabled:opacity-60";
@@ -127,11 +128,7 @@ async function handleRefreshRepos(): Promise<void> {
       v-if="isLoadingStatus"
       class="flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Checking GitHub connection…</span>
     </div>
 
@@ -177,11 +174,9 @@ async function handleRefreshRepos(): Promise<void> {
           :disabled="isLoadingRepos || isDisconnecting"
           @click="handleRefreshRepos"
         >
-          <LoaderCircle
+          <Spinner
             v-if="isLoadingRepos"
-            :size="14"
-            class="animate-spin"
-            aria-hidden="true"
+            size="sm"
           />
           <RefreshCw
             v-else
@@ -208,11 +203,9 @@ async function handleRefreshRepos(): Promise<void> {
           :disabled="isDisconnecting"
           @click="handleDisconnectGitHub"
         >
-          <LoaderCircle
+          <Spinner
             v-if="isDisconnecting"
-            :size="14"
-            class="animate-spin"
-            aria-hidden="true"
+            size="sm"
           />
           <Unplug
             v-else
@@ -265,11 +258,7 @@ async function handleRefreshRepos(): Promise<void> {
             :class="buttonPrimaryClass"
             disabled
           >
-            <LoaderCircle
-              :size="16"
-              class="animate-spin"
-              aria-hidden="true"
-            />
+            <Spinner />
             Starting authorization…
           </button>
 
@@ -314,11 +303,7 @@ async function handleRefreshRepos(): Promise<void> {
             </a>
 
             <div class="flex items-center gap-2 text-sm text-muted">
-              <LoaderCircle
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner />
               <span>{{ pollStatusLabel }}</span>
             </div>
 
@@ -420,12 +405,7 @@ async function handleRefreshRepos(): Promise<void> {
               :disabled="!personalAccessToken.trim() || patState.status === 'testing' || isConnectingWithPat"
               @click="testPersonalAccessToken"
             >
-              <LoaderCircle
-                v-if="patState.status === 'testing'"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="patState.status === 'testing'" />
               <span>{{ patState.status === 'testing' ? 'Testing…' : 'Test connection' }}</span>
             </button>
 
@@ -435,12 +415,7 @@ async function handleRefreshRepos(): Promise<void> {
               :disabled="!personalAccessToken.trim() || isConnectingWithPat"
               @click="handleConnectWithPersonalAccessToken"
             >
-              <LoaderCircle
-                v-if="isConnectingWithPat"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="isConnectingWithPat" />
               <span>{{ isConnectingWithPat ? 'Connecting…' : 'Connect' }}</span>
             </button>
           </div>

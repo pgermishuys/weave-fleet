@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -8,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { parseLabels, type JobMachine, type JobRepository } from "@/lib/jobs";
 import { useJobsStore } from "@/stores/jobs";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{ machines: readonly JobMachine[] }>();
 const open = defineModel<boolean>("open", { default: false });
@@ -180,11 +180,7 @@ async function submit(): Promise<void> {
             :disabled="!canPost"
             data-testid="new-job-post"
           >
-            <LoaderCircle
-              v-if="isPosting"
-              :size="16"
-              class="animate-spin"
-            />
+            <Spinner v-if="isPosting" />
             Post job
           </Button>
         </DialogFooter>

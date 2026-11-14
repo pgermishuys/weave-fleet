@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { ArrowRight, Check, CheckCircle2, KeyRound, LoaderCircle, Rocket, Sparkles } from "lucide-vue-next";
+import { ArrowRight, Check, CheckCircle2, KeyRound, Rocket, Sparkles } from "lucide-vue-next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/api/client";
 import type { StoreCredentialRequest } from "@/api/client";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 type WizardStep = "welcome" | "credentials" | "ready";
 
@@ -227,12 +228,7 @@ async function finishOnboarding(): Promise<void> {
                 :disabled="isSaving"
                 @click="void saveCredential()"
               >
-                <LoaderCircle
-                  v-if="isSaving"
-                  :size="16"
-                  class="animate-spin"
-                  aria-hidden="true"
-                />
+                <Spinner v-if="isSaving" />
                 <KeyRound
                   v-else
                   :size="16"
@@ -301,12 +297,7 @@ async function finishOnboarding(): Promise<void> {
             :disabled="isFinishing"
             @click="void finishOnboarding()"
           >
-            <LoaderCircle
-              v-if="isFinishing"
-              :size="16"
-              class="animate-spin"
-              aria-hidden="true"
-            />
+            <Spinner v-if="isFinishing" />
             <Rocket
               v-else
               :size="16"

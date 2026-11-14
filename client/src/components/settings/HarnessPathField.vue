@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Where Fleet finds the program a harness runs, for when it isn't on PATH: the path, a Check button, and what Fleet found. */
 const props = defineProps<{
@@ -75,11 +75,9 @@ async function check(): Promise<void> {
         data-testid="harness-path-check"
         @click="void check()"
       >
-        <LoaderCircle
+        <Spinner
           v-if="checking"
-          :size="12"
-          class="animate-spin"
-          aria-hidden="true"
+          size="xs"
         />
         Check
       </button>

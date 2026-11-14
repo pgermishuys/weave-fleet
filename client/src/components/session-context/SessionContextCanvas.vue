@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { GitBranch, LoaderCircle, Paperclip, Plus, RefreshCw, Zap } from "lucide-vue-next";
+import { GitBranch, Paperclip, Plus, RefreshCw, Zap } from "lucide-vue-next";
 import SmartLinkCard from "@/components/session-context/SmartLinkCard.vue";
 import SmartLinkRow from "@/components/session-context/SmartLinkRow.vue";
 import { apiFetchOn } from "@/lib/api-client";
@@ -11,6 +11,7 @@ import { formatCheckedAgo, isPullRequest, type SmartLink } from "@/lib/smart-lin
 import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   sessionId: string;
@@ -396,11 +397,9 @@ watch(
         :disabled="refreshing"
         @click="refresh"
       >
-        <LoaderCircle
+        <Spinner
           v-if="refreshing"
-          :size="12"
-          class="context-spin"
-          aria-hidden="true"
+          size="xs"
         />
         <RefreshCw
           v-else
@@ -609,16 +608,8 @@ watch(
   font-size: 11.5px;
 }
 
-.context-spin {
-  animation: context-spin 0.9s linear infinite;
-}
-
 .context-canvas :deep(.context-flash) {
   animation: context-flash 1.2s ease-out;
-}
-
-@keyframes context-spin {
-  to { transform: rotate(360deg); }
 }
 
 @keyframes context-flash {
@@ -627,8 +618,7 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .context-spin,
-  .context-canvas :deep(.context-flash) {
+.context-canvas :deep(.context-flash) {
     animation: none;
   }
 }

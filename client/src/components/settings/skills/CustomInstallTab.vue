@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { shallowRef } from "vue";
-import { Download, LoaderCircle } from "lucide-vue-next";
+import { Download } from "lucide-vue-next";
 import { useSkills } from "@/composables/use-skills";
 import { Button } from "@/components/ui/button";
 import type { InstallTarget } from "@/lib/install-target";
 import InstallTargetPicker from "../InstallTargetPicker.vue";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const target = defineModel<InstallTarget>("target", { required: true });
 
@@ -79,12 +80,7 @@ async function submitInstall(): Promise<void> {
           variant="default"
           :disabled="isInstalling"
         >
-          <LoaderCircle
-            v-if="isInstalling"
-            :size="16"
-            class="animate-spin"
-            aria-hidden="true"
-          />
+          <Spinner v-if="isInstalling" />
           <Download
             v-else
             :size="16"

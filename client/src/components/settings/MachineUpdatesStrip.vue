@@ -10,6 +10,7 @@ import {
   type Rollout,
   type UpdateRule,
 } from "@/lib/fleet-updates";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The release line at the top of Settings → Updates & about › Machines: what is out, how many machines have
@@ -141,9 +142,13 @@ const outcomeClass: Record<FleetUpdateState["tone"], string> = {
             data-testid="updates-check-now"
             @click="emit('check')"
           >
+            <Spinner
+              v-if="isChecking"
+              size="sm"
+            />
             <RefreshCw
+              v-else
               :size="14"
-              :class="{ 'animate-spin': isChecking }"
               aria-hidden="true"
             />
             Check now

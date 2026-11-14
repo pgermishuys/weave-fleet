@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { ChevronLeft, File, LoaderCircle, X } from "lucide-vue-next";
+import { ChevronLeft, File, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import type { FileDiffItem, SessionDiffBase } from "@/api/client";
 import { apiFetchOn } from "@/lib/api-client";
@@ -8,6 +8,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { diffBaseLabel } from "@/lib/diff-base";
 import { parseDiffLines, type DiffLine } from "@/lib/diff-parser";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 /** The session's changed files as settings rows (name, folder, +a −d), then one file's diff, read-only. */
 const props = defineProps<{
@@ -114,9 +115,9 @@ async function openFile(item: FileDiffItem): Promise<void> {
         v-if="loading && diffs.length === 0"
         class="ph-foot chs__note"
       >
-        <LoaderCircle
+        <Spinner
+          size="sm"
           class="ph-spinner"
-          :size="14"
         /> Reading the changes…
       </p>
       <EmptyState
@@ -165,9 +166,9 @@ async function openFile(item: FileDiffItem): Promise<void> {
         v-else-if="!lines"
         class="chs__loading"
       >
-        <LoaderCircle
+        <Spinner
+          size="lg"
           class="ph-spinner"
-          :size="20"
         />
       </p>
       <div

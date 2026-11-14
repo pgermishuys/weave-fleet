@@ -6,7 +6,7 @@ const opened = new Set<string>();
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { ArrowRight, Check, CornerUpLeft, FileCheck2, LoaderCircle, Play, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-vue-next";
+import { ArrowRight, Check, CornerUpLeft, FileCheck2, Play, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { fileName, listFiles, MOVE_ON_ANYWAY, WITHOUT_SKILL, type WorkflowRunChoice, type WorkflowRunSession } from "@/lib/workflows";
@@ -14,6 +14,7 @@ import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The run's card in a step session's conversation. When the run waits on the user here, it asks: a You step's choices
@@ -196,9 +197,9 @@ function openSession(sessionId: string): void {
           data-testid="workflow-card-send-note"
           @click="choose(noteFor)"
         >
-          <LoaderCircle
+          <Spinner
             v-if="busy === noteFor.id"
-            class="size-3.5 animate-spin"
+            size="sm"
           />
           <Send
             v-else
@@ -229,9 +230,9 @@ function openSession(sessionId: string): void {
               @click="choose(choice, false)"
             >
               <b>
-                <LoaderCircle
+                <Spinner
                   v-if="busy === `${choice.id}:false`"
-                  class="size-3.5 animate-spin"
+                  size="sm"
                 />
                 <Play
                   v-else
@@ -249,9 +250,9 @@ function openSession(sessionId: string): void {
               @click="choose(choice, true)"
             >
               <b>
-                <LoaderCircle
+                <Spinner
                   v-if="busy === `${choice.id}:true`"
-                  class="size-3.5 animate-spin"
+                  size="sm"
                 />
                 <UserRound
                   v-else
@@ -273,9 +274,9 @@ function openSession(sessionId: string): void {
           :data-testid="`workflow-card-choice-${waiting.choices.indexOf(choice)}`"
           @click="choose(choice)"
         >
-          <LoaderCircle
+          <Spinner
             v-if="busy === choice.id"
-            class="size-3.5 animate-spin"
+            size="sm"
           />
           <CornerUpLeft
             v-else-if="choice.note"

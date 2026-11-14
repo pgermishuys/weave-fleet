@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { shallowRef } from "vue";
-import { LoaderCircle, Sparkles } from "lucide-vue-next";
+import { Sparkles } from "lucide-vue-next";
 import SkillDiff from "@/components/skills/SkillDiff.vue";
 import SkillEditorDialog from "@/components/skills/SkillEditorDialog.vue";
 import SkillHistoryDialog from "@/components/skills/SkillHistoryDialog.vue";
@@ -15,6 +15,7 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 // Shown as a plugin page too, which hands it props it has no use for.
 defineOptions({ inheritAttrs: false });
@@ -72,11 +73,7 @@ async function toggleFleetChange(name: string): Promise<void> {
       v-if="isLoading && skills.length === 0"
       class="flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading built-in skills…</span>
     </div>
 
@@ -117,11 +114,9 @@ async function toggleFleetChange(name: string): Promise<void> {
           </div>
 
           <div class="flex items-center gap-2">
-            <LoaderCircle
+            <Spinner
               v-if="savingName === skill.name"
-              :size="16"
-              class="animate-spin text-muted"
-              aria-hidden="true"
+              class="text-muted"
             />
             <span
               v-if="skill.withMods"
@@ -209,10 +204,10 @@ async function toggleFleetChange(name: string): Promise<void> {
           >
             Use Fleet's
           </button>
-          <LoaderCircle
+          <Spinner
             v-if="busyName === skill.name"
-            class="h-3.5 w-3.5 animate-spin text-muted"
-            aria-hidden="true"
+            size="sm"
+            class="text-muted"
           />
         </div>
       </article>

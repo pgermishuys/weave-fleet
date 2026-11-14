@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { LoaderCircle, Undo2 } from "lucide-vue-next";
+import { Undo2 } from "lucide-vue-next";
 import { formatAbsoluteTimestamp, formatRelativeTime } from "@/lib/format-utils";
 import type { KeptMod } from "@/lib/mods/kept";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** One kept mod: its switch, Undo and why it is off. */
 const props = defineProps<{ mod: KeptMod }>();
@@ -147,10 +148,9 @@ const undo = () => run("undo", () => store.undo(props.mod.name));
         :data-testid="`mod-undo-${mod.name}`"
         @click="undo"
       >
-        <LoaderCircle
+        <Spinner
           v-if="busy === 'undo'"
-          class="h-3 w-3 animate-spin"
-          aria-hidden="true"
+          size="xs"
         />
         <Undo2
           v-else

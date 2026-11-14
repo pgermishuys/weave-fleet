@@ -1,18 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import {
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  GitBranch,
-  LoaderCircle,
-  MessageSquare,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  TriangleAlert,
-} from "lucide-vue-next";
+import { ChevronDown, ChevronRight, ExternalLink, GitBranch, MessageSquare, Plus, RefreshCw, Sparkles, TriangleAlert } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import CheckIcon from "@/components/github/CheckIcon.vue";
 import ChecksSummary from "@/components/github/ChecksSummary.vue";
@@ -48,6 +37,7 @@ import { prState, prStateLabel, prWords, reviewerWords, type PrState } from "@/l
 import { isSessionLive, sessionRowStatus } from "@/lib/session-row-status";
 import { checkState, ciStatus, formatFixPrompt, reviewThreads, type SmartLink } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   owner: string;
@@ -236,11 +226,7 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
       v-if="isLoading"
       class="gh-item__state"
     >
-      <LoaderCircle
-        :size="16"
-        class="gh-item__spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       Loading the {{ noun }}…
     </div>
 
@@ -305,9 +291,13 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
               title="Refresh"
               @click="refresh"
             >
+              <Spinner
+                v-if="isRefreshing"
+                size="sm"
+              />
               <RefreshCw
+                v-else
                 :size="14"
-                :class="{ 'gh-item__spin': isRefreshing }"
                 aria-hidden="true"
               />
             </button>
@@ -331,11 +321,9 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
                 data-testid="github-item-primary"
                 @click="primary.run"
               >
-                <LoaderCircle
+                <Spinner
                   v-if="sending.has('fix')"
-                  :size="13"
-                  class="gh-item__spin"
-                  aria-hidden="true"
+                  size="sm"
                 />
                 <Sparkles
                   v-else-if="primary.icon === 'fix'"
@@ -720,14 +708,6 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
 
 .gh-item__state--error > svg {
   color: var(--error);
-}
-
-.gh-item__spin {
-  animation: gh-item-spin 1s linear infinite;
-}
-
-@keyframes gh-item-spin {
-  to { transform: rotate(360deg); }
 }
 
 .gh-item__head {
@@ -1117,7 +1097,4 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gh-item__spin { animation: none; }
-}
 </style>

@@ -2,7 +2,7 @@
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, toRefs, useTemplateRef, watch } from "vue";
 import { useNavigate, useSearch } from "@tanstack/vue-router";
-import { ArrowUp, CircleAlert, CircleDot, GitPullRequest, LoaderCircle, Paperclip, X } from "lucide-vue-next";
+import { ArrowUp, CircleAlert, CircleDot, GitPullRequest, Paperclip, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import AgentSelector from "@/components/session/AgentSelector.vue";
@@ -68,6 +68,7 @@ import { useMachinesStore } from "@/stores/machines";
 import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMachineTarget } from "@/lib/machine-target";
+import { Spinner } from "@/components/ui/spinner";
 
 const MAX_TEXTAREA_HEIGHT = 180;
 
@@ -1205,10 +1206,7 @@ onUnmounted(() => {
               :disabled="!canSend"
               @click="submit(false)"
             >
-              <LoaderCircle
-                v-if="isStarting"
-                class="size-4 animate-spin"
-              />
+              <Spinner v-if="isStarting" />
               <ArrowUp
                 v-else
                 class="size-4"

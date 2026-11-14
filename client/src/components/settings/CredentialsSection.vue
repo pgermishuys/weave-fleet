@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, shallowRef } from "vue";
-import { Check, KeyRound, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-vue-next";
+import { Check, KeyRound, Pencil, Plus, Trash2, X } from "lucide-vue-next";
 import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 // API keys belong to a machine: the one Settings shows.
 const { api } = useMachineTarget();
@@ -320,12 +321,7 @@ async function removeCredential(id: string): Promise<void> {
               :class="buttonPrimaryClass"
               :disabled="isSaving"
             >
-              <LoaderCircle
-                v-if="isSaving"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="isSaving" />
               <span>{{ isSaving ? "Saving…" : "Save API Key" }}</span>
             </button>
 
@@ -346,11 +342,7 @@ async function removeCredential(id: string): Promise<void> {
       v-if="isLoading"
       class="mt-5 flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading credentials…</span>
     </div>
 
@@ -431,12 +423,7 @@ async function removeCredential(id: string): Promise<void> {
               :disabled="updatingId === credential.id"
               @click="updateCredential(credential.id)"
             >
-              <LoaderCircle
-                v-if="updatingId === credential.id"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="updatingId === credential.id" />
               <Check
                 v-else
                 :size="16"
@@ -482,12 +469,7 @@ async function removeCredential(id: string): Promise<void> {
             :disabled="deletingId === credential.id"
             @click="removeCredential(credential.id)"
           >
-            <LoaderCircle
-              v-if="deletingId === credential.id"
-              :size="16"
-              class="animate-spin"
-              aria-hidden="true"
-            />
+            <Spinner v-if="deletingId === credential.id" />
             <Trash2
               v-else
               :size="16"

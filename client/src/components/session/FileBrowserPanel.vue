@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onActivated, onDeactivated, onMounted, provide, ref, watch } from 'vue'
-import { FolderTree, Loader2, RotateCw, Search, X } from 'lucide-vue-next'
+import { FolderTree, RotateCw, Search, X } from 'lucide-vue-next'
 import { useFileBrowser } from '@/composables/use-file-browser'
 import { useFindFiles } from '@/composables/use-find-files'
 import type { UseDiffsResult } from '@/composables/use-diffs'
@@ -15,6 +15,7 @@ import FileBrowserTreeNode from './FileBrowserTreeNode.vue'
 import FindInFilesResults from './FindInFilesResults.vue'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNote } from '@/components/ui/error-note'
+import { Spinner } from '@/components/ui/spinner'
 
 interface Props {
   sessionId: string
@@ -189,7 +190,7 @@ function handleResultClick(path: string, keep = false) {
         title="Refresh files"
         @click="handleRefresh"
       >
-        <RotateCw :size="14" :class="{ 'file-browser-panel__refresh-icon--spinning': rootLoading }" />
+        <Spinner v-if="rootLoading" size="sm" /> <RotateCw v-else :size="14" />
       </button>
     </div>
 
@@ -218,7 +219,7 @@ function handleResultClick(path: string, keep = false) {
     <!-- Search results view -->
     <div v-else-if="!inContents && isSearching" class="file-browser-panel__content">
       <div v-if="findFiles.isLoading.value" class="file-browser-panel__loading">
-        <Loader2 class="file-browser-panel__spinner" :size="20" />
+        <Spinner size="lg" class="text-muted" />
         <span class="file-browser-panel__loading-text">Searching…</span>
       </div>
 
@@ -250,7 +251,7 @@ function handleResultClick(path: string, keep = false) {
     <!-- Tree view -->
     <div v-else class="file-browser-panel__content">
       <div v-if="rootLoading && rootEntries.length === 0" class="file-browser-panel__loading">
-        <Loader2 class="file-browser-panel__spinner" :size="20" />
+        <Spinner size="lg" class="text-muted" />
         <span class="file-browser-panel__loading-text">Loading files…</span>
       </div>
 
@@ -324,19 +325,6 @@ function handleResultClick(path: string, keep = false) {
 .file-browser-panel__icon-btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-.file-browser-panel__refresh-icon--spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* Search input */
@@ -489,11 +477,6 @@ function handleResultClick(path: string, keep = false) {
   align-items: center;
   gap: 8px;
   padding: 24px 16px;
-}
-
-.file-browser-panel__spinner {
-  color: var(--muted);
-  animation: spin 1s linear infinite;
 }
 
 .file-browser-panel__loading-text {

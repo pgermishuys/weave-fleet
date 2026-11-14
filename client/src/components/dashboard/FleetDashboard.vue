@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { Download, LoaderCircle, MessageSquare, Plus } from "lucide-vue-next";
+import { Download, MessageSquare, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useRelativeTime } from "@/composables/use-relative-time";
@@ -20,6 +20,7 @@ import DashboardSessionRow from "./DashboardSessionRow.vue";
 import RetentionFilter from "./RetentionFilter.vue";
 import SummaryBar from "./SummaryBar.vue";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 /** How many quiet sessions show before "Show more". */
 const RECENT_LIMIT = 8;
@@ -230,10 +231,7 @@ function handleNewSession(): void {
       v-if="isLoading && sessions.length === 0"
       class="dashboard__placeholder"
     >
-      <LoaderCircle
-        class="h-4 w-4 animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       Loading sessions…
     </div>
 

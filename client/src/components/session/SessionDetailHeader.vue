@@ -20,7 +20,8 @@ import { useSidebarStore } from "@/stores/sidebar";
 import { useSessionTitle } from "@/composables/use-session-lineage";
 import { lineageLinkLabel, type LineageKind } from "@/lib/session-lineage";
 import { useRouter } from "@tanstack/vue-router";
-import { ArchiveRestore, Check, Copy, CornerLeftUp, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
+import { ArchiveRestore, Check, Copy, CornerLeftUp, GitBranch, Layers, X, Plus } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 
 const phone = useIsMobileNav();
 
@@ -498,11 +499,7 @@ onUnmounted(() => {
             :title="restoreError ?? checkoutRemovedLabel"
           >
             <template v-if="checkoutRestoringNow">
-              <Loader2
-                :size="11"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner size="xs" />
               Putting the checkout back…
             </template>
             <template v-else-if="props.checkoutRemovedAt">
@@ -727,10 +724,9 @@ onUnmounted(() => {
           :disabled="props.isRestoring"
           @click="emit('restore')"
         >
-          <Loader2
+          <Spinner
             v-if="props.isRestoring"
-            class="session-archived-banner__spinner"
-            aria-hidden="true"
+            size="lg"
           />
           <ArchiveRestore
             v-else
@@ -789,14 +785,6 @@ onUnmounted(() => {
 .session-archived-banner__restore svg {
   width: 13px;
   height: 13px;
-}
-
-.session-archived-banner__spinner {
-  animation: session-archived-spin 0.8s linear infinite;
-}
-
-@keyframes session-archived-spin {
-  to { transform: rotate(360deg); }
 }
 
 .session-detail-header__title--editable {

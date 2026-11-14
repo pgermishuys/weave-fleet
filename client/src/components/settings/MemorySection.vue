@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watch } from "vue";
-import { Cable, ChevronRight, Coins, Eye, FileText, FolderGit2, Hourglass, LoaderCircle, Pencil, Pin, Plus, Search, Server, TriangleAlert, X } from "lucide-vue-next";
+import { Cable, ChevronRight, Coins, Eye, FileText, FolderGit2, Hourglass, Pencil, Pin, Plus, Search, Server, TriangleAlert, X } from "lucide-vue-next";
 import {
   addMemoryNote,
   clearMemory,
@@ -27,6 +27,7 @@ import DreamNightly from "@/components/settings/memory/DreamNightly.vue";
 import DreamingPanel from "@/components/settings/memory/DreamingPanel.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 // Memory belongs to a machine: the one Settings shows.
 const target = useMachineTarget();
@@ -244,11 +245,7 @@ onMounted(load);
       v-if="isLoading"
       class="mt-5 flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading memory…</span>
     </div>
 
@@ -268,11 +265,9 @@ onMounted(load);
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <LoaderCircle
+          <Spinner
             v-if="isSaving"
-            :size="16"
-            class="animate-spin text-muted"
-            aria-hidden="true"
+            class="text-muted"
           />
           <button
             type="button"

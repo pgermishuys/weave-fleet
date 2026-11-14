@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Check, ChevronDown, Folder, GitBranch, GitFork, History, LoaderCircle } from "lucide-vue-next";
+import { Check, ChevronDown, Folder, GitBranch, GitFork, History } from "lucide-vue-next";
 import { DropdownMenuItem, DropdownMenuSeparator } from "reka-ui";
 import type { WorktreeInfo } from "@/api/client";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { tildePath } from "@/lib/new-session-plan";
 import type { NewSessionWorkspace } from "@/lib/new-session-request";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   repositoryPath: string;
@@ -162,9 +163,9 @@ function choose(workspace: NewSessionWorkspace): void {
           v-if="isLoadingWorktrees && orderedWorktrees.length === 0"
           class="ns-pop__note ns-workspace-loading"
         >
-          <LoaderCircle
-            class="ns-option__icon animate-spin"
-            aria-hidden="true"
+          <Spinner
+            size="lg"
+            class="ns-option__icon"
           />
           Loading worktrees…
         </div>

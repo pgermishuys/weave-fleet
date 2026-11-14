@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertTriangle, Brain, LoaderCircle, RefreshCw, Trash2 } from "lucide-vue-next";
+import { AlertTriangle, Brain, RefreshCw, Trash2 } from "lucide-vue-next";
 import { useSkills, type SkillRef } from "@/composables/use-skills";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { targetKey, targetLabel } from "@/lib/install-target";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const { skills, isLoading, error, removeSkill, checkUpdate, updateSkill } = useSkills();
 
@@ -67,11 +68,7 @@ function cancelRemove(): void {
       v-if="isLoading"
       class="flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading skills…</span>
     </div>
 
@@ -173,12 +170,7 @@ function cancelRemove(): void {
               :disabled="checkingUpdateKey === keyOf(skill) || updatingKey === keyOf(skill)"
               @click="handleCheckUpdate(skill)"
             >
-              <LoaderCircle
-                v-if="checkingUpdateKey === keyOf(skill)"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="checkingUpdateKey === keyOf(skill)" />
               <RefreshCw
                 v-else
                 :size="16"
@@ -194,12 +186,7 @@ function cancelRemove(): void {
               :disabled="updatingKey === keyOf(skill)"
               @click="handleUpdate(skill)"
             >
-              <LoaderCircle
-                v-if="updatingKey === keyOf(skill)"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="updatingKey === keyOf(skill)" />
               <RefreshCw
                 v-else
                 :size="16"
@@ -215,12 +202,7 @@ function cancelRemove(): void {
               :disabled="removingKey === keyOf(skill)"
               @click="confirmRemoveKey === keyOf(skill) ? handleRemove(skill) : confirmRemove(skill)"
             >
-              <LoaderCircle
-                v-if="removingKey === keyOf(skill)"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="removingKey === keyOf(skill)" />
               <Trash2
                 v-else
                 :size="16"

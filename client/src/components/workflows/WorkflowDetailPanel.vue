@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { AlertTriangle, Bot, CalendarClock, Check, Copy, LoaderCircle, Pencil, Repeat, Sparkles, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { AlertTriangle, Bot, CalendarClock, Check, Copy, Pencil, Repeat, Sparkles, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Button } from "@/components/ui/button";
 import WorkflowCreateDialog from "@/components/workflows/WorkflowCreateDialog.vue";
@@ -26,6 +26,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const router = useRouter();
 const nav = useWorkflowsNav();
@@ -178,9 +179,9 @@ function openRun(run: WorkflowRun): void {
       data-testid="workflow-drafting"
     >
       <template v-if="!nav.drafting.value.error">
-        <LoaderCircle
-          class="wf-drafting__icon animate-spin"
-          aria-hidden="true"
+        <Spinner
+          size="lg"
+          class="wf-drafting__icon"
         />
         <p class="wf-drafting__title">
           {{ nav.drafting.value.sessionTitle ? `Drafting a workflow from ${nav.drafting.value.sessionTitle}…` : "Drafting a workflow from your description…" }}

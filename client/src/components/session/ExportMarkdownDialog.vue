@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Check, Copy, Download, Loader2, Share2 } from "lucide-vue-next";
+import { Check, Copy, Download, Share2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import MarkdownRenderer from "@/components/visual-renderers/MarkdownRenderer.vue";
@@ -16,6 +16,7 @@ import {
   type ExportToolMode,
 } from "@/lib/export-markdown";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   open: boolean;
@@ -277,7 +278,7 @@ async function share(): Promise<void> {
               class="flex items-center gap-2 text-sm text-muted"
               data-testid="export-loading"
             >
-              <Loader2 class="size-4 animate-spin" />
+              <Spinner />
               Loading the conversation… {{ loaded }} messages
             </p>
             <pre

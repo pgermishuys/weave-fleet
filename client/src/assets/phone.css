@@ -2415,21 +2415,16 @@ html[data-phone].ph-kb-open .ph-sheet__foot {
   }
 }
 
+/* The phone's colour for <Spinner>: muted, or the button's own colour inside a button. */
 .ph-spinner {
   flex: none;
   color: var(--muted);
-  animation: ph-spin 0.8s linear infinite;
 }
 
 .ph-btn .ph-spinner {
   color: currentColor;
 }
 
-@keyframes ph-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 /* ── Page bits ──────────────────────────────────────────────────────────── */
 

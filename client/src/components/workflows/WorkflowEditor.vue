@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
-import { AlertCircle, AlertTriangle, CheckCircle2, Code2, LoaderCircle, Play, Save, Sparkles, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { AlertCircle, AlertTriangle, CheckCircle2, Code2, Play, Save, Sparkles, Workflow as WorkflowIcon } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -21,6 +21,7 @@ import { fileName, isRole, modelShortName, ROLE_NAMES } from "@/lib/workflows";
 import { draftCost, draftedFrom, insertStep, newAgentStep, newYouStep, removeStep, type WorkflowDraft } from "@/lib/workflow-draft";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * A repository's workflow file, in the Designer or the File view, with Try it and Save. Saving doesn't commit: the
@@ -201,9 +202,9 @@ onBeforeUnmount(() => {
           data-testid="workflow-save"
           @click="save"
         >
-          <LoaderCircle
+          <Spinner
             v-if="editor.isSaving.value"
-            class="size-3.5 animate-spin"
+            size="sm"
           />
           <Save
             v-else

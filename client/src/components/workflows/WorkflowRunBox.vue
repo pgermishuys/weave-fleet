@@ -2,7 +2,7 @@
 import "@/components/sessions/new-session/new-session.css";
 import { computed, reactive, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Bot, ChevronDown, GitBranch, LoaderCircle, Play, UserRound } from "lucide-vue-next";
+import { Bot, ChevronDown, GitBranch, Play, UserRound } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -27,6 +27,7 @@ import { ROLE_NAMES, WORKFLOW_ROLES, skillsInUse, type Workflow, type WorkflowRo
 import { useAppShellStore } from "@/stores/app-shell";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The Run box: what to build, where (a repository; each run gets its own worktree from the base branch), which
@@ -236,10 +237,7 @@ function handleKeydown(event: KeyboardEvent): void {
           :disabled="!canRun"
           @click="run"
         >
-          <LoaderCircle
-            v-if="isStarting"
-            class="size-4 animate-spin"
-          />
+          <Spinner v-if="isStarting" />
           <Play
             v-else
             class="size-3.5"

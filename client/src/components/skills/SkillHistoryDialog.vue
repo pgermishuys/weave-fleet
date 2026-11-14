@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +18,7 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * A skill's history: each of the user's versions with why it was made, newest first, then Fleet's. Any of them can be
@@ -104,10 +104,7 @@ function exactly(createdAt: string): string {
         v-if="!detail && !error"
         class="flex items-center gap-2 text-sm text-muted"
       >
-        <LoaderCircle
-          class="h-4 w-4 animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner />
         Loading the history…
       </div>
 
@@ -147,9 +144,9 @@ function exactly(createdAt: string): string {
                 :data-testid="`skill-version-use-${version.number}`"
                 @click="use(version.number)"
               >
-                <LoaderCircle
+                <Spinner
                   v-if="busy === version.number"
-                  class="h-3 w-3 animate-spin"
+                  size="xs"
                 />
                 Use this version
               </button>
@@ -186,9 +183,9 @@ function exactly(createdAt: string): string {
                 data-testid="skill-version-use-fleet"
                 @click="use(null)"
               >
-                <LoaderCircle
+                <Spinner
                   v-if="busy === 'fleet'"
-                  class="h-3 w-3 animate-spin"
+                  size="xs"
                 />
                 Use Fleet's
               </button>

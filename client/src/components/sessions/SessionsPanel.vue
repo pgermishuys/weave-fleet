@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, LoaderCircle, Plus, Search, X } from "lucide-vue-next";
+import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, Plus, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
@@ -37,6 +37,7 @@ import NewProjectDialog from "./NewProjectDialog.vue";
 
 import ProjectGroup from "./ProjectGroup.vue";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 interface ActiveSessionDrag {
   sessionId: string;
@@ -713,10 +714,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
               class="sessions-feedback-state"
               aria-live="polite"
             >
-              <LoaderCircle
-                class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning"
-                aria-hidden="true"
-              />
+              <Spinner class="sessions-feedback-state__icon" />
               <p class="sessions-feedback-state__title">
                 Loading sessions
               </p>
@@ -1231,10 +1229,6 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   color: var(--muted);
 }
 
-.sessions-feedback-state__icon--spinning {
-  animation: sessions-spin 0.9s linear infinite;
-}
-
 .sessions-feedback-state__title {
   margin: 0;
   font-size: 0.85714rem;
@@ -1269,16 +1263,6 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 .sessions-feedback-state__button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-@keyframes sessions-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .sessions-sr-only {

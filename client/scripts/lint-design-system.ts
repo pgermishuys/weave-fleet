@@ -10,6 +10,7 @@
 //   RAW_ERROR_RED     error red written by hand: Tailwind's red palette (`text-red-300`, `bg-red-500/10`) or
 //                     `text-error` / `text-destructive` for words, which miss 4.5:1 in most themes. Use <ErrorNote>,
 //                     or `text-error-text` for an error word that isn't a note
+//   AD_HOC_SPINNER    a home-made spinner: `animate-spin`, or an @keyframes that rotates. Use <Spinner>
 //
 // The counts are compared with design-lint-baseline.json. A count above its baseline fails (the output names
 // the files that grew); a count below it passes and asks you to lower the baseline, so it only ever goes down.
@@ -21,7 +22,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED"] as const;
+export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER"] as const;
 export type Rule = (typeof RULES)[number];
 
 export interface Violation {
@@ -182,6 +183,24 @@ export function checkErrorRed(file: string, content: string): Violation[] {
   return out;
 }
 
+// A spinner made by hand: Tailwind's animate-spin anywhere in the file, or a scoped @keyframes that rotates.
+export function checkSpinners(file: string, template: Block[], style: Block[]): Violation[] {
+  const out: Violation[] = [];
+  for (const block of template) {
+    for (const m of block.text.matchAll(/(?<![\w-])(?:[a-z-]+:)*animate-spin(?![\w-])/g)) {
+      out.push({ rule: "AD_HOC_SPINNER", file, line: lineAt(block, m.index), detail: "animate-spin; use <Spinner>" });
+    }
+  }
+  for (const block of style) {
+    for (const m of block.text.matchAll(/@keyframes\s+([\w-]+)\s*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g)) {
+      if (/rotate\(/.test(m[0])) {
+        out.push({ rule: "AD_HOC_SPINNER", file, line: lineAt(block, m.index), detail: `@keyframes ${m[1]} rotates; use <Spinner>` });
+      }
+    }
+  }
+  return out;
+}
+
 export function lintFile(file: string, content: string): Violation[] {
   const { template, style } = extractBlocks(content);
   return [
@@ -190,6 +209,7 @@ export function lintFile(file: string, content: string): Violation[] {
     ...checkTransitionTimings(file, style),
     ...checkEmptyStates(file, template),
     ...checkErrorRed(file, content),
+    ...checkSpinners(file, template, style),
   ];
 }
 

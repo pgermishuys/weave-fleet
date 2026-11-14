@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { CircleDot, Copy, ExternalLink, Github, LoaderCircle, Plus, RefreshCw, TriangleAlert, Zap } from "lucide-vue-next";
+import { CircleDot, Copy, ExternalLink, Github, Plus, RefreshCw, TriangleAlert, Zap } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import AddRepositoryDialog from "@/plugins/builtin/github/components/AddRepositoryDialog.vue";
 import GitHubItemRow from "@/plugins/builtin/github/components/GitHubItemRow.vue";
@@ -22,6 +22,7 @@ import { useGitHubAuth } from "@/plugins/builtin/github/composables/use-github-a
 import { useGitHubBookmarks } from "@/plugins/builtin/github/composables/use-github-bookmarks";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 const router = useRouter();
 const smartLinks = useSmartLinksStore();
@@ -151,11 +152,7 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
           </a>
         </span>
         <span class="gh-connect__hint">
-          <LoaderCircle
-            :size="13"
-            class="gh-home__spin"
-            aria-hidden="true"
-          />
+          <Spinner size="sm" />
           Waiting for you to approve it{{ expiresIn ? ` (the code works for ${expiresIn} more minutes)` : "" }}…
         </span>
         <button
@@ -188,11 +185,9 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
           data-testid="github-connect-start"
           @click="connectWithDeviceFlow"
         >
-          <LoaderCircle
+          <Spinner
             v-if="deviceState.status === 'initiating'"
-            :size="14"
-            class="gh-home__spin"
-            aria-hidden="true"
+            size="sm"
           />
           <Github
             v-else
@@ -231,9 +226,13 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
           title="Refresh"
           @click="refresh"
         >
+          <Spinner
+            v-if="isLoading"
+            size="sm"
+          />
           <RefreshCw
+            v-else
             :size="14"
-            :class="{ 'gh-home__spin': isLoading }"
             aria-hidden="true"
           />
         </button>
@@ -266,11 +265,7 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
         v-if="!work && isLoading"
         class="gh-home__loading"
       >
-        <LoaderCircle
-          :size="16"
-          class="gh-home__spin"
-          aria-hidden="true"
-        />
+        <Spinner />
         Asking GitHub what needs you…
       </div>
 
@@ -478,14 +473,6 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
   text-decoration: underline;
 }
 
-.gh-home__spin {
-  animation: gh-home-spin 1s linear infinite;
-}
-
-@keyframes gh-home-spin {
-  to { transform: rotate(360deg); }
-}
-
 .gh-home__error {
   display: flex;
   align-items: center;
@@ -604,7 +591,4 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
   font-size: 12.5px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gh-home__spin { animation: none; }
-}
 </style>

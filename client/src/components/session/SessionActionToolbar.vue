@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Archive, ArchiveRestore, ChartNoAxesColumn, Copy, Ellipsis, FileDown, GitFork, Loader2, OctagonX, Pencil, SquareTerminal, Trash2 } from "lucide-vue-next";
+import { Archive, ArchiveRestore, ChartNoAxesColumn, Copy, Ellipsis, FileDown, GitFork, OctagonX, Pencil, SquareTerminal, Trash2 } from "lucide-vue-next";
 import { useIsMobileNav } from "@/composables/use-media-query";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useTerminalsStore } from "@/stores/terminals";
@@ -13,6 +13,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = withDefaults(defineProps<{
   canAbort?: boolean;
@@ -95,10 +96,9 @@ async function copyDirectory(): Promise<void> {
       title="Abort"
       @click="emit('abort')"
     >
-      <Loader2
+      <Spinner
         v-if="props.isAborting"
-        class="session-action-toolbar__spinner"
-        aria-hidden="true"
+        size="lg"
       />
       <OctagonX
         v-else
@@ -141,10 +141,9 @@ async function copyDirectory(): Promise<void> {
           aria-label="More actions"
           title="More actions"
         >
-          <Loader2
+          <Spinner
             v-if="props.isRenaming || props.isArchiving || props.isDeleting"
-            class="session-action-toolbar__spinner"
-            aria-hidden="true"
+            size="lg"
           />
           <Ellipsis
             v-else
@@ -279,10 +278,6 @@ async function copyDirectory(): Promise<void> {
   display: inline-flex;
 }
 
-.session-action-toolbar__spinner {
-  animation: session-action-toolbar-spin 0.8s linear infinite;
-}
-
 .session-action-toolbar__error {
   width: 100%;
   margin: 2px 0 0;
@@ -290,8 +285,4 @@ async function copyDirectory(): Promise<void> {
   color: var(--error);
 }
 
-@keyframes session-action-toolbar-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 </style>

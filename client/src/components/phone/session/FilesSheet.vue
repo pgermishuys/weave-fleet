@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
 import { computed } from "vue";
-import { ChevronLeft, ChevronRight, FileText, Folder, LoaderCircle, X } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight, FileText, Folder, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { browseSessionDirectory, readSessionFile } from "@/api/session-files";
 import { useMachineTarget } from "@/lib/machine-target";
+import { Spinner } from "@/components/ui/spinner";
 
 /** The session's folder, read-only: folders to walk through, a file's text to read. Editing is for the computer. */
 const props = defineProps<{ open: boolean; sessionId: string; /** A file to show as soon as the sheet opens. */ openPath?: string | null }>();
@@ -97,10 +98,10 @@ watch(() => props.open, (open) => {
         <ChevronLeft aria-hidden="true" />
       </button>
       <h2>{{ heading }}</h2>
-      <LoaderCircle
+      <Spinner
         v-if="loading"
+        size="lg"
         class="ph-spinner"
-        :size="18"
       />
       <button
         type="button"

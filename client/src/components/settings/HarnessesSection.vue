@@ -38,6 +38,7 @@ import {
   type HarnessStatus,
 } from "@/lib/harness-display";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 interface HarnessCard {
   id: string;
@@ -311,8 +312,12 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
               data-testid="harnesses-check-again"
               @click="void checkHarnessesAgain()"
             >
+              <Spinner
+                v-if="isCheckingHarnesses"
+                size="lg"
+              />
               <RefreshCw
-                :class="isCheckingHarnesses ? 'animate-spin' : ''"
+                v-else
                 aria-hidden="true"
               />
               Check again

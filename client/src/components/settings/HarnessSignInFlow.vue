@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
-import { Check, Copy, ExternalLink, LoaderCircle } from "lucide-vue-next";
+import { Check, Copy, ExternalLink } from "lucide-vue-next";
 import type { HarnessSignInAttempt, HarnessSignInMethod, HarnessSignInProvider } from "@/api/client";
 import {
   answersToSend,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/harness-sign-in";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessSignInStore } from "@/stores/harness-sign-in";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Signs in to one provider: a key, a sign-in in the browser, or what the harness says about its command and
@@ -249,11 +250,7 @@ onBeforeUnmount(() => {
       data-testid="sign-in-attempt"
     >
       <p class="sign-in-flow__status">
-        <LoaderCircle
-          :size="14"
-          class="animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner size="sm" />
         Waiting for you to finish on {{ provider.name }}'s page. It runs out at {{ expiresAt }}.
       </p>
       <a
@@ -480,11 +477,9 @@ onBeforeUnmount(() => {
             :disabled="busy"
             data-testid="sign-in-submit"
           >
-            <LoaderCircle
+            <Spinner
               v-if="busy"
-              :size="12"
-              class="animate-spin"
-              aria-hidden="true"
+              size="xs"
             />
             {{ method.type === "key" ? "Sign in" : "Continue in the browser" }}
           </button>

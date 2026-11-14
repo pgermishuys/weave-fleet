@@ -9,6 +9,7 @@ import { useSessionDiffsContext } from "@/composables/use-session-diffs-context"
 import { parseDiffLines } from "@/lib/diff-parser";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 export type FileDiffViewItem = FilesChangedFileListItem;
 
@@ -391,10 +392,7 @@ function getActiveElement(): HTMLElement | null {
             aria-live="polite"
             aria-busy="true"
           >
-            <span
-              class="files-changed-view__state-spinner"
-              aria-hidden="true"
-            />
+            <Spinner size="lg" />
             <p class="files-changed-view__state-title">
               Loading changed files…
             </p>
@@ -635,16 +633,6 @@ function getActiveElement(): HTMLElement | null {
   overflow-wrap: anywhere;
 }
 
-.files-changed-view__state-spinner {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  border: 2px solid color-mix(in srgb, var(--muted) 28%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 999px;
-  animation: files-changed-view-spin 0.8s linear infinite;
-}
-
 .files-changed-view__diff-placeholder {
   display: flex;
   align-items: center;
@@ -667,9 +655,4 @@ function getActiveElement(): HTMLElement | null {
   margin: 0;
 }
 
-@keyframes files-changed-view-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 </style>

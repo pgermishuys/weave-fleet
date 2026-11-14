@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
-import { ChevronRight, LoaderCircle, Moon } from "lucide-vue-next";
+import { ChevronRight, Moon } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
@@ -21,6 +21,7 @@ import {
   type DreamView,
 } from "@/lib/dreaming";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** `harness` is the one Dream each night uses; Dream now follows it until a harness is picked here. */
 const props = defineProps<{ repository: string | null; nightlyHarness?: string | null }>();
@@ -216,11 +217,7 @@ function sessionLabel(session: DreamSessionRef): string {
         class="mt-3 flex items-center gap-2 text-sm text-muted"
         data-testid="dream-running"
       >
-        <LoaderCircle
-          :size="14"
-          class="animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner size="sm" />
         Dreaming…
         <template v-if="dream.readSessions.length > 0">
           reading {{ dream.readSessions.length }} {{ dream.readSessions.length === 1 ? "session" : "sessions" }}

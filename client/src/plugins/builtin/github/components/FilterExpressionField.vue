@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { Search, X, Loader2 } from "lucide-vue-next";
+import { Search, X } from "lucide-vue-next";
 import { parseFilterExpression, serializeFilterExpression } from "../lib/filter-expression";
 import { DEFAULT_ISSUE_FILTER, type IssueFilterState } from "../composables/github-types";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   filter: IssueFilterState;
@@ -57,10 +58,9 @@ function handleClear() {
 <template>
   <div class="expression-field">
     <span class="expression-icon">
-      <Loader2
+      <Spinner
         v-if="isSearching"
-        :size="13"
-        class="animate-spin"
+        size="sm"
       />
       <Search
         v-else

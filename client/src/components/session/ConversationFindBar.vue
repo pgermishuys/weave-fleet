@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import { ChevronDown, ChevronUp, LoaderCircle, X } from "lucide-vue-next";
+import { ChevronDown, ChevronUp, X } from "lucide-vue-next";
 import type { FindScope } from "@/lib/conversation-find";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The find bar of a conversation: the query, "n of m", previous and next, the scope chips, and "searching older…"
@@ -149,10 +150,7 @@ watch(() => props.docked, trackKeyboard);
         class="find-bar__older"
         data-testid="conversation-find-older"
       >
-        <LoaderCircle
-          class="find-bar__spinner"
-          aria-hidden="true"
-        />
+        <Spinner size="xs" />
         searching older…
         <button
           type="button"
@@ -299,26 +297,9 @@ watch(() => props.docked, trackKeyboard);
   color: var(--idle);
 }
 
-.find-bar__spinner {
-  width: 12px;
-  height: 12px;
-  animation: find-bar-spin 1s linear infinite;
-}
-
 .find-bar__stop {
   color: var(--accent);
   text-decoration: underline;
 }
 
-@keyframes find-bar-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .find-bar__spinner {
-    animation: none;
-  }
-}
 </style>

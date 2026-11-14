@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSessionContext } from "@/composables/use-session-context";
 import {
@@ -13,6 +12,7 @@ import {
 import { useSessionsStore } from "@/stores/sessions";
 import { useHarnessUsageFor } from "@/composables/use-harness-usage";
 import { currentWindows, isNearLimit, percentLabel, resetLabel, windowLabel } from "@/lib/usage-limits";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * How full the session's context window is, by Send: a ring, with the percentage once it's three-quarters full. Click
@@ -228,11 +228,9 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
             </p>
           </div>
           <span class="context-card__state">
-            <LoaderCircle
+            <Spinner
               v-if="compacting"
-              class="context-card__spin"
-              :size="12"
-              aria-hidden="true"
+              size="xs"
             />
             <span
               v-else
@@ -504,10 +502,6 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
   background: var(--tone);
 }
 
-.context-card__spin {
-  animation: context-ring-spin 1s linear infinite;
-}
-
 .context-card__sub {
   margin: 3px 0 0;
   color: var(--muted);
@@ -722,13 +716,8 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
   cursor: default;
 }
 
-@keyframes context-ring-spin {
-  to { transform: rotate(270deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .context-ring--compacting .context-ring__svg,
-  .context-card__spin {
+.context-ring--compacting .context-ring__svg {
     animation: none;
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, useTemplateRef } from "vue";
-import { LoaderCircle, Plus } from "lucide-vue-next";
+import { Plus } from "lucide-vue-next";
 import type { WeaveHarnessDetection } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/weave-flavors";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * One harness's Weave: whether its plugin list loads Weave (with Add Weave and Remove), and whose config Weave reads in
@@ -102,11 +103,7 @@ onBeforeUnmount(() => watcher?.disconnect());
         role="status"
         data-testid="weave-asking"
       >
-        <LoaderCircle
-          :size="16"
-          class="animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner />
         <span>Asking your harnesses which plugins they load…</span>
       </div>
     </SettingGroup>
@@ -167,10 +164,9 @@ onBeforeUnmount(() => watcher?.disconnect());
             :disabled="loading || pluginLocked"
             @click="load(true)"
           >
-            <LoaderCircle
+            <Spinner
               v-if="loading"
-              class="animate-spin"
-              aria-hidden="true"
+              size="lg"
             />
             Check again
           </Button>
@@ -182,10 +178,9 @@ onBeforeUnmount(() => watcher?.disconnect());
             :disabled="pluginLocked"
             @click="changeWeavePlugin(detection, true)"
           >
-            <LoaderCircle
+            <Spinner
               v-if="pluginBusy"
-              class="animate-spin"
-              aria-hidden="true"
+              size="lg"
             />
             <Plus
               v-else
@@ -201,10 +196,9 @@ onBeforeUnmount(() => watcher?.disconnect());
             :disabled="pluginLocked"
             @click="changeWeavePlugin(detection, false)"
           >
-            <LoaderCircle
+            <Spinner
               v-if="pluginBusy"
-              class="animate-spin"
-              aria-hidden="true"
+              size="lg"
             />
             {{ pluginBusy ? "Removing…" : "Remove" }}
           </Button>

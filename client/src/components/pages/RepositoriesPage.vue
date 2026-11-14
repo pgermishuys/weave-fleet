@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { FolderGit2, LoaderCircle, RefreshCw, Settings2 } from "lucide-vue-next";
+import { FolderGit2, RefreshCw, Settings2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/api/client";
@@ -9,6 +9,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const router = useRouter();
 
@@ -104,9 +105,13 @@ function goToSettings(): void {
           :disabled="isLoading || isRefreshing"
           @click="loadRepositories(true)"
         >
+          <Spinner
+            v-if="isRefreshing"
+            size="sm"
+          />
           <RefreshCw
+            v-else
             :size="14"
-            :class="isRefreshing ? 'animate-spin' : ''"
           />
           Refresh
         </Button>
@@ -126,10 +131,7 @@ function goToSettings(): void {
       v-if="isLoading"
       class="flex flex-1 items-center justify-center gap-3 border border-border bg-card p-8 text-sm text-muted-foreground"
     >
-      <LoaderCircle
-        :size="18"
-        class="animate-spin"
-      />
+      <Spinner size="lg" />
       <span>Loading repositories…</span>
     </div>
 

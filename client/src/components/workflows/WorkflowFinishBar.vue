@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { ArrowRight, Check, CornerUpLeft, FileText, LoaderCircle, UserRound } from "lucide-vue-next";
+import { ArrowRight, Check, CornerUpLeft, FileText, UserRound } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { moveBlockedReason, moveLabel, type WorkflowRunMove } from "@/lib/workflows";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The bar above the composer while the user and the agent work through a step the user finishes. The agent has no way
@@ -137,9 +138,9 @@ async function endRun(): Promise<void> {
         :data-testid="`workflow-move-${move.outcome}`"
         @click="moveOn(move)"
       >
-        <LoaderCircle
+        <Spinner
           v-if="busy === move.outcome"
-          class="size-3.5 animate-spin"
+          size="sm"
         />
         <CornerUpLeft
           v-else-if="move.back"

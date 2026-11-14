@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
-import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark, LoaderCircle } from "lucide-vue-next";
+import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ReferenceMirror from "@/components/session/ReferenceMirror.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
@@ -66,6 +66,7 @@ import { trackAction } from "@/lib/track-action";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
+import { Spinner } from "@/components/ui/spinner";
 
 defineOptions({
   name: "SessionComposer",
@@ -1375,10 +1376,7 @@ function handleKeydown(event: KeyboardEvent): void {
           :aria-busy="isUploading || undefined"
           @click="handleSend(steersByDefault)"
         >
-          <LoaderCircle
-            v-if="isUploading"
-            class="size-4 animate-spin"
-          />
+          <Spinner v-if="isUploading" />
           <ArrowUp
             v-else
             class="size-4"

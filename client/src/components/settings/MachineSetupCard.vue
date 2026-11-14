@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Check, Circle, LoaderCircle, Minus, X } from "lucide-vue-next";
+import { Check, Circle, Minus, X } from "lucide-vue-next";
 import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
 import { diagnosisOf, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { useMachinesStore, type CandidateProbe, type MachineCandidate, type SetupStep } from "@/stores/machines";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Add a machine → Set it up from here: the machines Fleet can already see (ssh config, Tailscale), what is on each, and
@@ -197,11 +198,9 @@ function act(candidate: MachineCandidate): void {
               class="m-0 mt-0.5 flex items-center gap-1.5 text-xs text-muted"
               data-testid="machines-setup-status"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="!probeFor(candidate)"
-                :size="12"
-                class="animate-spin"
-                aria-hidden="true"
+                size="xs"
               />
               {{ statusLine(candidate) }}
             </p>
@@ -238,11 +237,9 @@ function act(candidate: MachineCandidate): void {
             :data-step="step.key"
             :data-state="step.state"
           >
-            <LoaderCircle
+            <Spinner
               v-if="step.state === 'running'"
-              :size="16"
-              class="mt-0.5 shrink-0 animate-spin text-accent"
-              aria-hidden="true"
+              class="mt-0.5 text-accent"
             />
             <Check
               v-else-if="step.state === 'done'"

@@ -11,6 +11,7 @@ import { useHarnesses } from "@/composables/use-harnesses";
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Updates & about › Harnesses: the Check for updates switch and, for each harness Fleet found, its version with the
@@ -62,8 +63,12 @@ useHarnessUpdatePoll(harnesses);
             data-testid="harnesses-check-again"
             @click="void refresh()"
           >
+            <Spinner
+              v-if="isLoading"
+              size="lg"
+            />
             <RefreshCw
-              :class="isLoading ? 'animate-spin' : ''"
+              v-else
               aria-hidden="true"
             />
             Check again

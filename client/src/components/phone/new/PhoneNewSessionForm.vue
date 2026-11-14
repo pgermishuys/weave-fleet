@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowUp, Check, ChevronDown, ChevronLeft, Cpu, Folder, GitBranch, LoaderCircle, Monitor, Search, X } from "lucide-vue-next";
+import { ArrowUp, Check, ChevronDown, ChevronLeft, Cpu, Folder, GitBranch, Monitor, Search, X } from "lucide-vue-next";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
@@ -13,6 +13,7 @@ import { takeKeyboard } from "@/lib/phone/keyboard";
 import { buildCreateSessionRequest, type NewSessionFolder, type NewSessionWorkspace } from "@/lib/new-session-request";
 import { folderFromId, folderId, folderName, folderOptions, startCaption, type PhoneMachine } from "@/lib/phone/new-session";
 import { autogrow, grownHeight } from "@/lib/phone/keyboard";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The New session sheet's pages for one machine (the sheet provides the machine, and builds this again when it
@@ -418,10 +419,9 @@ onMounted(() => {
         data-testid="phone-new-start"
         @click="start"
       >
-        <LoaderCircle
+        <Spinner
           v-if="starting"
           class="ph-spinner"
-          aria-hidden="true"
         />
         <ArrowUp
           v-else

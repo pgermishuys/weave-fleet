@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +16,7 @@ import { getSkill, saveSkillVersion, type BuiltInSkillDetail } from "@/lib/skill
 import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Edit a built-in skill by hand. Saving makes the text the user's next version, which the sessions they start
@@ -109,10 +109,7 @@ async function save(): Promise<void> {
         v-if="isLoading"
         class="flex items-center gap-2 text-sm text-muted"
       >
-        <LoaderCircle
-          class="h-4 w-4 animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner />
         Loading the skill…
       </div>
 
@@ -189,10 +186,7 @@ async function save(): Promise<void> {
           data-testid="skill-editor-save"
           @click="save"
         >
-          <LoaderCircle
-            v-if="isSaving"
-            class="h-4 w-4 animate-spin"
-          />
+          <Spinner v-if="isSaving" />
           Save as version {{ nextVersion }}
         </Button>
       </DialogFooter>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { LoaderCircle, Sparkles } from "lucide-vue-next";
+import { Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 import { useNoticesStore } from "@/stores/notices";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Improve a built-in skill from the session it was used in. The user says what should change and picks what the
@@ -287,10 +288,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
             :disabled="!canAsk || stage === 'asking'"
             data-testid="improve-skill-ask"
           >
-            <LoaderCircle
-              v-if="stage === 'asking'"
-              class="h-4 w-4 animate-spin"
-            />
+            <Spinner v-if="stage === 'asking'" />
             {{ stage === "asking" ? "Asking the model…" : "Propose a change" }}
           </Button>
         </DialogFooter>
@@ -356,10 +354,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
             data-testid="improve-skill-keep"
             @click="keep"
           >
-            <LoaderCircle
-              v-if="isSaving"
-              class="h-4 w-4 animate-spin"
-            />
+            <Spinner v-if="isSaving" />
             Keep it
           </Button>
         </DialogFooter>

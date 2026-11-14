@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Wrench, Download, LoaderCircle } from "lucide-vue-next";
+import { Wrench, Download } from "lucide-vue-next";
 import { useToolCatalog } from "@/composables/use-tool-catalog";
 import { useTools } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-targ
 import InstallTargetPicker from "../InstallTargetPicker.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const target = defineModel<InstallTarget>("target", { required: true });
 
@@ -72,11 +73,7 @@ async function handleInstall(toolName: string): Promise<void> {
       v-if="isLoading"
       class="flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading catalog…</span>
     </div>
 
@@ -182,12 +179,7 @@ async function handleInstall(toolName: string): Promise<void> {
               :disabled="installingToolName === tool.name"
               @click="handleInstall(tool.name)"
             >
-              <LoaderCircle
-                v-if="installingToolName === tool.name"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="installingToolName === tool.name" />
               <Download
                 v-else
                 :size="16"

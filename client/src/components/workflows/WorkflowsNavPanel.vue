@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus, SlidersHorizontal, Sparkles } from "lucide-vue-next";
+import { AlertTriangle, GitPullRequest, MessageSquareText, Plus, SlidersHorizontal, Sparkles } from "lucide-vue-next";
 import MachineSwitch from "@/components/layout/MachineSwitch.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
@@ -8,6 +8,7 @@ import type { Workflow } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const nav = useWorkflowsNav();
 const store = useWorkflowsStore(nav.machine.target.value);
@@ -171,10 +172,9 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
       v-else-if="nav.isLoadingLibrary.value"
       class="workflows-nav-empty"
     >
-      <Loader2
-        :size="20"
-        class="spinner"
-        aria-hidden="true"
+      <Spinner
+        size="lg"
+        class="text-muted"
       />
       <span class="sr-only">Loading workflows…</span>
     </div>
@@ -352,17 +352,6 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   align-items: center;
   justify-content: center;
   padding: 24px 12px;
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
-  color: var(--muted);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .sr-only {

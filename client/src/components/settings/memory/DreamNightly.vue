@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
-import { LoaderCircle } from "lucide-vue-next";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
@@ -19,6 +18,7 @@ import {
   type NightlyDreamingView,
 } from "@/lib/dreaming";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** The harness Dream each night uses, so Dream now can follow it. */
 const emit = defineEmits<{ harness: [type: string | null] }>();
@@ -179,11 +179,9 @@ watch(() => nightly.value?.enabled && harnessType.value, (type) => emit("harness
       />
     </div>
     <div class="flex items-center gap-2">
-      <LoaderCircle
+      <Spinner
         v-if="isSaving"
-        :size="16"
-        class="animate-spin text-muted"
-        aria-hidden="true"
+        class="text-muted"
       />
       <button
         type="button"
