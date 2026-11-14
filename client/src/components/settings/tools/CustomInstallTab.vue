@@ -195,7 +195,7 @@ async function submitInstall(): Promise<void> {
         class="flex-1 rounded-btn px-4 py-2 text-sm font-medium transition-colors"
         :class="
           isNativeMode
-            ? 'bg-accent text-accent-fg'
+            ? 'bg-accent text-primary-foreground'
             : 'text-muted hover:text-text'
         "
         :disabled="isInstalling"
@@ -208,7 +208,7 @@ async function submitInstall(): Promise<void> {
         class="flex-1 rounded-btn px-4 py-2 text-sm font-medium transition-colors"
         :class="
           isMcpMode
-            ? 'bg-accent text-accent-fg'
+            ? 'bg-accent text-primary-foreground'
             : 'text-muted hover:text-text'
         "
         :disabled="isInstalling"

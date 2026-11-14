@@ -13,11 +13,11 @@ export const buttonVariants = cva(
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border border-border bg-background hover:bg-accent/10 hover:text-accent-foreground",
+          "border border-border bg-background hover:bg-accent/10",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:
-          "border border-transparent hover:bg-accent/10 hover:border-border hover:text-accent-foreground",
+          "border border-transparent hover:bg-accent/10 hover:border-border",
         link: "text-primary underline-offset-4 hover:underline",
         "toolbar-icon":
           "border border-transparent bg-transparent text-muted hover:bg-text/6 hover:text-text [transition:background_var(--transition),color_var(--transition),border-color_var(--transition)]",

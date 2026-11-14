@@ -295,6 +295,15 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-surface: var(--panel-bg);
+  /* Names the shared ui/ components use. Each maps to a Fleet token, so they follow every theme. */
+  --color-muted-foreground: var(--muted);
+  --color-secondary: color-mix(in srgb, var(--text) 8%, transparent);
+  --color-secondary-foreground: var(--text);
+  /* Field borders and the Switch's off track: a step stronger than --border, so the track reads as a control. */
+  --color-input: color-mix(in srgb, var(--text) 18%, transparent);
+  --color-ring: var(--accent);
+  /* Text on a solid accent fill (highlighted Select and Command rows). */
+  --color-accent-foreground: var(--primary-foreground);
   --radius-card: var(--radius-card);
   --radius-btn: var(--radius-btn);
   --radius-panel: var(--radius-panel);

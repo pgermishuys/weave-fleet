@@ -178,7 +178,7 @@ function selectSection(sectionId: SettingsSectionId): void {
               <span
                 v-if="item.id === 'updates' && showUpdateDot"
                 class="ml-auto h-2 w-2 shrink-0 rounded-full"
-                :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
+                :class="isUpdateStaged ? 'bg-idle' : 'bg-accent'"
                 aria-label="Update available"
               />
               <span

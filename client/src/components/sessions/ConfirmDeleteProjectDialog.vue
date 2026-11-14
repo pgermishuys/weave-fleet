@@ -72,7 +72,7 @@ function handleConfirm(): void {
 
       <div class="grid gap-3">
         <label
-          class="flex cursor-pointer items-start gap-3 border border-border bg-muted/20 p-4 text-sm transition-colors hover:bg-muted/40"
+          class="flex cursor-pointer items-start gap-3 border border-border bg-secondary/60 p-4 text-sm transition-colors hover:bg-secondary"
           :class="selectedMode === 'move_to_scratch' ? 'border-primary bg-primary/5' : undefined"
         >
           <input

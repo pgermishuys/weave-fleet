@@ -18,7 +18,7 @@ const delegatedProps = reactiveOmit(props, "class", "variant")
       'inline-flex w-fit items-center justify-center',
       props.variant === 'underline'
         ? 'h-10 gap-4 border-b border-border bg-transparent px-0'
-        : 'bg-muted text-muted-foreground h-9 p-[3px]',
+        : 'bg-secondary text-muted-foreground h-9 p-[3px]',
       props.class,
     )"
     :data-variant="props.variant ?? 'default'"

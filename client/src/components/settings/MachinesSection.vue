@@ -852,7 +852,7 @@ onUnmounted(() => stopPolling?.());
               class="mt-1 text-xs"
               data-testid="machine-details"
             >
-              <summary class="cursor-pointer text-text-muted">
+              <summary class="cursor-pointer text-muted">
                 Details
               </summary>
               <MachineDiagnosisPanel

@@ -702,7 +702,7 @@ onUnmounted(() => {
       <div
         v-if="showStoppedBanner"
         data-testid="session-stopped-banner"
-        class="border border-border bg-muted/40 px-4 py-3"
+        class="border border-border bg-secondary px-4 py-3"
       >
         <p class="text-sm text-muted-foreground">
           {{ effectiveLifecycleStatus === "disconnected"
