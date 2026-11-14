@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, shallowRef } from "vue";
 import { Loader2, Pencil, Plus } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import MachineSwitch from "@/components/layout/MachineSwitch.vue";
 import { useAutomations } from "@/composables/use-automations";
@@ -26,7 +27,17 @@ const emit = defineEmits<Emits>();
 
 // The list is the chosen machine's (the panel is rebuilt when it changes).
 const automationsMachine = useAutomationsMachine();
-const { automations, isLoading } = useAutomations(automationsMachine.target.value);
+const { automations, isLoading, error, refresh } = useAutomations(automationsMachine.target.value);
+// A failed load says so and offers another try, rather than looking like an empty list.
+const retrying = shallowRef(false);
+async function retry(): Promise<void> {
+  retrying.value = true;
+  try {
+    await refresh();
+  } finally {
+    retrying.value = false;
+  }
+}
 const { viewMode, draft } = useAutomationsNav();
 const now = useRelativeTime();
 
@@ -178,6 +189,32 @@ function handleCreate(): void {
         aria-hidden="true"
       />
       <span class="sr-only">Loading automations...</span>
+    </div>
+
+    <div
+      v-else-if="error || retrying"
+      class="automations-nav-empty automations-nav-error"
+      role="alert"
+      data-testid="automations-load-error"
+    >
+      <p class="empty-message">
+        Couldn't load automations.
+      </p>
+      <p
+        v-if="error"
+        class="automations-nav-error__detail"
+      >
+        {{ error }}
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        :disabled="retrying"
+        data-testid="automations-load-retry"
+        @click="retry"
+      >
+        Try again
+      </Button>
     </div>
 
     <div
@@ -380,6 +417,19 @@ function handleCreate(): void {
   to {
     transform: rotate(360deg);
   }
+}
+
+.automations-nav-error {
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+
+.automations-nav-error__detail {
+  margin: 0;
+  font-size: 0.78571rem;
+  color: var(--error);
+  overflow-wrap: anywhere;
 }
 
 .empty-message {
