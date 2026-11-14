@@ -1,9 +1,22 @@
 name: Release
 
+# A pushed v* tag builds, checks and publishes a release. Run by hand (workflow_dispatch) it's a dry run: it builds,
+# packages and smoke-tests everything the same way and assembles the release, then compares it with the latest real
+# release instead of publishing. Every step that publishes runs only for a pushed v* tag (see `if:` on each).
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp on the dry run's packages (default: the one in Directory.Build.props)"
+        required: false
+        default: ''
+      compare_with:
+        description: "Published release to compare the dry run with (default: the latest)"
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -23,6 +36,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -34,6 +49,25 @@ jobs:
             scripts
             .github/workflows
 
+      # A tag push releases its tag. A dry run stamps the version asked for, or the one in Directory.Build.props.
+      - name: Resolve the version
+        id: version
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            tag="$REF_NAME"
+          else
+            version="${INPUT_VERSION:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -1)}"
+            tag="v${version#v}"
+            echo "::notice::Dry run of ${tag}: nothing is published."
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "::error::'$tag' isn't a version tag"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Test the gate
         run: bash scripts/test-release-ci-gate.sh
 
@@ -41,7 +75,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: bash scripts/release-ci-gate.sh HEAD "${{ github.ref_name }}"
+        run: bash scripts/release-ci-gate.sh HEAD "${{ steps.version.outputs.tag }}"
 
   build:
     name: Build ${{ matrix.rid }}
@@ -69,8 +103,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -127,7 +159,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
         run: |
           package_version="${RELEASE_TAG#v}"
           bash ./scripts/package.sh \
@@ -140,7 +172,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
         run: |
           $packageVersion = $env:RELEASE_TAG.TrimStart('v')
           ./scripts/package.ps1 `
@@ -153,7 +185,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
         run: |
           asset_base_name="fleet-${RELEASE_TAG}-${{ matrix.rid }}"
           archive_path="${{ github.workspace }}/artifacts/release/${asset_base_name}${{ matrix.archive_extension }}"
@@ -169,7 +201,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
         run: |
           $assetBaseName = "fleet-$($env:RELEASE_TAG)-${{ matrix.rid }}"
           $archivePath = Join-Path $env:GITHUB_WORKSPACE "artifacts/release/$assetBaseName${{ matrix.archive_extension }}"
@@ -190,7 +222,7 @@ jobs:
         if: runner.os != 'Windows' && !matrix.cross_compile
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
         run: |
           package_version="${RELEASE_TAG#v}"
           asset_base_name="fleet-${RELEASE_TAG}-${{ matrix.rid }}"
@@ -250,7 +282,7 @@ jobs:
         if: runner.os == 'Windows' && !matrix.cross_compile
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
         run: |
           $packageVersion = $env:RELEASE_TAG.TrimStart('v')
           $assetBaseName = "fleet-$($env:RELEASE_TAG)-${{ matrix.rid }}"
@@ -353,19 +385,18 @@ jobs:
     needs: ci-gate
     uses: ./.github/workflows/desktop-packages.yml
     with:
-      version: ${{ github.ref_name }}
+      version: ${{ needs.ci-gate.outputs.tag }}
 
   publish:
-    name: Publish GitHub Release
+    # On a dry run this assembles the release exactly as for a tag, then compares it with the latest real release.
+    name: ${{ github.event_name == 'push' && 'Publish GitHub Release' || 'Assemble release (dry run, publishes nothing)' }}
     runs-on: ubuntu-latest
-    needs: [build, desktop]
+    needs: [ci-gate, build, desktop]
     timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
@@ -414,7 +445,7 @@ jobs:
       # Fleet-mac-arm64.dmg and friends, so latest/download/<name> links never change.
       - name: Add installers without the version
         shell: bash
-        run: scripts/add-unversioned-installers.sh "${{ github.ref_name }}" release-assets
+        run: scripts/add-unversioned-installers.sh "${{ needs.ci-gate.outputs.tag }}" release-assets
 
       - name: Stage installer scripts
         shell: bash
@@ -424,6 +455,7 @@ jobs:
           chmod +x release-assets/install.sh
 
       - name: Create GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
@@ -432,10 +464,40 @@ jobs:
           files: |
             release-assets/*
 
+      - name: Compare the dry run with the latest release
+        if: github.event_name != 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.ci-gate.outputs.tag }}
+          COMPARE_WITH: ${{ inputs.compare_with }}
+        run: |
+          previous="${COMPARE_WITH:-$(gh api "repos/${GH_REPO}/releases/latest" --jq .tag_name)}"
+          ls -la release-assets
+          python3 scripts/compare-release-assets.py release-assets "${RELEASE_TAG#v}" "$previous" --report compare.md
+          cat compare.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The dry run's small files (update feeds, checksums, comparison) to read; the packages are the run's
+      # release-* artifacts already.
+      - name: Upload the dry run's release files
+        if: github.event_name != 'push' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-release-files
+          path: |
+            release-assets/*.yml
+            release-assets/checksums.txt
+            compare.md
+          if-no-files-found: warn
+          retention-days: 7
+
+
   deploy-vanity-url:
     name: Deploy vanity URL installer
     runs-on: ubuntu-latest
     needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     timeout-minutes: 10
     env:
       VANITY_URL_TARGET_REPOSITORY: ${{ vars.VANITY_URL_TARGET_REPOSITORY }}
@@ -478,8 +540,6 @@ jobs:
       - name: Checkout release source
         if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Prepare vanity URL payload
         if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
@@ -524,6 +584,7 @@ jobs:
     name: Notify website of Fleet release
     runs-on: ubuntu-latest
     needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     timeout-minutes: 5
     env:
       WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
