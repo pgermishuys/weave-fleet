@@ -127,7 +127,7 @@ describe("GitHubPanel", () => {
     const wrapper = mount(GitHubPanel);
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Follow a repository to see its pull requests and issues here.");
+    expect(wrapper.text()).toContain("Follow a repository to see its pull requests and issues here");
   });
 
   it("shows the account, what needs you and each repository's open counts", async () => {

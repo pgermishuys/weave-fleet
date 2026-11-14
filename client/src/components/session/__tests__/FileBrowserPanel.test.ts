@@ -136,7 +136,7 @@ describe("FileBrowserPanel", () => {
       const wrapper = mountPanel();
       await flushPromises();
 
-      expect(wrapper.get(".file-browser-panel__empty-text").text()).toBe("No files found");
+      expect(wrapper.get("[data-slot='empty-state'] p").text()).toBe("No files found");
     });
 
     it("refreshes_the_tree_from_the_toolbar", async () => {
@@ -274,7 +274,7 @@ describe("FileBrowserPanel", () => {
       mockFindText.result.value = { files: [], matches: 0, stopped: null, engine: "git" };
       const wrapper = mountPanel();
       await searchContents(wrapper, "zzzz");
-      expect(wrapper.text()).toContain("No matches for “zzzz”.");
+      expect(wrapper.text()).toContain("No matches for “zzzz”");
 
       mockFindText.result.value = { files: [], matches: 0, stopped: "deadline", engine: "git" };
       await nextTick();

@@ -6,6 +6,7 @@ import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { Workflow } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const nav = useWorkflowsNav();
 const store = useWorkflowsStore(nav.machine.target.value);
@@ -158,12 +159,11 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
         <span class="workflow-row__title">{{ draftRow.title }}</span>
         <span class="workflow-row__meta workflow-row__meta--wait">{{ draftRow.label }}</span>
       </button>
-      <p
+      <EmptyState
         v-if="nav.repoWorkflows.value.length === 0 && !draftRow"
-        class="empty-message"
-      >
-        {{ nav.library.value.repository ? "No workflow files in this repo yet." : "Pick a repository in the Run box to see its workflows." }}
-      </p>
+        :title="nav.library.value.repository ? 'No workflow files in this repo yet' : 'Pick a repository in the Run box to see its workflows'"
+        compact
+      />
     </nav>
 
     <div

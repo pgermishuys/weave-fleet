@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-vue-next'
 import { fileIcon, fileName } from '@/lib/canvas-registry'
 import type { FindTextFailure } from '@/composables/use-find-text'
 import { MATCHES_PER_FILE, segmentsOf, type TextSearchResult } from '@/lib/find-text'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const props = defineProps<{
   query: string
@@ -84,13 +85,16 @@ function shown<T>(path: string, matches: T[]): T[] {
         <span>That isn't “no matches”. Try a longer or more exact search.</span>
       </div>
 
-      <div v-else-if="!hasMatches" class="find-results__empty">
-        <p class="find-results__empty-text">No matches for “{{ query.trim() }}”.</p>
-        <p class="find-results__empty-hint">{{ emptyHint }}</p>
-        <p v-if="result.engine === 'walk'" class="find-results__empty-hint">
+      <EmptyState
+        v-else-if="!hasMatches"
+        :title="`No matches for “${query.trim()}”`"
+        compact
+      >
+        {{ emptyHint }}
+        <template v-if="result.engine === 'walk'">
           This folder isn't a git repository, so Fleet searched every file except build and dependency folders.
-        </p>
-      </div>
+        </template>
+      </EmptyState>
 
       <div v-else class="find-results__list" :class="{ 'find-results__list--busy': isLoading }">
         <div v-for="file in result.files" :key="file.path" class="find-results__group">
@@ -179,28 +183,6 @@ function shown<T>(path: string, matches: T[]): T[] {
 .find-results__summary--busy,
 .find-results__list--busy {
   opacity: 0.6;
-}
-
-.find-results__empty {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 24px 12px;
-  text-align: center;
-}
-
-.find-results__empty-text {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.find-results__empty-hint {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.4;
-  color: var(--muted);
 }
 
 .find-results__note {

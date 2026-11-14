@@ -14,6 +14,7 @@ import {
   weaveAddedByFleet,
   weavePill,
 } from "@/lib/weave-flavors";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * One harness's Weave: whether its plugin list loads Weave (with Add Weave and Remove), and whose config Weave reads in
@@ -282,27 +283,25 @@ onBeforeUnmount(() => watcher?.disconnect());
       v-else-if="detection"
       class="px-4 py-3"
     >
-      <div
-        class="grid justify-items-center gap-1.5 rounded-card border border-dashed border-border px-4 py-6 text-center"
+      <EmptyState
+        title="Weave isn't running in any harness"
+        bordered
         data-testid="weave-none"
       >
-        <p class="text-sm font-semibold text-text">
-          Weave isn't running in any harness
-        </p>
-        <p class="max-w-md text-sm text-muted">
-          Nothing here changes how Fleet works. Sessions use the harness's own agents. Once Weave is in a harness's
-          plugin list, you can set its config here.
-          <template v-if="all.some((harness) => harness.addTo)">
-            Add Weave above puts it there for you.
-          </template>
-        </p>
-        <a
-          class="text-sm text-accent hover:underline"
-          href="https://tryweave.io/docs/quickstart/"
-          target="_blank"
-          rel="noopener"
-        >What Weave adds</a>
-      </div>
+        Nothing here changes how Fleet works. Sessions use the harness's own agents. Once Weave is in a harness's
+        plugin list, you can set its config here.
+        <template v-if="all.some((harness) => harness.addTo)">
+          Add Weave above puts it there for you.
+        </template>
+        <template #action>
+          <a
+            class="text-sm text-accent hover:underline"
+            href="https://tryweave.io/docs/quickstart/"
+            target="_blank"
+            rel="noopener"
+          >What Weave adds</a>
+        </template>
+      </EmptyState>
     </div>
   </SettingGroup>
 </template>

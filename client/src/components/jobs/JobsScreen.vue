@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Plus } from "lucide-vue-next";
+import { ListTodo, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import JobDetail from "@/components/jobs/JobDetail.vue";
 import JobsStrip from "@/components/jobs/JobsStrip.vue";
@@ -12,6 +12,7 @@ import { HOME_MACHINE_KEY } from "@/lib/machines";
 import { useSelectedJobId } from "@/composables/use-jobs-menu";
 import { useJobsStore } from "@/stores/jobs";
 import { useMachinesStore } from "@/stores/machines";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** The Jobs screen: what's queued, running and finished across the machines, and each machine's seats. */
 const store = useJobsStore();
@@ -132,20 +133,19 @@ async function cancel(job: Job): Promise<void> {
             @open="openSession(selected)"
             @cancel="cancel(selected)"
           />
-          <p
+          <EmptyState
             v-else-if="store.isLoaded && store.jobs.length === 0"
-            class="p-5 text-sm text-muted"
+            :icon="ListTodo"
+            title="No jobs yet"
+            description="Post one with New job, and Fleet starts it on a machine with a free seat."
             data-testid="jobs-empty"
-          >
-            No jobs yet. Post one with New job, and Fleet starts it on a machine with a free seat.
-          </p>
-          <p
+          />
+          <EmptyState
             v-else-if="store.isLoaded"
-            class="p-5 text-sm text-muted"
+            :icon="ListTodo"
+            title="Pick a job from the list"
             data-testid="jobs-pick"
-          >
-            Pick a job from the list.
-          </p>
+          />
         </div>
       </template>
       <JobsAgents

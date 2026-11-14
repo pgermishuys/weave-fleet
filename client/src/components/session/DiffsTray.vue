@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
-import { Info, Rows3, RotateCcw } from "lucide-vue-next";
+import { GitCompare, Info, Rows3, RotateCcw } from "lucide-vue-next";
 import FilesChangedFileList from "@/components/session/FilesChangedFileList.vue";
 import DiffView from "@/components/session/DiffView.vue";
 import type { FilesChangedFileListItem } from "@/components/session/FilesChangedFileList.vue";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { parseDiffLines } from "@/lib/diff-parser";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export type DiffsTrayFileItem = FilesChangedFileListItem;
 
@@ -371,14 +372,13 @@ onUnmounted(stopTrayResize);
               <p>Loading diffs…</p>
             </div>
 
-            <div
+            <EmptyState
               v-else-if="mainState === 'unavailable'"
-              class="diffs-tray__state"
+              :icon="Info"
+              title="Diffs are unavailable for this session"
+              class="min-h-full"
               role="status"
-            >
-              <Info aria-hidden="true" />
-              <p>Diffs are unavailable for this session.</p>
-            </div>
+            />
 
             <div
               v-else-if="mainState === 'error'"
@@ -389,14 +389,13 @@ onUnmounted(stopTrayResize);
               <p>{{ error }}</p>
             </div>
 
-            <div
+            <EmptyState
               v-else-if="mainState === 'empty'"
-              class="diffs-tray__state"
+              :icon="GitCompare"
+              title="No files changed"
+              class="min-h-full"
               role="status"
-            >
-              <Info aria-hidden="true" />
-              <p>No files changed.</p>
-            </div>
+            />
 
             <div
               v-else-if="selectedFileDiffPlaceholder !== null"

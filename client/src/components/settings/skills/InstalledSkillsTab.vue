@@ -5,6 +5,7 @@ import { useSkills, type SkillRef } from "@/composables/use-skills";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { targetKey, targetLabel } from "@/lib/install-target";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const { skills, isLoading, error, removeSkill, checkUpdate, updateSkill } = useSkills();
 
@@ -86,22 +87,13 @@ function cancelRemove(): void {
       <span>{{ error }}</span>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="!hasSkills"
-      class="rounded-card border border-dashed border-border p-6 text-center"
-    >
-      <Brain
-        :size="28"
-        class="mx-auto text-muted"
-        aria-hidden="true"
-      />
-      <p class="mt-3 text-sm font-medium text-text">
-        No skills installed
-      </p>
-      <p class="mt-1 text-xs text-muted">
-        Install a skill from the Catalog or Custom tab.
-      </p>
-    </div>
+      :icon="Brain"
+      title="No skills installed"
+      description="Install a skill from the Catalog or Custom tab."
+      bordered
+    />
 
     <div
       v-else

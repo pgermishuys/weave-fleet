@@ -6,6 +6,7 @@ import ModsShowcase from "@/components/settings/mods/ModsShowcase.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** Settings → Skills & tools → Mods: the mods the user kept, with on/off and Undo, and Fleet's sample mods to add. */
 const store = useModsStore(useMachineTarget());
@@ -132,14 +133,14 @@ onMounted(load);
         </button>
       </div>
 
-      <p
+      <EmptyState
         v-else-if="mods.length === 0"
-        class="mt-5 rounded-card border border-dashed border-border p-6 text-center text-sm text-muted"
+        title="No kept mods yet"
+        description="When an agent writes a mod in a session, you can keep it from there, or add one from the Showcase below."
+        bordered
+        class="mt-5"
         data-testid="mods-empty"
-      >
-        No kept mods yet. When an agent writes a mod in a session, you can keep it from there, or add one from the
-        Showcase below.
-      </p>
+      />
 
       <ul
         v-else

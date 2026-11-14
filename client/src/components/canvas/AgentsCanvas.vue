@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { ChevronDown } from "lucide-vue-next";
+import { ChevronDown, Network } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import AgentDetail from "@/components/canvas/AgentDetail.vue";
 import AgentsCanvasRow from "@/components/canvas/AgentsCanvasRow.vue";
@@ -11,6 +11,7 @@ import { useSessionLineage } from "@/composables/use-session-lineage";
 import { modelDisplayName } from "@/lib/turns";
 import { lineageParentNote, sessionAgentState, type AgentRow } from "@/lib/session-lineage";
 import { useSessionsStore } from "@/stores/sessions";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * The Agents tab: the session's lineage. The session it came from, what runs now (its subagents and tasks, and sessions
@@ -138,12 +139,12 @@ const isEmpty = computed(() => !parentRow.value && agents.value.running.length +
       >{{ summary }}</span>
     </header>
 
-    <p
+    <EmptyState
       v-if="isEmpty"
-      class="agents-canvas__empty"
-    >
-      Subagents this session's agent starts, and sessions it forks or starts, show here.
-    </p>
+      :icon="Network"
+      title="Subagents this session's agent starts, and sessions it forks or starts, show here"
+      compact
+    />
 
     <section
       v-if="parentRow"
@@ -302,15 +303,9 @@ const isEmpty = computed(() => !parentRow.value && agents.value.running.length +
   font-weight: 600;
 }
 
-.agents-canvas__summary,
-.agents-canvas__empty {
+.agents-canvas__summary {
   color: var(--muted);
   font-size: 12px;
-}
-
-.agents-canvas__empty {
-  margin: 0;
-  line-height: 1.5;
 }
 
 .agents-section {

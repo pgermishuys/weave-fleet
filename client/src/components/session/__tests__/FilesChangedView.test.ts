@@ -44,9 +44,9 @@ describe("FilesChangedView", () => {
       "Changed files could not be loaded.",
     );
     expect(errorWrapper.text()).toContain("HTTP 500");
-    expect(emptyWrapper.get(".files-changed-view__state").text()).toContain("No files changed");
-    expect(unavailableWrapper.get(".files-changed-view__state").text()).toContain(
-      "Diffs unavailable for this session",
+    expect(emptyWrapper.get(".files-changed-view__diff-body [data-slot='empty-state']").text()).toContain("No files changed");
+    expect(unavailableWrapper.get(".files-changed-view__diff-body [data-slot='empty-state']").text()).toContain(
+      "Diffs are unavailable for this session",
     );
 
     await errorWrapper.get(".files-changed-view__retry-button").trigger("click");

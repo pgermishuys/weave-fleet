@@ -103,7 +103,7 @@ describe("SessionContextCanvas", () => {
     const wrapper = mountCanvas();
     await flushPromises();
 
-    expect(wrapper.get(".context-empty").text()).toContain("Nothing attached yet");
+    expect(wrapper.get("[data-slot='empty-state']").text()).toContain("Nothing attached yet");
     wrapper.unmount();
   });
 });

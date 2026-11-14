@@ -7,6 +7,8 @@ import { isModOff } from "@/lib/mods/mod-off";
 import { useResolvedModView } from "@/lib/mods/resolve";
 import type { ModAction } from "@/lib/mods/types";
 import { useModsStore } from "@/stores/mods";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Puzzle } from "lucide-vue-next";
 
 /**
  * A pane a mod opened, drawn from the view the mod last contributed. Without one (restored after a reload, before the
@@ -54,13 +56,13 @@ function send(action: ModAction): void {
       :session-id="sessionId"
       @action="send"
     />
-    <p
+    <EmptyState
       v-else
-      class="mod-pane__empty"
+      :icon="Puzzle"
+      :title="view ? 'Nothing to show here yet' : `Waiting for ${modName} to draw this pane`"
+      compact
       data-testid="mod-pane-empty"
-    >
-      {{ view ? "Nothing to show here yet" : `Waiting for ${modName} to draw this pane` }}
-    </p>
+    />
   </div>
 </template>
 
@@ -72,11 +74,4 @@ function send(action: ModAction): void {
   padding: 12px;
 }
 
-.mod-pane__empty {
-  margin: 0;
-  padding: 24px 8px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted);
-}
 </style>

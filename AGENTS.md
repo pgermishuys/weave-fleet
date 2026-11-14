@@ -77,6 +77,9 @@ No gutter between the rail and the context area.
 - **Buttons:** `<Button>` with a variant (`default` primary, `destructive`, `outline`, `secondary`, `ghost`, `link`,
   `toolbar-icon` / `toolbar-icon-danger` for icon-only toolbar buttons, `filter` for toggles) and a size (`default`,
   `sm`, `lg`, `icon`, `icon-sm`, `icon-lg`, `toolbar`, `toolbar-lg`). They're defined in `ui/button/index.ts`.
+- **Empty states:** `<EmptyState>` (`ui/empty-state`) for a list, panel or page with nothing in it: an optional icon, a
+  title, one line of text and an optional `#action`. `bordered` draws the dashed card; `compact` is for side panels and
+  narrow lists. A picker's "no matches" row (`CommandEmpty`) and a one-line note inside a card are not empty states.
 - **Colours:** theme tokens only (`--text`, `--muted`, `--accent`, `--border`, `--main-bg`, `--panel-bg`, `--card-bg`, …,
   and the Tailwind classes built on them such as `text-muted`, `bg-card-bg`).
   - Every theme in `client/src/assets/main.css` defines them.
@@ -86,7 +89,8 @@ No gutter between the rail and the context area.
 - **Keyboard focus:** the global 2px ring in `--focus-ring`. Never remove an outline without drawing another.
 - **Ratchet:** `bun run lint` includes the design lint (`client/scripts/lint-design-system.ts`).
   - In a `.vue` file outside `components/ui/`, it fails a new raw `<button>`, a border-radius that isn't 0, 50% or a
-    token, and a duration that isn't `var(--transition…)`.
+    token, a duration that isn't `var(--transition…)`, and an element with its own empty-state class (`x__empty`,
+    `empty-message`).
   - The counts are compared with `scripts/design-lint-baseline.json`; `--list <RULE>` prints every one.
 
 ## Diagnostics and Testing

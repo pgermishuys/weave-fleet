@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, reactive, shallowRef, useTemplateRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
-import { AlertCircle, Ellipsis, Play, Plus, Trash2 } from "lucide-vue-next";
+import { AlertCircle, Ellipsis, Play, Plus, Trash2, Zap } from "lucide-vue-next";
 import { DropdownMenuItem } from "reka-ui";
 import AutomationComposer from "@/components/automations/AutomationComposer.vue";
 import AutomationMachineScope from "@/components/automations/AutomationMachineScope.vue";
@@ -33,6 +33,7 @@ import { useAutomationsStore, type Automation, type AutomationRun, type CreateAu
 import { useMachineTarget } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // The machine the view shows (MachineScope in AutomationsPage): the list, runs and every change are its.
 const target = useMachineTarget();
@@ -511,14 +512,13 @@ const firstRunHint = computed(() => {
           </span>
         </div>
 
-        <div
+        <EmptyState
           v-if="hasLoadedRuns && runs.length === 0"
-          class="automation-page__empty"
+          title="No runs yet"
+          :description="firstRunHint"
+          bordered
           data-testid="automation-no-runs"
-        >
-          <strong>No runs yet</strong>
-          {{ firstRunHint }}
-        </div>
+        />
         <AutomationRunsList
           v-else-if="runs.length > 0"
           :runs="runs"
@@ -576,25 +576,29 @@ const firstRunHint = computed(() => {
           Try again
         </Button>
       </div>
-      <div
+      <EmptyState
         v-else
-        class="automation-page__empty"
+        :icon="Zap"
+        :title="automations.length === 0 ? 'No automations yet' : 'Automations'"
+        :description="automations.length === 0
+          ? 'An automation runs a prompt or a workflow on a schedule, or when something happens in Fleet.'
+          : 'Pick one from the list, or make a new one.'"
+        class="m-auto"
       >
-        <strong>{{ automations.length === 0 ? "No automations yet" : "Automations" }}</strong>
-        {{ automations.length === 0
-          ? "An automation runs a prompt or a workflow on a schedule, or when something happens in Fleet."
-          : "Pick one from the list, or make a new one." }}
-        <Button
+        <template
           v-if="automations.length === 0"
-          size="sm"
-          class="mx-auto mt-4 flex"
-          data-testid="automation-empty-create"
-          @click="startCreate"
+          #action
         >
-          <Plus class="h-4 w-4" />
-          New automation
-        </Button>
-      </div>
+          <Button
+            size="sm"
+            data-testid="automation-empty-create"
+            @click="startCreate"
+          >
+            <Plus class="h-4 w-4" />
+            New automation
+          </Button>
+        </template>
+      </EmptyState>
     </div>
 
     <AlertDialog v-model:open="deleteConfirmOpen">

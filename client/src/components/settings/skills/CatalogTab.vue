@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { InstallSkillRequest } from "@/composables/use-skill-catalog";
 import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-target";
 import InstallTargetPicker from "../InstallTargetPicker.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 
 function mapSourceToNumber(source: "GitHub" | "Local" | "Bundled"): number {
   switch (source) {
@@ -99,22 +100,13 @@ async function handleInstall(skillName: string): Promise<void> {
       <span>{{ error }}</span>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="!hasCatalog"
-      class="rounded-card border border-dashed border-border p-6 text-center"
-    >
-      <Brain
-        :size="28"
-        class="mx-auto text-muted"
-        aria-hidden="true"
-      />
-      <p class="mt-3 text-sm font-medium text-text">
-        No skills in catalog
-      </p>
-      <p class="mt-1 text-xs text-muted">
-        The skill catalog is empty or unavailable.
-      </p>
-    </div>
+      :icon="Brain"
+      title="No skills in catalog"
+      description="The skill catalog is empty or unavailable."
+      bordered
+    />
 
     <div
       v-else

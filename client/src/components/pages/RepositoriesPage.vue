@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/api/client";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const router = useRouter();
 
@@ -148,31 +149,25 @@ function goToSettings(): void {
       </div>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="sortedRepositories.length === 0"
-      class="flex flex-1 flex-col items-center justify-center gap-4 border border-dashed border-border bg-card/40 p-8 text-center"
+      :icon="FolderGit2"
+      title="No repositories found"
+      description="Add a location in Settings → Folders, and Fleet lists the repositories inside it."
+      bordered
+      class="flex-1"
     >
-      <FolderGit2
-        :size="44"
-        class="text-muted-foreground/50"
-      />
-      <div class="space-y-1">
-        <p class="text-sm font-medium text-foreground">
-          No repositories found
-        </p>
-        <p class="text-sm text-muted-foreground">
-          Add a location in Settings → Folders, and Fleet lists the repositories inside it.
-        </p>
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        @click="goToSettings"
-      >
-        <Settings2 :size="14" />
-        Open settings
-      </Button>
-    </div>
+      <template #action>
+        <Button
+          variant="outline"
+          size="sm"
+          @click="goToSettings"
+        >
+          <Settings2 :size="14" />
+          Open settings
+        </Button>
+      </template>
+    </EmptyState>
 
     <div
       v-else

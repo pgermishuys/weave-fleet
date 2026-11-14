@@ -36,6 +36,7 @@ import MachineSessionsGroup from "./MachineSessionsGroup.vue";
 import NewProjectDialog from "./NewProjectDialog.vue";
 
 import ProjectGroup from "./ProjectGroup.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface ActiveSessionDrag {
   sessionId: string;
@@ -793,18 +794,12 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
               />
             </template>
 
-            <div
+            <EmptyState
               v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0 && !showPinnedGroup"
-              class="sessions-empty-state"
-            >
-              <p class="sessions-empty-state__title">
-                <template v-if="normalizedQuery">No sessions found</template>
-                <template v-else>{{ isArchivedView ? "No archived sessions" : "No sessions yet" }}</template>
-              </p>
-              <p class="sessions-empty-state__copy">
-                {{ normalizedQuery ? "Try a different search term or clear the filter." : isArchivedView ? "Sessions you archive show up here." : "Start one with New session above." }}
-              </p>
-            </div>
+              :title="normalizedQuery ? 'No sessions found' : isArchivedView ? 'No archived sessions' : 'No sessions yet'"
+              :description="normalizedQuery ? 'Try a different search term or clear the filter.' : isArchivedView ? 'Sessions you archive show up here.' : 'Start one with New session above.'"
+              compact
+            />
           </template>
         </template>
         <MachineSessionsGroup
@@ -1182,13 +1177,6 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   scrollbar-color: var(--muted) transparent;
 }
 
-.sessions-empty-state {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .sessions-feedback-state {
   display: flex;
   flex-direction: column;
@@ -1281,19 +1269,6 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 .sessions-feedback-state__button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.sessions-empty-state__title {
-  margin: 0;
-  font-size: 0.85714rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.sessions-empty-state__copy {
-  margin: 0;
-  font-size: 0.78571rem;
-  color: var(--muted);
 }
 
 @keyframes sessions-spin {

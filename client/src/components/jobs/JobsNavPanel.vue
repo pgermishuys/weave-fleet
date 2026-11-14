@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useJobsMenu } from "@/composables/use-jobs-menu";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const menu = useJobsMenu();
 </script>
@@ -46,12 +47,11 @@ const menu = useJobsMenu();
       </button>
     </div>
 
-    <p
+    <EmptyState
       v-if="menu.isLoaded.value && menu.groups.value.every((group) => group.jobs.length === 0)"
-      class="jobs-nav__empty"
-    >
-      No jobs yet.
-    </p>
+      title="No jobs yet"
+      compact
+    />
   </section>
 </template>
 
@@ -148,11 +148,5 @@ const menu = useJobsMenu();
 
 .jobs-nav__flag--needs {
   color: var(--accent);
-}
-
-.jobs-nav__empty {
-  margin: 8px 12px;
-  font-size: 0.85714rem;
-  color: var(--muted);
 }
 </style>

@@ -21,6 +21,7 @@ import {
 import { useGitHubAuth } from "@/plugins/builtin/github/composables/use-github-auth";
 import { useGitHubBookmarks } from "@/plugins/builtin/github/composables/use-github-bookmarks";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const router = useRouter();
 const smartLinks = useSmartLinksStore();
@@ -368,17 +369,13 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
           />
         </section>
 
-        <div
+        <EmptyState
           v-if="isEmpty"
-          class="gh-home__empty"
-        >
-          <p class="gh-home__empty-title">
-            Nothing needs you.
-          </p>
-          <p>
-            No review requests, open pull requests or assigned issues{{ bookmarks.length ? " in the repositories you follow" : "" }}.
-          </p>
-        </div>
+          :icon="Github"
+          title="Nothing needs you"
+          :description="`No review requests, open pull requests or assigned issues${bookmarks.length ? ' in the repositories you follow' : ''}.`"
+          class="py-12"
+        />
       </template>
     </template>
 
@@ -532,23 +529,6 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
   color: color-mix(in srgb, var(--muted) 75%, transparent);
   font-family: var(--font-mono-stack);
   font-weight: 400;
-}
-
-.gh-home__empty {
-  padding: 48px 16px;
-  color: var(--muted);
-  text-align: center;
-}
-
-.gh-home__empty p {
-  margin: 0;
-}
-
-.gh-home__empty-title {
-  margin-bottom: 4px !important;
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 600;
 }
 
 /* ── Connect ── */

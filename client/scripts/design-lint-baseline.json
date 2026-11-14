@@ -1,7 +1,7 @@
 {
   "rules": {
     "RAW_BUTTON": {
-      "total": 690,
+      "total": 689,
       "files": {
         "src/components/analytics/AnalyticsFilters.vue": 1,
         "src/components/analytics/AnalyticsNavPanel.vue": 1,
@@ -134,7 +134,6 @@
         "src/components/session/TurnRetryBar.vue": 2,
         "src/components/sessions/ArchiveUndoToast.vue": 2,
         "src/components/sessions/DraftSessionRow.vue": 1,
-        "src/components/sessions/MachineSessionsGroup.vue": 1,
         "src/components/sessions/NewSessionComposer.vue": 3,
         "src/components/sessions/ProjectGroup.vue": 3,
         "src/components/sessions/SessionItem.vue": 4,
@@ -219,7 +218,7 @@
       }
     },
     "HARDCODED_RADIUS": {
-      "total": 287,
+      "total": 286,
       "files": {
         "src/components/analytics/AnalyticsSectionStrip.vue": 1,
         "src/components/analytics/charts/HorizontalCostBars.vue": 2,
@@ -305,7 +304,6 @@
         "src/components/session/TurnRetryBar.vue": 2,
         "src/components/session/WorkOutput.vue": 1,
         "src/components/sessions/ArchiveUndoToast.vue": 1,
-        "src/components/sessions/MachineSessionsGroup.vue": 1,
         "src/components/sessions/NewSessionComposer.vue": 2,
         "src/components/sessions/ProjectGroup.vue": 2,
         "src/components/sessions/SessionItem.vue": 4,
@@ -405,6 +403,30 @@
         "src/components/workflows/WorkflowsNavPanel.vue": 1,
         "src/plugins/builtin/github/pages/GitHubBrowserPage.vue": 1,
         "src/plugins/builtin/github/pages/GitHubRepoPage.vue": 1,
+        "src/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue": 1
+      }
+    },
+    "AD_HOC_EMPTY_STATE": {
+      "total": 24,
+      "files": {
+        "src/components/analytics/charts/HorizontalCostBars.vue": 1,
+        "src/components/analytics/tabs/DailyTab.vue": 1,
+        "src/components/analytics/tabs/OverviewTab.vue": 1,
+        "src/components/analytics/tabs/ProjectsTab.vue": 1,
+        "src/components/automations/AutomationDetailPanel.vue": 2,
+        "src/components/automations/AutomationsNavPanel.vue": 3,
+        "src/components/board/BoardSourceConfig.vue": 1,
+        "src/components/board/KanbanColumn.vue": 1,
+        "src/components/canvas/AgentTabView.vue": 1,
+        "src/components/canvas/ChangesCanvas.vue": 1,
+        "src/components/canvas/GoToFileDialog.vue": 2,
+        "src/components/canvas/TurnsCanvas.vue": 1,
+        "src/components/session/FileBrowserTreeNode.vue": 1,
+        "src/components/session/SelectorDropdown.vue": 1,
+        "src/components/session/ToolCard.vue": 1,
+        "src/components/sessions/NewSessionComposer.vue": 1,
+        "src/components/sessions/ProjectGroup.vue": 1,
+        "src/components/workflows/WorkflowsNavPanel.vue": 2,
         "src/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue": 1
       }
     }

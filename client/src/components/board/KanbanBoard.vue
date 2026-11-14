@@ -10,6 +10,8 @@ import { useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useBoardStore } from "@/stores/board";
 import { useKeybindingsStore, getBoardModeToggleShortcut } from "@/stores/keybindings";
 import { useSidebarStore } from "@/stores/sidebar";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LayoutGrid } from "lucide-vue-next";
 
 interface CardDraftPayload {
   laneId: string;
@@ -621,27 +623,28 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
       </p>
     </section>
 
-    <section
+    <EmptyState
       v-else-if="showEmptyState"
-      class="kanban-state"
+      :icon="LayoutGrid"
+      title="No lanes yet"
+      description="Click Edit Board to unlock lane management, then add your first board column."
+      class="flex-1"
       aria-live="polite"
     >
-      <p class="kanban-state__title">
-        No lanes yet
-      </p>
-      <p class="kanban-state__copy">
-        Click Edit Board to unlock lane management, then add your first board column.
-      </p>
-      <Button
+      <template
         v-if="isManageMode"
-        type="button"
-        variant="default"
-        size="sm"
-        @click="handleCreateFirstLane"
+        #action
       >
-        Create first lane
-      </Button>
-    </section>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          @click="handleCreateFirstLane"
+        >
+          Create first lane
+        </Button>
+      </template>
+    </EmptyState>
 
     <div
       v-else

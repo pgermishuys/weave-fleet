@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Check, ChevronDown, ChevronRight } from "lucide-vue-next";
+import { Check, ChevronDown, ChevronRight, ListChecks } from "lucide-vue-next";
 import ProgressSubagentCard from "@/components/canvas/ProgressSubagentCard.vue";
 import { useSessionProgress } from "@/composables/use-session-progress";
 import {
@@ -11,6 +11,7 @@ import {
   type SessionSubagent,
 } from "@/lib/session-progress";
 import type { TodoItem } from "@/lib/todo-utils";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * The Progress tab: the plan the session is working through, with its live todo list under the current step,
@@ -316,16 +317,15 @@ function subagentsFor(step: SessionPlanStep): SessionSubagent[] {
       </p>
     </template>
 
-    <div
+    <EmptyState
       v-else
-      class="progress-canvas__empty"
+      :icon="ListChecks"
+      title="Nothing to track yet"
+      compact
     >
-      <strong>Nothing to track yet</strong>
-      <p>
-        Progress shows up when the agent writes a todo list, or a markdown checklist such as a plan in
-        <code>.weave/plans/</code>.
-      </p>
-    </div>
+      Progress shows up when the agent writes a todo list, or a markdown checklist such as a plan in
+      <code class="font-mono">.weave/plans/</code>.
+    </EmptyState>
 
     <section
       v-if="unplacedSubagents.length > 0"
@@ -681,26 +681,4 @@ function subagentsFor(step: SessionPlanStep): SessionSubagent[] {
   color: var(--muted);
 }
 
-.progress-canvas__empty {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 18px 4px;
-  color: var(--muted);
-}
-
-.progress-canvas__empty strong {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.progress-canvas__empty p {
-  margin: 0;
-}
-
-.progress-canvas__empty code {
-  font-family: var(--font-mono-stack);
-  font-size: 11.5px;
-}
 </style>

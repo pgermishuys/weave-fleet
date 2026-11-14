@@ -4,6 +4,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { createBoardSource, deleteBoardSource, listBoardSources } from "@/lib/board-api";
 import { getBoardSources } from "@/plugins/slots";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface Props {
   boardId: string | null;
@@ -302,13 +303,12 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
       </Button>
     </div>
 
-    <div
+    <EmptyState
       v-if="!hasBoard"
-      class="board-source-config__empty"
+      title="Create a board lane first to enable source syncing"
+      compact
       data-testid="board-source-no-board"
-    >
-      Create a board lane first to enable source syncing.
-    </div>
+    />
 
     <template v-else>
       <form
@@ -433,13 +433,13 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
           </Button>
         </li>
       </ul>
-      <div
+      <EmptyState
         v-else
-        class="board-source-config__empty"
+        title="No configured sources yet"
+        compact
+        bordered
         data-testid="board-source-empty"
-      >
-        No configured sources yet.
-      </div>
+      />
     </template>
   </section>
 </template>

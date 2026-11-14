@@ -136,7 +136,7 @@ describe("BoardSourceConfig", () => {
 
     expect(boardApiMocks.deleteBoardSource).toHaveBeenCalledWith("board-1", "source-1");
     expect(wrapper.findAll('[data-testid="board-source-item"]')).toHaveLength(0);
-    expect(wrapper.get('[data-testid="board-source-empty"]').text()).toContain("No configured sources yet.");
+    expect(wrapper.get('[data-testid="board-source-empty"]').text()).toContain("No configured sources yet");
   });
 
   it("adds an assigned-to-me source with assignee in config json", async () => {

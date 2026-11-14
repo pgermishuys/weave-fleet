@@ -24,6 +24,7 @@ import { buildInbox, machinesStatus, restartRow, sectionRows, type InboxItem } f
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { ago, clock } from "@/lib/phone/time";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * The phone's home, in Fleet's look: the chrome bar (logo, Notifications, New session), a panel with three pages,
@@ -416,13 +417,13 @@ const pull = usePullToRefresh({
                 />
               </div>
               <NoHarnessNotice v-else-if="noHarnessReason !== null" />
-              <p
+              <EmptyState
                 v-else
-                class="ph-empty ph-fade-in"
-              >
-                <Check aria-hidden="true" />
-                <span>Nothing needs you right now.</span>
-              </p>
+                :icon="Check"
+                title="Nothing needs you right now"
+                compact
+                class="ph-fade-in"
+              />
 
               <template v-if="working.length">
                 <h2 class="ph-section-h">
@@ -592,12 +593,11 @@ const pull = usePullToRefresh({
                 </SwipeRow>
               </div>
             </template>
-            <p
+            <EmptyState
               v-if="!firstLoad && allSessions.length === 0"
-              class="ph-empty inbox__none"
-            >
-              {{ query ? "No sessions match." : "No sessions in the last month." }}
-            </p>
+              :title="query ? 'No sessions found' : 'No sessions in the last month'"
+              compact
+            />
             <p class="ph-foot inbox__swipe-hint">
               Swipe a session left to archive it.
             </p>
@@ -758,10 +758,6 @@ const pull = usePullToRefresh({
 
 .inbox__filter {
   padding: 6px 12px 2px;
-}
-
-.inbox__none {
-  margin-top: 18px;
 }
 
 .inbox__swipe-hint {

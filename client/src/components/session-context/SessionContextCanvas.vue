@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { GitBranch, LoaderCircle, Plus, RefreshCw, Zap } from "lucide-vue-next";
+import { GitBranch, LoaderCircle, Paperclip, Plus, RefreshCw, Zap } from "lucide-vue-next";
 import SmartLinkCard from "@/components/session-context/SmartLinkCard.vue";
 import SmartLinkRow from "@/components/session-context/SmartLinkRow.vue";
 import { apiFetchOn } from "@/lib/api-client";
@@ -10,6 +10,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { formatCheckedAgo, isPullRequest, type SmartLink } from "@/lib/smart-links";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const props = defineProps<{
   sessionId: string;
@@ -290,12 +291,13 @@ watch(
       />
     </section>
 
-    <p
+    <EmptyState
       v-if="isEmpty"
-      class="context-empty"
-    >
-      Nothing attached yet. Pull requests and issues mentioned in the conversation, and pull requests this session opens, show up here.
-    </p>
+      :icon="Paperclip"
+      title="Nothing attached yet"
+      description="Pull requests and issues mentioned in the conversation, and pull requests this session opens, show up here."
+      compact
+    />
 
     <div class="context-attach">
       <form
@@ -481,13 +483,6 @@ watch(
 .context-origin__detail {
   color: var(--muted);
   font-size: 11.5px;
-}
-
-.context-empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.5;
 }
 
 .context-link-btn {

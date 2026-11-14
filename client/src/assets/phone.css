@@ -2432,20 +2432,6 @@ html[data-phone].ph-kb-open .ph-sheet__foot {
 }
 
 /* ── Page bits ──────────────────────────────────────────────────────────── */
-.ph-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 18px 2px;
-  font-size: 14px;
-  color: var(--muted);
-}
-
-.ph-empty svg {
-  width: 16px;
-  height: 16px;
-  color: var(--running);
-}
 
 .ph-banner {
   display: block;

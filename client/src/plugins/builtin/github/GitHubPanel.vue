@@ -8,6 +8,7 @@ import { useGitHubWork } from "@/composables/use-github-work";
 import { needsYou } from "@/lib/github-items";
 import { useGitHubBookmarks } from "./composables/use-github-bookmarks";
 import { useGitHubAuth } from "./composables/use-github-auth";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const router = useRouter();
 const pathname = useLocation({ select: (location) => location.pathname });
@@ -114,12 +115,11 @@ async function handleRemove(fullName: string): Promise<void> {
         Repositories
       </p>
 
-      <p
+      <EmptyState
         v-if="bookmarks.length === 0"
-        class="panel-empty"
-      >
-        Follow a repository to see its pull requests and issues here.
-      </p>
+        title="Follow a repository to see its pull requests and issues here"
+        compact
+      />
 
       <div
         v-for="bookmark in bookmarks"
@@ -315,13 +315,6 @@ async function handleRemove(fullName: string): Promise<void> {
 
 .panel-row__count--hot {
   color: var(--pr-blocked);
-}
-
-.panel-empty {
-  margin: 0;
-  padding: 4px 8px 8px;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .bookmark-item {

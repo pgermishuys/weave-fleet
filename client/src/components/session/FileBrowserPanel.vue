@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onActivated, onDeactivated, onMounted, provide, ref, watch } from 'vue'
-import { Loader2, RotateCw, Search, X } from 'lucide-vue-next'
+import { FolderTree, Loader2, RotateCw, Search, X } from 'lucide-vue-next'
 import { useFileBrowser } from '@/composables/use-file-browser'
 import { useFindFiles } from '@/composables/use-find-files'
 import type { UseDiffsResult } from '@/composables/use-diffs'
@@ -13,6 +13,7 @@ import { useFindInFilesStore } from '@/stores/find-in-files'
 import { useGoToFileStore } from '@/stores/go-to-file'
 import FileBrowserTreeNode from './FileBrowserTreeNode.vue'
 import FindInFilesResults from './FindInFilesResults.vue'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface Props {
   sessionId: string
@@ -224,12 +225,12 @@ function handleResultClick(path: string, keep = false) {
         <p class="file-browser-panel__error-text">{{ findFiles.error.value }}</p>
       </div>
 
-      <div v-else-if="foundFiles.length === 0" class="file-browser-panel__empty">
-        <p class="file-browser-panel__empty-text">No files found</p>
-        <p class="file-browser-panel__empty-hint">
-          Try a different search query
-        </p>
-      </div>
+      <EmptyState
+        v-else-if="foundFiles.length === 0"
+        title="No files found"
+        description="Try a different search query"
+        compact
+      />
 
       <div v-else class="file-browser-panel__results">
         <button
@@ -254,12 +255,13 @@ function handleResultClick(path: string, keep = false) {
         <p class="file-browser-panel__error-text">{{ error }}</p>
       </div>
 
-      <div v-else-if="rootEntries.length === 0" class="file-browser-panel__empty">
-        <p class="file-browser-panel__empty-text">No files found</p>
-        <p class="file-browser-panel__empty-hint">
-          The session directory is empty or not yet initialized.
-        </p>
-      </div>
+      <EmptyState
+        v-else-if="rootEntries.length === 0"
+        :icon="FolderTree"
+        title="No files found"
+        description="The session directory is empty or not yet initialized."
+        compact
+      />
 
       <div v-else class="file-browser-panel__tree">
         <FileBrowserTreeNode
@@ -505,28 +507,6 @@ function handleResultClick(path: string, keep = false) {
   margin: 0;
   font-size: 13px;
   color: #ef4444;
-}
-
-.file-browser-panel__empty {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 24px 16px;
-  text-align: center;
-}
-
-.file-browser-panel__empty-text {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.file-browser-panel__empty-hint {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
 }
 
 .file-browser-panel__tree {

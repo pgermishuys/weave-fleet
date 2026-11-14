@@ -524,41 +524,6 @@
   }
 }
 
-/* ─── Design System Interactive Utilities ───────────────────────────────── */
-@utility list-item-hover {
-  background: transparent;
-  transition: background var(--transition);
-
-  &:hover {
-    background: var(--bg);
-  }
-}
-
-@utility tab-hover {
-  color: var(--muted);
-  border-bottom: 2px solid transparent;
-  transition: color var(--transition), border-color var(--transition);
-
-  &:hover {
-    color: var(--text);
-  }
-
-  &[data-active="true"],
-  &.active {
-    color: var(--text);
-    border-bottom-color: var(--indigo);
-  }
-}
-
-@utility interactive-icon {
-  color: var(--muted);
-  transition: color var(--transition);
-
-  &:hover {
-    color: var(--text);
-  }
-}
-
 /* ─── Small-screen typography ───────────────────────────────────────────── */
 @media (max-width: 359px) {
   html {

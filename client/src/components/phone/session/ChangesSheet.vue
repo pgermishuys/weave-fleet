@@ -7,6 +7,7 @@ import { apiFetchOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { diffBaseLabel } from "@/lib/diff-base";
 import { parseDiffLines, type DiffLine } from "@/lib/diff-parser";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** The session's changed files as settings rows (name, folder, +a −d), then one file's diff, read-only. */
 const props = defineProps<{
@@ -118,12 +119,11 @@ async function openFile(item: FileDiffItem): Promise<void> {
           :size="14"
         /> Reading the changes…
       </p>
-      <p
+      <EmptyState
         v-else-if="diffs.length === 0"
-        class="ph-foot chs__note"
-      >
-        Nothing changed yet.
-      </p>
+        title="No files changed"
+        compact
+      />
       <div
         v-else
         class="ph-card"

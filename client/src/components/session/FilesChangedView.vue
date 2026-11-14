@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowLeft, Info } from "lucide-vue-next";
+import { ArrowLeft, GitCompare, Info } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import FilesChangedFileList from "@/components/session/FilesChangedFileList.vue";
 import type { FilesChangedFileListItem } from "@/components/session/FilesChangedFileList.vue";
 import { isEditableKeyboardTarget } from "@/composables/use-keyboard-shortcut";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { parseDiffLines } from "@/lib/diff-parser";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export type FileDiffViewItem = FilesChangedFileListItem;
 
@@ -398,19 +399,13 @@ function getActiveElement(): HTMLElement | null {
             </p>
           </div>
 
-          <div
+          <EmptyState
             v-else-if="mainState === 'unavailable'"
-            class="files-changed-view__state"
+            :icon="Info"
+            title="Diffs are unavailable for this session"
+            class="h-full"
             role="status"
-          >
-            <Info
-              class="files-changed-view__state-icon"
-              aria-hidden="true"
-            />
-            <p class="files-changed-view__state-title">
-              Diffs unavailable for this session
-            </p>
-          </div>
+          />
 
           <div
             v-else-if="mainState === 'error'"
@@ -441,19 +436,13 @@ function getActiveElement(): HTMLElement | null {
             </div>
           </div>
 
-          <div
+          <EmptyState
             v-else-if="mainState === 'empty'"
-            class="files-changed-view__state"
+            :icon="GitCompare"
+            title="No files changed"
+            class="h-full"
             role="status"
-          >
-            <Info
-              class="files-changed-view__state-icon"
-              aria-hidden="true"
-            />
-            <p class="files-changed-view__state-title">
-              No files changed
-            </p>
-          </div>
+          />
 
           <div
             v-else-if="selectedFileDiffPlaceholder !== null"
