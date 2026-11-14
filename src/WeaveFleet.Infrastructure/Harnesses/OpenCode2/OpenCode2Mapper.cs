@@ -1106,8 +1106,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 
     /// <summary>
     /// A finished <c>edit</c> or <c>write</c> call as Fleet's two file events: <c>files.written</c> (the files a tool
-    /// call wrote, which progress tracking reads) and <c>file.watcher.updated</c> (which Fleet turns into
-    /// <c>files.changed</c>, so open files and the file list reload). OpenCode (1.x) gets the second from its file
+    /// call wrote, which progress tracking reads, with what the call did: the whole file, or the exact text an edit
+    /// replaced, so a plan ticked by the very next call still shows this call's state) and <c>file.watcher.updated</c>
+    /// (which Fleet turns into <c>files.changed</c>, so open files and the file list reload). OpenCode (1.x) gets the second from its file
     /// watcher; V2 has one too but doesn't send it on the event stream. The path is made absolute, as the watcher's
     /// are, against the event's folder. Edits by other means (a shell's <c>sed</c>) aren't seen; the client reloads open
     /// files when the turn ends for those.
@@ -1126,10 +1127,21 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             return [];
 
         var fullPath = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory!, path));
+        FileChange? change = tool.Name == "write"
+            ? ReadString(input, "content") is { } content ? new FileChange { Path = fullPath, Content = content } : null
+            : ReadString(input, "oldString") is { Length: > 0 } oldString && ReadString(input, "newString") is { } newString
+                ? new FileChange
+                {
+                    Path = fullPath,
+                    OldString = oldString,
+                    NewString = newString,
+                    ReplaceAll = input.TryGetProperty("replaceAll", out var all) && all.ValueKind == JsonValueKind.True,
+                }
+                : null;
         return
         [
             Event(EventTypes.FilesWritten, JsonSerializer.SerializeToElement(
-                new FilesWrittenPayload { SessionId = fleetSessionId, MessageId = messageId, Paths = [fullPath] },
+                new FilesWrittenPayload { SessionId = fleetSessionId, MessageId = messageId, Paths = [fullPath], Changes = change is null ? [] : [change] },
                 OpenCode2JsonContext.Default.FilesWrittenPayload)),
             Event(EventTypes.FileWatcherUpdated, JsonSerializer.SerializeToElement(
                 new OpenCode2FileChangedPayload { File = fullPath, Event = "change" },

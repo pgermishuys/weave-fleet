@@ -617,6 +617,9 @@ public sealed class DomainEventTranslatorTests
         written.Payload.SessionId.ShouldBe("fleet-1");
         written.Payload.MessageId.ShouldBe("msg-1");
         written.Payload.Paths.ShouldBe(["/work/a.md", "/work/b.cs"]);
+
+        // A harness that doesn't say what each call did sends no changes: none, not null.
+        written.Payload.Changes.ShouldNotBeNull().ShouldBeEmpty();
     }
 
     [Fact]

@@ -408,6 +408,8 @@ internal sealed class DomainEventTranslator
             {
                 SessionId = ResolveSessionId(evt),
                 Paths = paths,
+                // Source-generated JSON sets init-only properties all at once, so a missing "changes" arrives as null.
+                Changes = payload.Changes ?? [],
             }
         };
     }
