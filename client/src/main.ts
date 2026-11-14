@@ -92,3 +92,4 @@ app.mount("#app");
 startServiceWorker((path) => {
   void router.history.push(path);
 });
+// scratch: mixed change
