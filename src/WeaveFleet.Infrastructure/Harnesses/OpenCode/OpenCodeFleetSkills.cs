@@ -1,5 +1,3 @@
-using WeaveFleet.Application.Skills;
-
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 /// <summary>
@@ -26,8 +24,6 @@ internal static class OpenCodeFleetSkills
     private const string ResourcePrefix = "opencode/skills/";
     private const string BuiltInResourcePrefix = "opencode/built-in-skills/";
 
-    private static readonly Lazy<IReadOnlyList<BuiltInSkill>> _builtIn = new(ReadBuiltIn);
-
     /// <summary>
     /// Writes the skills every session gets to <c>{dataDirectory}/opencode/skills</c>, leaving identical copies alone,
     /// deletes files there that Fleet no longer ships, and returns the folder.
@@ -42,9 +38,6 @@ internal static class OpenCodeFleetSkills
     public static string InstallBuiltIn(string dataDirectory) =>
         Install(BuiltInResourcePrefix, Path.Combine(dataDirectory, "opencode", "built-in-skills"));
 
-    /// <summary>The built-in skills, with the name and description from each one's <c>SKILL.md</c>, in name order.</summary>
-    public static IReadOnlyList<BuiltInSkill> BuiltIn => _builtIn.Value;
-
     /// <summary>Each embedded skill file under <paramref name="prefix"/>: its path under the skills folder and its resource name.</summary>
     internal static IEnumerable<(string RelativePath, string ResourceName)> Resources(string prefix = ResourcePrefix) =>
         typeof(OpenCodeFleetSkills).Assembly.GetManifestResourceNames()
@@ -54,24 +47,10 @@ internal static class OpenCodeFleetSkills
             .Select(resource => (Path.Combine(resource.Normalized[prefix.Length..].Split('/')), resource.Name));
 
     /// <summary>
-    /// The <c>name</c> and <c>description</c> lines of a skill's front matter. Fleet writes its own skills, so a plain
-    /// line scan is enough; a test keeps them to single-line values.
-    /// </summary>
-    internal static BuiltInSkill? ParseFrontMatter(string content) => SkillVersions.ParseFrontMatter(content);
-
-    /// <summary>
     /// The variable with the folders of the owner's own versions of built-in skills, separated like <c>PATH</c>. Each
     /// folder is one version, so a new version changes the pool key and new sessions get a process that loads it.
     /// </summary>
     internal const string YourVersionsVariable = "FLEET_YOUR_SKILLS";
-
-    /// <summary>A built-in skill's <c>SKILL.md</c> as Fleet ships it, or null when Fleet doesn't ship it.</summary>
-    public static string? ContentOf(string name)
-    {
-        var resource = Resources(BuiltInResourcePrefix)
-            .FirstOrDefault(resource => resource.RelativePath == Path.Combine(name, "SKILL.md"));
-        return resource.ResourceName is null ? null : System.Text.Encoding.UTF8.GetString(EmbeddedFiles.Read(resource.ResourceName));
-    }
 
     private static string Install(string prefix, string root)
     {
@@ -93,20 +72,4 @@ internal static class OpenCodeFleetSkills
         BuiltInSkillFiles.RemoveEmptyFolders(root);
         return root;
     }
-
-    private static List<BuiltInSkill> ReadBuiltIn() =>
-        Resources(BuiltInResourcePrefix)
-            .Where(resource => Path.GetFileName(resource.RelativePath) == "SKILL.md")
-            .Select(resource => ParseFrontMatter(System.Text.Encoding.UTF8.GetString(EmbeddedFiles.Read(resource.ResourceName)))
-                ?? throw new InvalidOperationException($"{resource.RelativePath} has no name or description."))
-            .OrderBy(skill => skill.Name, StringComparer.Ordinal)
-            .ToList();
-}
-
-/// <summary>The built-in skills Fleet embeds, for Settings.</summary>
-internal sealed class OpenCodeBuiltInSkillCatalog : IBuiltInSkillCatalog
-{
-    public IReadOnlyList<BuiltInSkill> Skills => OpenCodeFleetSkills.BuiltIn;
-
-    public string? ContentOf(string name) => OpenCodeFleetSkills.ContentOf(name);
 }

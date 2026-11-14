@@ -265,7 +265,7 @@ public sealed class SessionMessagesLiveTests
             });
         }
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }

@@ -46,7 +46,7 @@ public sealed class CompactedSessionLiveTests
         var processEnvironment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, llm.BaseUrl, plugin, contextLimit: 10_000);
         ScriptModel(llm.Queue);
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }

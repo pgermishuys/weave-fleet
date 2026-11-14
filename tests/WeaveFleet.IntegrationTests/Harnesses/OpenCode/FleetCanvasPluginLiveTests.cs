@@ -52,7 +52,7 @@ public sealed partial class FleetCanvasPluginLiveTests
         var processEnvironment = WriteScratchOpenCodeHome(root, llm.BaseUrl);
         ScriptModel(llm.Queue);
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         List<int> pooledProcessIds = [];
         try
         {
@@ -185,7 +185,7 @@ public sealed partial class FleetCanvasPluginLiveTests
         });
         llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }
@@ -241,7 +241,7 @@ public sealed partial class FleetCanvasPluginLiveTests
         });
         llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }
@@ -331,7 +331,7 @@ public sealed partial class FleetCanvasPluginLiveTests
         });
         llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }

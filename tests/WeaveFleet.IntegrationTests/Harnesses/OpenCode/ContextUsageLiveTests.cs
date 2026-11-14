@@ -46,7 +46,7 @@ public sealed class ContextUsageLiveTests
         llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "It's in client/src/pages/login.vue.", InputTokens = 50_000, OutputTokens = 10 });
         llm.Queue.Fallback = _ => new ScriptedLlmResponse { Text = "Carrying on." };
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }

@@ -397,7 +397,7 @@ public sealed partial class WorkflowStepToolLiveTests
             });
         }
 
-        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        var factory = new KestrelFleetFactory(dbPath);
         try
         {
             try { _ = factory.Services; }

@@ -10,10 +10,11 @@ using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
-namespace WeaveFleet.Infrastructure.Tests.Services;
+namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 /// <summary>
 /// Reopening a session rebuilds it from OpenCode's history. Every part must come back exactly as the live stream
@@ -184,7 +185,7 @@ public sealed class OpenCodeReopenedSessionTests
         var activity = new SessionActivityTracker();
         activity.Update(FleetSessionId, "busy", "user-1");
 
-        var proxy = new OpenCodeSessionMessageProxy(
+        var proxy = new SessionMessageProxy(
             sessions,
             instances,
             activity,
@@ -192,7 +193,7 @@ public sealed class OpenCodeReopenedSessionTests
             new FakeSessionSnapshotBuilder(),
             new ServiceCollection().BuildServiceProvider(),
             new HarnessRegistry([new OpenCodeHarness(new FleetOptions())], []),
-            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+            NullLogger<SessionMessageProxy>.Instance);
 
         return await proxy.GetSnapshotAsync(FleetSessionId);
     }

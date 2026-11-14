@@ -56,14 +56,10 @@ internal static class OpenCodeMapper
                 ? HarnessErrorReader.TryRead(error)
                 : null,
             Finish = (msg.Info as OpenCodeAssistantMessage)?.Finish,
-            CompactionSummary = msg.Info is OpenCodeAssistantMessage assistant && IsCompactionSummary(assistant.Mode, assistant.Summary),
+            CompactionSummary = msg.Info is OpenCodeAssistantMessage assistant && DomainEventTranslator.IsCompactionSummary(assistant.Mode, assistant.Summary),
             Steered = msg.Info.Role == "user" && msg.Parts.OfType<OpenCodeTextPart>().Any(p => IsSteered(p.Metadata)),
         };
     }
-
-    /// <summary>The assistant message a compaction writes: its summary, in <c>mode: compaction</c> or with <c>summary: true</c>.</summary>
-    internal static bool IsCompactionSummary(string? mode, JsonElement? summary)
-        => mode == "compaction" || summary is { ValueKind: JsonValueKind.True };
 
     /// <summary>Whether a text part carries the mark Fleet puts on a prompt sent into a running turn.</summary>
     private static bool IsSteered(JsonElement? metadata)

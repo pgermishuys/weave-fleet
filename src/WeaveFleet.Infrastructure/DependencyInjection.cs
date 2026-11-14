@@ -187,7 +187,7 @@ public static class DependencyInjection
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<ISessionSnapshotBuilder, SessionSnapshotBuilder>();
-        services.AddScoped<ISessionMessageProxy, OpenCodeSessionMessageProxy>();
+        services.AddScoped<ISessionMessageProxy, SessionMessageProxy>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
@@ -236,7 +236,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Weave.WeaveConfigService>();
         services.AddSingleton<WeaveFleet.Application.Weave.WeaveDetectionCache>();
         services.AddSingleton<WeaveFleet.Application.Weave.IWeavePackageVersions, WeaveFleet.Infrastructure.Weave.NpmWeavePackageVersions>();
-        services.AddSingleton<IBuiltInSkillCatalog, WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeBuiltInSkillCatalog>();
+        services.AddSingleton<IBuiltInSkillCatalog, BuiltInSkillCatalog>();
         services.AddScoped<BuiltInSkillService>();
         services.AddSingleton<ISkillVersionStore>(sp => new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(sp.GetRequiredService<FleetOptions>()));
         services.AddSingleton<WeaveFleet.Application.Mods.IModVersionStore>(sp => new WeaveFleet.Infrastructure.Mods.FileModVersionStore(sp.GetRequiredService<FleetOptions>()));

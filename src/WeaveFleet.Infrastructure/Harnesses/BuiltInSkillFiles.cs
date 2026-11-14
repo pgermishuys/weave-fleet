@@ -29,6 +29,19 @@ internal static class BuiltInSkillFiles
         .Select(resource => resource.RelativePath.Split(Path.DirectorySeparatorChar)[0])
         .ToHashSet(StringComparer.Ordinal);
 
+    private static readonly Lazy<IReadOnlyList<BuiltInSkill>> _builtIn = new(ReadBuiltIn);
+
+    /// <summary>The built-in skills, with the name and description from each one's <c>SKILL.md</c>, in name order.</summary>
+    public static IReadOnlyList<BuiltInSkill> BuiltIn => _builtIn.Value;
+
+    /// <summary>A built-in skill's <c>SKILL.md</c> as Fleet ships it, or null when Fleet doesn't ship it.</summary>
+    public static string? ContentOf(string name)
+    {
+        var resource = Resources(Prefix)
+            .FirstOrDefault(resource => resource.RelativePath == Path.Combine(name, "SKILL.md"));
+        return resource.ResourceName is null ? null : Encoding.UTF8.GetString(Read(resource.ResourceName));
+    }
+
     /// <summary>
     /// Makes <paramref name="root"/> hold exactly the built-in skills in <paramref name="enabled"/>, one folder per skill,
     /// leaving identical files alone. A skill in <paramref name="yours"/> gets the owner's version of its
@@ -120,6 +133,18 @@ internal static class BuiltInSkillFiles
 
         return new OwnerSkills(skills.Select(skill => skill.Name).ToList(), yours);
     }
+
+    /// <summary>
+    /// Each built-in skill's <c>name</c> and <c>description</c> from its front matter. Fleet writes its own skills, so a
+    /// plain line scan is enough; a test keeps them to single-line values.
+    /// </summary>
+    private static List<BuiltInSkill> ReadBuiltIn() =>
+        Resources(Prefix)
+            .Where(resource => Path.GetFileName(resource.RelativePath) == "SKILL.md")
+            .Select(resource => SkillVersions.ParseFrontMatter(Encoding.UTF8.GetString(Read(resource.ResourceName)))
+                ?? throw new InvalidOperationException($"{resource.RelativePath} has no name or description."))
+            .OrderBy(skill => skill.Name, StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>The owner's folder name: a short hash, since an owner id can be anything.</summary>
     internal static string OwnerFolder(string ownerUserId)
