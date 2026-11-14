@@ -226,7 +226,7 @@ watch(open, async (isOpen) => {
               v-if="isCreating"
               class="h-4 w-4 animate-spin"
             />
-            {{ isCreating ? "Creating…" : "Create Project" }}
+            {{ isCreating ? "Creating…" : "Create project" }}
           </Button>
         </DialogFooter>
       </form>

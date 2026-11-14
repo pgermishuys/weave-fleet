@@ -282,7 +282,7 @@ async function submitInstall(): Promise<void> {
             :size="16"
             aria-hidden="true"
           />
-          <span>{{ isInstalling ? "Installing…" : "Install Tool" }}</span>
+          <span>{{ isInstalling ? "Installing…" : "Install tool" }}</span>
         </Button>
       </form>
     </div>

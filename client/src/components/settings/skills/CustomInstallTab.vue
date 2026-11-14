@@ -97,7 +97,7 @@ async function submitInstall(): Promise<void> {
             :size="16"
             aria-hidden="true"
           />
-          <span>{{ isInstalling ? "Installing…" : "Install Skill" }}</span>
+          <span>{{ isInstalling ? "Installing…" : "Install skill" }}</span>
         </Button>
       </form>
     </div>
