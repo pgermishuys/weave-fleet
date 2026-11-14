@@ -43,14 +43,40 @@ internal sealed class CdpConnection : IAsyncDisposable
 
     public bool IsOpen => _socket.State == WebSocketState.Open;
 
+    /// <summary>
+    /// How long opening the websocket may take. A browser answers in milliseconds; one that wrote its DevTools port and
+    /// then wedged takes the connection and never answers the upgrade, and without a bound that waited for ever (a
+    /// macOS CI run sat on the page check until the job's 15 minutes ran out).
+    /// </summary>
+    public static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromSeconds(10);
+
     /// <param name="replyTimeout">How long a command waits for its reply; <see cref="DefaultReplyTimeout"/> when not given.</param>
-    public static async Task<CdpConnection> ConnectAsync(Uri url, CancellationToken ct, TimeSpan? replyTimeout = null)
+    /// <param name="connectTimeout">How long opening the websocket may take; <see cref="DefaultConnectTimeout"/> when not given.</param>
+    /// <exception cref="CdpException">The browser didn't answer the websocket upgrade in time.</exception>
+    public static async Task<CdpConnection> ConnectAsync(Uri url, CancellationToken ct, TimeSpan? replyTimeout = null, TimeSpan? connectTimeout = null)
     {
         var socket = new ClientWebSocket();
         // A screenshot arrives as one base64 blob of tens of kilobytes; a bigger receive buffer than the 4 KB
         // default means fewer trips round the read loop for it.
         socket.Options.SetBuffer(64 * 1024, 4 * 1024);
-        await socket.ConnectAsync(url, ct);
+        var limit = connectTimeout ?? DefaultConnectTimeout;
+        using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        connecting.CancelAfter(limit);
+        try
+        {
+            await socket.ConnectAsync(url, connecting.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            socket.Dispose();
+            throw new CdpException($"The browser didn't answer on its DevTools port within {limit.TotalSeconds:0.#} seconds.");
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+
         return new CdpConnection(socket, replyTimeout ?? DefaultReplyTimeout);
     }
 
@@ -84,15 +110,43 @@ internal sealed class CdpConnection : IAsyncDisposable
             writer.WriteEndObject();
         }
 
-        await _send.WaitAsync(ct);
+        // The send has the same bound as the reply: a browser that stopped reading fills the socket's buffer, and a
+        // send into a full buffer waits for ever.
+        using var sending = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        sending.CancelAfter(_replyTimeout);
         try
         {
-            await _socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Text, true, ct);
+            await _send.WaitAsync(sending.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _pending.TryRemove(id, out _);
+            throw new CdpException($"Sending {method} to the browser waited {_replyTimeout.TotalSeconds:0.#} seconds behind another call.");
+        }
+        catch
+        {
+            _pending.TryRemove(id, out _);
+            throw;
+        }
+
+        try
+        {
+            await _socket.SendAsync(buffer.WrittenMemory, WebSocketMessageType.Text, true, sending.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _pending.TryRemove(id, out _);
+            throw new CdpException($"Sending {method} to the browser didn't finish within {_replyTimeout.TotalSeconds:0.#} seconds.");
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
             _pending.TryRemove(id, out _);
             throw new CdpException($"Sending {method} to the browser failed: {error.Message}");
+        }
+        catch
+        {
+            _pending.TryRemove(id, out _);
+            throw;
         }
         finally
         {
