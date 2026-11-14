@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # Tests scripts/release-ci-gate.sh against a fake `gh` that answers from fixture files, in a throwaway git repository:
-# green, red, cancelled, still running then green or red, never ran, a commit that only changes ignored paths, a
-# "CI passed" job that failed, and an API that keeps failing. Also checks the paths the gate treats as ignored still
-# match ci.yml's push paths-ignore. Needs no network and no token.
+# green, red, cancelled, still running then green or red, never ran, a "CI passed" job that failed, and an API that
+# keeps failing. Needs no network and no token.
 set -euo pipefail
 export LC_ALL=C
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GATE="$SCRIPT_DIR/release-ci-gate.sh"
-CI_YML="$SCRIPT_DIR/../.github/workflows/ci.yml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -42,20 +40,16 @@ fi
 SH
 chmod +x "$WORK/bin/gh"
 
-# A repository: base (code) → code change → docs-only change.
+# A repository: a code commit, then a docs-only commit on top of it.
 REPO="$WORK/repo"
 git init -q "$REPO"
-git -C "$REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base
-mkdir -p "$REPO/src" "$REPO/.weave"
+mkdir -p "$REPO/src"
 echo one > "$REPO/src/app.cs"
 git -C "$REPO" add -A && git -C "$REPO" -c user.name=t -c user.email=t@t commit -q -m code
 CODE=$(git -C "$REPO" rev-parse HEAD)
-echo notes > "$REPO/README.md"; echo plan > "$REPO/.weave/plan.txt"; echo d > "$REPO/src/notes.md"
+echo notes > "$REPO/README.md"
 git -C "$REPO" add -A && git -C "$REPO" -c user.name=t -c user.email=t@t commit -q -m docs
 DOCS=$(git -C "$REPO" rev-parse HEAD)
-echo two > "$REPO/src/app.cs"
-git -C "$REPO" add -A && git -C "$REPO" -c user.name=t -c user.email=t@t commit -q -m code-after-docs
-CODE2=$(git -C "$REPO" rev-parse HEAD)
 
 case_no=0
 # run_gate <name> <sha> <expected exit> <expected output fragment>; fixtures are written by the caller first.
@@ -120,32 +114,12 @@ reset; printf '\n---\n21 completed success push\n' > "$WORK/fixtures/runs-$CODE.
 GRACE=60 run_gate "waits for a run that hasn't started yet" "$CODE" 0 "actions/runs/21"
 
 reset; fx "runs-$CODE" "22 completed success push"
-run_gate "a docs-only commit is judged by its parent's green run" "$DOCS" 0 "only changes paths ci.yml ignores; judging it by its CI run on $CODE"
-
-reset; fx "runs-$CODE" "23 completed failure push"
-run_gate "a docs-only commit whose parent is red is blocked" "$DOCS" 1 "ci.yml didn't pass on $CODE"
-
-reset; fx "runs-$DOCS" "24 completed success workflow_dispatch"; fx "runs-$CODE" "25 completed failure push"
-run_gate "a docs-only commit's own run wins over its parent's" "$DOCS" 0 "actions/runs/24"
-
-reset; fx "runs-$CODE" "26 completed success push"
-run_gate "a code change on top of a docs-only commit needs its own run" "$CODE2" 1 "ci.yml never ran on $CODE2"
+run_gate "a docs-only commit needs its own run: its parent's green one doesn't count" "$DOCS" 1 "ci.yml never ran on $DOCS"
 
 reset; touch "$WORK/fixtures/api-down"
 run_gate "an API that keeps failing blocks, never reads as no runs" "$CODE" 1 "HTTP 502"
 calls=$(grep -c "^api " "$WORK/fixtures/calls")
 [ "$calls" -eq 5 ] || fail "API down: expected 5 attempts, got $calls"
 echo "ok $((case_no + 1)) - the API is tried 5 times"
-
-# The gate's ignored paths must be ci.yml's push paths-ignore, no more, no fewer.
-ignored=$(awk '
-  /^  push:/ { in_push = 1; next }
-  in_push && /^  [a-z_]+:/ { in_push = 0 }
-  in_push && /paths-ignore:/ { in_list = 1; next }
-  in_list && /^ *- / { sub(/^ *- */, ""); gsub(/\x27|"/, ""); print; next }
-  in_list { in_list = 0 }
-' "$CI_YML" | sort | tr '\n' ' ')
-[ "$ignored" = "**/*.md .weave/** " ] || fail "ci.yml's push paths-ignore is now '$ignored': update is_ci_ignored_path in release-ci-gate.sh"
-echo "ok $((case_no + 2)) - ignored paths match ci.yml's push paths-ignore"
 
 echo "All release CI gate tests passed."

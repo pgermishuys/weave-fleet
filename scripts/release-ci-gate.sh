@@ -6,10 +6,9 @@
 # count: they test the PR merged into main, not this commit. A red or cancelled run fails at once, and so does a
 # commit CI never ran on (after a few minutes' grace for the run to show up). Each failure says how to recover.
 #
-# ci.yml skips pushes that only change '**/*.md' or '.weave/**', so a tag on such a commit is judged by the nearest
-# ancestor CI ran on, as long as everything since it is in those paths.
+# There's no stand-in: ci.yml runs on every push to main, docs-only ones too, so the tagged commit itself needs its run.
 #
-# Usage: release-ci-gate.sh <commit-ish> [<tag>]   (run inside a clone that has the commit and its recent history)
+# Usage: release-ci-gate.sh <commit-ish> [<tag>]   (run inside a clone that has the commit)
 # Env:   GH_REPO (owner/name, required), GH_TOKEN (for gh), GATE_TIMEOUT_SECONDS (default 3600),
 #        GATE_NO_RUN_GRACE_SECONDS (default 300), GATE_POLL_SECONDS (default 30), GATE_CI_WORKFLOW (default ci.yml),
 #        GATE_REQUIRED_JOB (default "CI passed"), GATE_RETRY_SECONDS (API retry back-off step, default 5).
@@ -26,16 +25,7 @@ required_job="${GATE_REQUIRED_JOB:-CI passed}"
 timeout_seconds="${GATE_TIMEOUT_SECONDS:-3600}"
 grace_seconds="${GATE_NO_RUN_GRACE_SECONDS:-300}"
 poll_seconds="${GATE_POLL_SECONDS:-30}"
-max_ancestors=20
 retry_seconds="${GATE_RETRY_SECONDS:-5}"
-
-# The paths ci.yml's push trigger ignores (its paths-ignore); scripts/test-release-ci-gate.sh checks they still match.
-is_ci_ignored_path() {
-  case "$1" in
-    *.md | .weave/*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 
 summary() {
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
@@ -122,38 +112,12 @@ required_job_conclusion() {
     --jq ".jobs[] | select(.name == \"${required_job}\") | (.conclusion // .status)"
 }
 
-# Finds the commit whose CI run stands for $sha: $sha itself, or its nearest first-parent ancestor with a CI run when
-# every file changed since then is one ci.yml ignores. Prints nothing when there's no such commit (yet).
-# Every call's output is assigned before it's tested, so a failed API call fails the script instead of reading as "no run".
-ci_commit_for() {
-  local runs ancestor ancestors changed path
-  runs="$(ci_runs "$sha")"
-  if [ -n "$runs" ]; then
-    echo "$sha"
-    return
-  fi
-  ancestors="$(git rev-list --first-parent --max-count="$max_ancestors" "${sha}~1" 2>/dev/null || true)"
-  for ancestor in $ancestors; do
-    runs="$(ci_runs "$ancestor")"
-    if [ -n "$runs" ]; then
-      changed="$(git diff --name-only "$ancestor" "$sha")"
-      while IFS= read -r path; do
-        [ -z "$path" ] && continue
-        is_ci_ignored_path "$path" || return 0
-      done <<< "$changed"
-      echo "$ancestor"
-      return
-    fi
-  done
-}
-
 start="$(date +%s)"
-announced=""
 while :; do
   elapsed=$(( $(date +%s) - start ))
-  ci_sha="$(ci_commit_for)"
+  runs="$(ci_runs "$sha")"
 
-  if [ -z "$ci_sha" ]; then
+  if [ -z "$runs" ]; then
     if [ "$elapsed" -ge "$grace_seconds" ]; then
       fail "${workflow} never ran on ${sha}${tag:+ (${tag})}, so nothing shows it passed." \
         "Only push and workflow_dispatch runs on this exact commit count (pull request runs test a merge commit)." \
@@ -164,12 +128,6 @@ while :; do
     continue
   fi
 
-  if [ "$ci_sha" != "$sha" ] && [ -z "$announced" ]; then
-    echo "::notice::${sha} only changes paths ${workflow} ignores; judging it by its CI run on ${ci_sha}."
-    announced=1
-  fi
-
-  runs="$(ci_runs "$ci_sha")"
   passed_run=""
   pending=""
   verdicts=""
@@ -199,22 +157,22 @@ while :; do
 
   if [ -n "$passed_run" ]; then
     url="https://github.com/${repo}/actions/runs/${passed_run}"
-    echo "${workflow} passed on ${ci_sha}: ${url}"
-    summary "CI passed on \`${ci_sha}\`${tag:+ (${tag})}: ${url}"
+    echo "${workflow} passed on ${sha}: ${url}"
+    summary "CI passed on \`${sha}\`${tag:+ (${tag})}: ${url}"
     exit 0
   fi
 
   if [ -z "$pending" ]; then
-    fail "${workflow} didn't pass on ${ci_sha}${tag:+ (${tag})}." "${verdicts%$'\n'}" \
+    fail "${workflow} didn't pass on ${sha}${tag:+ (${tag})}." "${verdicts%$'\n'}" \
       "$(if [ -n "$failed_ids" ]; then recovery failed "$failed_ids"; else recovery cancelled ""; fi)"
   fi
 
   if [ "$elapsed" -ge "$timeout_seconds" ]; then
-    fail "${workflow} on ${ci_sha} was still running after ${timeout_seconds}s." "${verdicts%$'\n'}" \
+    fail "${workflow} on ${sha} was still running after ${timeout_seconds}s." "${verdicts%$'\n'}" \
       "$(recovery still-running "$open_ids")"
   fi
 
-  echo "${workflow} on ${ci_sha} is still running (${elapsed}s):"
+  echo "${workflow} on ${sha} is still running (${elapsed}s):"
   printf '%s' "$verdicts"
   sleep "$poll_seconds"
 done
