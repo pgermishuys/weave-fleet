@@ -86,8 +86,8 @@ The Release workflow builds and publishes nothing until `ci.yml` has passed on t
 - While a run is still going, it waits, for up to an hour.
 - A red or cancelled run blocks the release at once. So does a commit `ci.yml` never ran on, after 5 minutes for the
   run to show up.
-- `ci.yml` skips pushes that only change `**/*.md` or `.weave/**`. A tag on such a commit is judged by the nearest
-  commit before it that CI ran on, as long as everything since then is in those paths.
+- No other commit's run stands in for it, not even its parent's. `ci.yml` runs on every push to main, docs-only ones
+  too, because some `.md` files are built into Fleet (built-in skills) or read by tests.
 
 When it blocks a release, the job's log says why and gives the exact commands, with the run ids filled in. Nothing
 has been built or published at that point. Don't move, delete or re-push the tag, and don't publish anything by hand.
