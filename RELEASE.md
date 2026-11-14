@@ -56,6 +56,25 @@ GitHub Releases is the primary public distribution channel. The supported instal
    the card lists the first new and fixed changes. Tests, refactors, docs, CI and other behind-the-scenes changes are
    only counted, never listed.
 
+## Trying a release without releasing (dry run)
+
+Run the **Release** workflow by hand on any branch, for example to try a change to `release.yml`:
+
+```bash
+gh workflow run ci.yml --ref <branch>       # the dry run checks CI on the commit too
+gh workflow run release.yml --ref <branch>  # optional: -f version=0.72.0 -f compare_with=v0.72.0
+```
+
+It runs every job a tag would: the CI check, the four platform builds with their smoke tests, the desktop installers
+with theirs, and the publish job's assembly (merged update feeds, `checksums.txt`, the unversioned installers, the
+install scripts). Then it compares that set with the latest published release, or the one given in `compare_with`:
+the same asset names once versions are lined up, each package within 80–125% of its size, and the files each package
+contains. It writes the comparison to the run's summary. The version stamped on the packages is the one in
+`Directory.Build.props` unless you give another.
+
+It publishes nothing. Creating the GitHub Release, the vanity URL deploy and the website notification run only for a
+pushed `v*` tag. The packages are left as the run's artifacts for 7 days.
+
 ## A release needs CI to have passed on its commit
 
 The Release workflow builds and publishes nothing until `ci.yml` has passed on the exact commit the tag points at
@@ -121,7 +140,7 @@ It then publishes a GitHub Release containing:
 
 The desktop packages take their version from the tag; `desktop/package.json`'s version only matters in development.
 To build the installers without releasing, run the **Desktop packages** workflow by hand: they come out as workflow
-artifacts.
+artifacts. To try the whole release, run a [dry run](#trying-a-release-without-releasing-dry-run).
 
 ### Desktop installers are unsigned for now
 
