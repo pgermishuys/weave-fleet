@@ -2,6 +2,8 @@ using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Automations;
+using WeaveFleet.Application.Git;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -37,11 +39,17 @@ public sealed partial class DreamingAutomation(
     private static readonly StringComparer PathComparer =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     /// <summary>How often a night looks at whether its dream has ended.</summary>
     internal TimeSpan PollEvery { get; init; } = TimeSpan.FromSeconds(5);
 
     /// <summary>A dream still going after this no longer holds up the night.</summary>
     internal TimeSpan GiveUpAfter { get; init; } = TimeSpan.FromMinutes(90);
+
+    /// <summary>The folder every quick chat gets its own folder in: none of those is a repository, even when it sits inside one.</summary>
+    internal string QuickChats { get; init; } = QuickChatSessionSourceProvider.BasePath;
 
     public async Task<bool> IsOnAsync(Automation automation)
     {
@@ -91,17 +99,29 @@ public sealed partial class DreamingAutomation(
         return new AutomationExecutionOutcome(null, null, null, Summary: summary);
     }
 
-    /// <summary>The repositories with sessions started since <paramref name="since"/>, the busiest first. Dreaming sessions don't count.</summary>
+    /// <summary>
+    /// The repositories with sessions started since <paramref name="since"/>, the busiest first. Dreaming sessions don't
+    /// count, and neither do sessions outside a git repository: a quick chat's folder, or any other plain folder.
+    /// </summary>
     internal async Task<List<(string Repository, int Sessions)>> RepositoriesSinceAsync(DateTimeOffset since)
     {
         var started = await sessions.ListCreatedSinceAsync(since.UtcDateTime.ToString("O"), DreamRules.NightSessionsScanned).ConfigureAwait(false);
         return [.. started
-            .Where(s => !s.IsHidden && !s.Tags.Contains(DreamRules.SessionTag) && !string.IsNullOrWhiteSpace(s.Directory))
+            .Where(s => !s.IsHidden && !s.Tags.Contains(DreamRules.SessionTag) && !string.IsNullOrWhiteSpace(s.Directory)
+                && !IsQuickChat(s.Directory) && GitPaths.MainCheckoutOf(s.Directory) is not null)
             .GroupBy(s => AgentMemory.RepositoryOf(s.Directory), PathComparer)
             .Where(group => Directory.Exists(group.Key))
             .Select(group => (Repository: group.Key, Sessions: group.Count()))
             .OrderByDescending(r => r.Sessions)
             .ThenBy(r => r.Repository, StringComparer.Ordinal)];
+    }
+
+    private bool IsQuickChat(string directory)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(QuickChats));
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        return full.Equals(root, PathComparison)
+            || (full.Length > root.Length && full.StartsWith(root, PathComparison) && full[root.Length] is '/' or '\\');
     }
 
     /// <summary>Dreams about each repository in turn until the budget is spent, writing the run's summary as it goes, then settles the run.</summary>
