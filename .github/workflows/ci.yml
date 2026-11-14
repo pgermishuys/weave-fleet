@@ -1,11 +1,10 @@
 name: CI
 
 on:
+  # No paths-ignore on pull requests: "CI passed" is the check the repository requires, and a PR whose run never
+  # starts never reports it, so the PR could never merge. Jobs a PR's changes can't affect skip themselves instead.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '.weave/**'
   push:
     branches: [main]
     paths-ignore:
@@ -17,9 +16,12 @@ permissions:
   contents: read
   checks: write
 
+# A new push to a PR cancels that PR's previous run. Every other run (each push to main, each dispatch) gets a group
+# of its own, so no run ever cancels or displaces it: with a shared group GitHub keeps one running and one pending
+# run and cancels any older pending one, even with cancel-in-progress off.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ── .NET unit tests ──────────────────────────────────────────────────────
@@ -34,8 +36,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -109,8 +109,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -615,8 +613,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -841,3 +837,49 @@ jobs:
           echo "::error::AOT binary did not become healthy within 30s"
           cat "$log_path"
           exit 1
+
+  # ── CI passed ─────────────────────────────────────────────────────────────
+  # The one check the repository requires. GitHub requires checks by name, the job list changes (shards, jobs that
+  # skip for a PR's paths), and a required check that never reports blocks the PR for good, so this job stands for
+  # them all. It runs whatever happened before it, and passes only when every job it needs succeeded or was skipped:
+  # a failed or cancelled job fails it.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [unit, live, client-checks, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, e2e, aot]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout the workflow
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows/ci.yml
+          sparse-checkout-cone-mode: false
+
+      # A job added to ci.yml but left out of needs would never hold up a merge, so a missing one fails here.
+      - name: Check every job is in needs
+        shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jobs=$(yq -r '.jobs | keys | .[] | select(. != "ci-passed")' .github/workflows/ci.yml | sort)
+          needed=$(jq -r 'keys[]' <<<"$NEEDS" | sort)
+          missing=$(comm -23 <(echo "$jobs") <(echo "$needed"))
+          if [ -n "$missing" ]; then
+            echo "::error::Add these jobs to ci-passed's needs: $(echo $missing)"
+            exit 1
+          fi
+
+      - name: Check every job succeeded or was skipped
+        shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          failed=$(jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key) (\(.value.result))"] | join(", ")' <<<"$NEEDS")
+          if [ -n "$failed" ]; then
+            echo "::error::These jobs didn't pass: $failed"
+            exit 1
+          fi
+          echo "Every job succeeded or was skipped."
