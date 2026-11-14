@@ -2,14 +2,14 @@ name: CI
 
 on:
   # No paths-ignore on pull requests: "CI passed" is the check the repository requires, and a PR whose run never
-  # starts never reports it, so the PR could never merge. Jobs a PR's changes can't affect skip themselves instead.
+  # starts never reports it, so the PR could never merge. Jobs a PR's changes can't affect skip themselves instead
+  # (the Changed paths job).
   pull_request:
     branches: [main]
+  # Main runs everything on every push: no paths-ignore (opencode/skills/**/SKILL.md and docs/workflows.md are .md
+  # files the build embeds or a test reads).
   push:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '.weave/**'
   workflow_dispatch:
 
 permissions:
@@ -24,10 +24,53 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # ── Changed paths ─────────────────────────────────────────────────────────
+  # Which jobs a pull request's changes can affect (.github/scripts/ci-changes.sh says what reads each path and why).
+  # A job it rules out is skipped, and "CI passed" counts a skipped job as fine. Pushes to main and dispatches run
+  # everything. If this job fails, every other job is skipped and "CI passed" fails.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dotnet: ${{ steps.paths.outputs.dotnet }}
+      aot: ${{ steps.paths.outputs.aot }}
+      e2e: ${{ steps.paths.outputs.e2e }}
+      client: ${{ steps.paths.outputs.client }}
+      desktop: ${{ steps.paths.outputs.desktop }}
+      launchers: ${{ steps.paths.outputs.launchers }}
+
+    steps:
+      # A pull request checks out its merge commit: parent 1 is main as the PR would land on it, so diffing the two
+      # gives exactly what the PR changes.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: false
+
+      - name: Work out which jobs to run
+        id: paths
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            .github/scripts/ci-changes.sh --all | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Both paths of a rename count. Fails the job (and so "CI passed") if git can't diff.
+          git rev-parse --verify -q HEAD^2 >/dev/null || { echo "::error::HEAD isn't the PR's merge commit."; exit 1; }
+          git diff --name-only --no-renames HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          echo "Changed: $(wc -l < "$RUNNER_TEMP/changed.txt") files"
+          sed 's/^/  /' "$RUNNER_TEMP/changed.txt" | head -200
+          .github/scripts/ci-changes.sh < "$RUNNER_TEMP/changed.txt" | tee -a "$GITHUB_OUTPUT"
+
   # ── .NET unit tests ──────────────────────────────────────────────────────
   # The one build that runs every analyzer (code style, trimming), so those problems still fail CI. The other
   # .NET jobs build with -p:RunAnalyzers=false.
   unit:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     name: .NET Unit Tests
     # Not ubuntu-latest: that is Ubuntu 26.04 now, which the pinned Playwright can't install a browser on.
     runs-on: ubuntu-24.04
@@ -96,6 +139,8 @@ jobs:
 
   # ── .NET live tests (real OpenCode / OpenCode 2) ─────────────────────────
   live:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     name: .NET Live Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -268,6 +313,8 @@ jobs:
 
   # ── Frontend checks (lint, typecheck) ───────────────────────────────────
   client-checks:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
     name: Client checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -300,6 +347,8 @@ jobs:
 
   # ── Frontend unit tests, split across two shards ─────────────────────────
   client:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
     name: Client tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -367,6 +416,8 @@ jobs:
 
   # ── Mod host (mods/host: Bun + TypeScript) ───────────────────────────────
   mods-host:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     name: Mod host
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -430,6 +481,8 @@ jobs:
 
   # ── fleet launchers (bin/fleet, bin/fleet.cmd) ───────────────────────────
   launchers:
+    needs: changes
+    if: needs.changes.outputs.launchers == 'true'
     name: Launchers (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
@@ -460,6 +513,8 @@ jobs:
   # with the session's Job Object, which only Windows has. The mod runtime tests run here too: Fleet starts bun.exe
   # with a cleared environment, which only a real Windows start can prove.
   windows-processes:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     name: Windows processes
     runs-on: windows-latest
     timeout-minutes: 15
@@ -508,6 +563,8 @@ jobs:
   # each other Unix Fleet's code has a path for. Fleet ships macOS for Apple silicon only (osx-arm64 in release.yml),
   # so Intel Mac isn't tested. On the Mac, the page check in headless Chrome runs here too.
   mods-file-safety:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     name: Mod file safety (${{ matrix.runs_on }})
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 15
@@ -573,6 +630,8 @@ jobs:
 
   # ── Desktop app ──────────────────────────────────────────────────────────
   desktop:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     name: Desktop
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -605,6 +664,8 @@ jobs:
   # Builds and tests in one job so the E2E project's packages come from its own
   # restore, not from a NuGet cache another job saved.
   e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     name: E2E
     # Not ubuntu-latest: that is Ubuntu 26.04 now, which the pinned Playwright can't install a browser on.
     runs-on: ubuntu-24.04
@@ -735,6 +796,8 @@ jobs:
 
   # ── AOT publish validation ────────────────────────────────────────────────
   aot:
+    needs: changes
+    if: needs.changes.outputs.aot == 'true'
     name: AOT Publish
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -846,7 +909,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [unit, live, client-checks, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, e2e, aot]
+    needs: [changes, unit, live, client-checks, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, e2e, aot]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
