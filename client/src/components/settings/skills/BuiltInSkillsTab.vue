@@ -251,7 +251,7 @@ async function toggleFleetChange(name: string): Promise<void> {
 
 .skill-pill--yours {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .skill-pill--changed {
@@ -281,7 +281,7 @@ async function toggleFleetChange(name: string): Promise<void> {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   font-weight: 500;
   cursor: pointer;

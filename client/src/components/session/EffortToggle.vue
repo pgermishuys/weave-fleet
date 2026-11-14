@@ -107,7 +107,7 @@ function cycleEffort(): void {
 }
 
 .effort-toggle__note {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 11px;
   white-space: nowrap;
 }

@@ -1466,7 +1466,7 @@ function handleKeydown(event: KeyboardEvent): void {
   padding: 0 8px;
   border-radius: var(--radius-btn);
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1565,7 +1565,7 @@ function handleKeydown(event: KeyboardEvent): void {
   padding: 0 4px 0 8px;
   border-radius: calc(var(--radius-btn) - 1px);
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 500;
 }

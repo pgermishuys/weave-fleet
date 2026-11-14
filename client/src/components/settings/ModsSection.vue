@@ -63,7 +63,7 @@ onMounted(load);
       Mods are on. The switch and the mod runtime (Bun) are in
       <button
         type="button"
-        class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        class="text-accent-text hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         data-testid="mods-features-link"
         @click="setActiveSection('plugin:mods')"
       >Plugins › Mods</button>.
@@ -77,7 +77,7 @@ onMounted(load);
       Mods are off. Turn Mods on in
       <button
         type="button"
-        class="text-accent hover:underline"
+        class="text-accent-text hover:underline"
         data-testid="mods-features-link"
         @click="setActiveSection('plugin:mods')"
       >Plugins › Mods</button>.

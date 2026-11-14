@@ -598,7 +598,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .msg-body__content :deep(code.file-ref:hover),
 .msg-body__content :deep(code.file-ref:focus-visible) {
-  color: var(--accent);
+  color: var(--accent-text);
   background: var(--accent-dim);
   text-decoration-style: solid;
 }
@@ -611,7 +611,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 .msg-command__name {
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono-stack);
   font-size: 0.92em;
   font-weight: 600;

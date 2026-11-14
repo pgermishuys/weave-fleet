@@ -1306,7 +1306,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 .complete-drop-zone--hovered {
   border-color: var(--accent);
   background: rgba(var(--accent-rgb, 139, 92, 246), 0.08);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .complete-drop-zone-enter-active,

@@ -828,7 +828,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
 .project-new:hover {
   background: color-mix(in srgb, var(--text) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .project-new:focus-visible {
@@ -1037,7 +1037,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
 .pinned-empty--over {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 </style>

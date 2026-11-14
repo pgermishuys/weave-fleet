@@ -726,7 +726,7 @@ function openSettings(): void {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   font-size: 11px;
   cursor: pointer;

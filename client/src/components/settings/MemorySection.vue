@@ -931,7 +931,7 @@ onMounted(load);
   border-radius: 999px;
   font-weight: 600;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .memory-life {

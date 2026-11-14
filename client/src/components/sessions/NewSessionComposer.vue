@@ -1482,7 +1482,7 @@ onUnmounted(() => {
   border: 0;
   padding: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   font-weight: 500;
   text-decoration: underline;

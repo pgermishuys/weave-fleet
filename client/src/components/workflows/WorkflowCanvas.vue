@@ -566,7 +566,7 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
 
 .wf-badge--you {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .wf-mono {

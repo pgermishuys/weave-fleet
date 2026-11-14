@@ -553,7 +553,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .pc__next--held {

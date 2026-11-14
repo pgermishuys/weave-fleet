@@ -376,7 +376,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
 .improve-pill--yours {
   border-color: transparent;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .improve-sees {

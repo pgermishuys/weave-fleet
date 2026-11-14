@@ -163,6 +163,6 @@ function redirectToLogin(): void {
 
 .auth-gate__home:hover {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 </style>

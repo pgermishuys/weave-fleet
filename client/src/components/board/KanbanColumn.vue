@@ -512,7 +512,7 @@ function showDropSlot(index: number): boolean {
 
 .kanban-col__inbox-pill {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .kanban-col__cards {

@@ -262,7 +262,7 @@ onUnmounted(() => {
 }
 
 .af-action--running {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .af-action--complete {

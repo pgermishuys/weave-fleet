@@ -83,5 +83,5 @@ function choose(key: string): void {
 .mx-item { display: grid; grid-template-columns: 7px 1fr auto; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; font: inherit; color: var(--text); }
 .mx-item:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
 .mx-item small { margin-left: 4px; color: var(--muted); font-size: 0.78571rem; }
-.mx-check { width: 12px; height: 12px; color: var(--accent); }
+.mx-check { width: 12px; height: 12px; color: var(--accent-text); }
 </style>

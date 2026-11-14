@@ -49,7 +49,7 @@ function answerPermission(tile: Tile, reply: PermissionReply): void {
       <h3 class="text-sm font-semibold text-text">
         Needs you
       </h3>
-      <span class="text-sm font-semibold text-accent">{{ items.length }}</span>
+      <span class="text-sm font-semibold text-accent-text">{{ items.length }}</span>
     </div>
     <div
       v-if="!items.length && loading"

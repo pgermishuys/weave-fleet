@@ -443,7 +443,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
 .sign-in-panel__chip--active {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sign-in-panel__connections {
@@ -535,7 +535,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
 }
 
 .sign-in-panel__notice {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sign-in-panel__error {

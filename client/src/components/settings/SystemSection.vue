@@ -170,7 +170,7 @@ const downloadProgressLabel = computed(() => {
           <Download
             v-else-if="statusVariant === 'info'"
             :size="15"
-            class="text-accent"
+            class="text-accent-text"
             aria-hidden="true"
           />
 
@@ -178,7 +178,7 @@ const downloadProgressLabel = computed(() => {
             class="text-sm"
             :class="{
               'text-text': statusVariant === 'ok' || statusVariant === 'muted',
-              'text-accent': statusVariant === 'info',
+              'text-accent-text': statusVariant === 'info',
               'text-idle-text': statusVariant === 'warn',
               'text-error-text': statusVariant === 'error',
             }"

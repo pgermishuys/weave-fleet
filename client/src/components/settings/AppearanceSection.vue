@@ -116,7 +116,7 @@ function selectFontSize(size: FontSize): void {
                   <Check
                     v-if="activeTheme === 'system'"
                     :size="14"
-                    class="text-accent"
+                    class="text-accent-text"
                   />
                 </div>
               </button>
@@ -156,7 +156,7 @@ function selectFontSize(size: FontSize): void {
                   <Check
                     v-if="activeTheme === theme.id"
                     :size="14"
-                    class="text-accent"
+                    class="text-accent-text"
                   />
                 </div>
               </button>
@@ -237,7 +237,7 @@ function selectFontSize(size: FontSize): void {
                   <Check
                     v-if="activeCodeTheme === card.id"
                     :size="14"
-                    class="text-accent"
+                    class="text-accent-text"
                   />
                 </div>
               </button>
@@ -267,7 +267,7 @@ function selectFontSize(size: FontSize): void {
               <Check
                 v-if="activeFontFamily === font.id"
                 :size="14"
-                class="shrink-0 text-accent"
+                class="shrink-0 text-accent-text"
               />
             </button>
           </div>

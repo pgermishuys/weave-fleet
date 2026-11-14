@@ -177,7 +177,7 @@ function openRun(): void {
 }
 
 .wf-group__meta--with {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .wf-group__meta--fail {

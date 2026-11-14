@@ -430,7 +430,7 @@ defineExpose({
 }
 
 .terminal-view__pop-btn--primary {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 @keyframes terminal-pop-in {

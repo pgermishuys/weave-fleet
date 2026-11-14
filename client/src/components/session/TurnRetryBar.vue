@@ -162,7 +162,7 @@ const why = computed(() => {
 
 .turn-retry__button:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .turn-retry__button:disabled {

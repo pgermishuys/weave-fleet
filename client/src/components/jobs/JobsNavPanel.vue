@@ -146,6 +146,6 @@ const menu = useJobsMenu();
 }
 
 .jobs-nav__flag--needs {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 </style>

@@ -1054,7 +1054,7 @@ function removeSessionFromStore(): void {
                 <span class="min-w-0 flex-1 truncate">{{ project.label }}</span>
                 <Check
                   v-if="project.id === currentProjectId"
-                  class="size-3.5 text-accent"
+                  class="size-3.5 text-accent-text"
                   aria-label="Current project"
                 />
               </ContextMenuItem>

@@ -1574,7 +1574,7 @@ function onCodeScroll(event: Event): void {
 }
 
 .rhunk__at {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 500;
 }
 

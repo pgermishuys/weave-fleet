@@ -484,7 +484,7 @@ function handleExpandVisual(): void {
   font-family: var(--font-mono-stack);
   font-size: 12px;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .tool-header__show {
@@ -492,7 +492,7 @@ function handleExpandVisual(): void {
   margin-left: auto;
   padding: 1px 8px;
   border-radius: calc(var(--radius-btn) - 2px);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 500;
   transition: background var(--transition);

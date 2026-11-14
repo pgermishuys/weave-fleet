@@ -16,7 +16,7 @@ const { setActiveSection } = useSettingsNav();
     prompts, turns and permission asks. You review each one before it's kept. Your mods, and Fleet's samples to add, are in
     <button
       type="button"
-      class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      class="text-accent-text hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       data-testid="mods-plugin-open-mods"
       @click="setActiveSection('skills', 'mods')"
     >Skills &amp; tools › Mods</button>.

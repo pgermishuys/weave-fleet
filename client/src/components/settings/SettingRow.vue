@@ -42,7 +42,7 @@ const moreOpen = shallowRef(false);
         <button
           v-if="$slots.more"
           type="button"
-          class="ml-1 text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          class="ml-1 text-accent-text hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           :aria-expanded="moreOpen"
           :aria-controls="`settings-row-${id}-more`"
           :data-testid="`setting-more-${id}`"
@@ -59,7 +59,7 @@ const moreOpen = shallowRef(false);
       </div>
       <p
         v-if="adds"
-        class="mt-1 text-xs text-accent"
+        class="mt-1 text-xs text-accent-text"
         :data-testid="`setting-adds-${id}`"
       >
         &#8627; Adds: {{ adds }}

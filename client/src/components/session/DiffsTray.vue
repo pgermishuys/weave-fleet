@@ -521,7 +521,7 @@ onUnmounted(stopTrayResize);
 .diffs-tray__toolbar-button[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .diffs-tray__toolbar-button:hover {

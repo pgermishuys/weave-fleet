@@ -318,7 +318,7 @@ async function endRun(): Promise<void> {
   border: 0;
   padding: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font: inherit;
   text-decoration: underline;

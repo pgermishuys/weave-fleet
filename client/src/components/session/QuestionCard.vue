@@ -450,7 +450,7 @@ function answerText(questionIdx: number): string {
 }
 
 .qcard__text :deep(a) {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

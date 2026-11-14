@@ -116,7 +116,7 @@ async function add(sample: Sample): Promise<void> {
           <div class="min-w-0">
             <p class="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
               <span class="break-all font-mono font-semibold text-text">{{ sample.name }}</span>
-              <span class="rounded-full border border-accent/40 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-accent">
+              <span class="rounded-full border border-accent/40 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-accent-text">
                 Showcase
               </span>
             </p>

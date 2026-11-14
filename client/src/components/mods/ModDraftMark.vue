@@ -16,7 +16,7 @@
   padding: 0 5px;
   border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 4px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 10px;
   font-weight: 600;
   line-height: 15px;

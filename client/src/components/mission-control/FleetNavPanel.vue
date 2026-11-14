@@ -166,6 +166,6 @@ const menu = useFleetMenu();
 
 .fleet-nav__count--alert {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 </style>

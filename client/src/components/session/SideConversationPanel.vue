@@ -414,7 +414,7 @@ onUnmounted(() => {
 
 .side-conversation__label {
   flex-shrink: 0;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 

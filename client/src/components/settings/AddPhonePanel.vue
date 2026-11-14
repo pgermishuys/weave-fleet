@@ -242,7 +242,7 @@ onUnmounted(stopTimer);
                   :href="item.link.href"
                   target="_blank"
                   rel="noopener"
-                  class="text-accent underline-offset-2 hover:underline"
+                  class="text-accent-text underline-offset-2 hover:underline"
                 >{{ item.link.label }}</a>
               </p>
               <div
@@ -296,7 +296,7 @@ onUnmounted(stopTimer);
               href="https://fleet.tryweave.io/docs/phone"
               target="_blank"
               rel="noopener"
-              class="text-accent underline-offset-2 hover:underline"
+              class="text-accent-text underline-offset-2 hover:underline"
             >Phone setup</a>
           </p>
           <div>

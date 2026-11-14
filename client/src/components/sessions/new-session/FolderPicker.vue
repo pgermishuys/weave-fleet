@@ -1657,7 +1657,7 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
   border: 0;
   background: none;
   padding: 0;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font: inherit;
 }

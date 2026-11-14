@@ -135,7 +135,7 @@ async function useMine(path: string): Promise<void> {
           To see what mods can do, add one from the
           <button
             type="button"
-            class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            class="text-accent-text hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             data-testid="mods-showcase-link"
             @click="setActiveSection('skills', 'mods')"
           >Showcase in Mods</button>.

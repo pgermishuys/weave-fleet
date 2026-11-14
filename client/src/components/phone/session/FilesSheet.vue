@@ -200,6 +200,6 @@ watch(() => props.open, (open) => {
 }
 
 .fls__dir {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 </style>

@@ -80,7 +80,7 @@ const undo = () => run("undo", () => store.undo(props.mod.name));
             · from “<a
               v-if="activeVersion.sessionId"
               :href="`/sessions/${encodeURIComponent(activeVersion.sessionId)}`"
-              class="text-accent hover:underline"
+              class="text-accent-text hover:underline"
               @click.prevent="openSession(activeVersion.sessionId)"
             >{{ activeVersion.sessionTitle }}</a><template v-else>{{ activeVersion.sessionTitle }}</template>”
           </template>
@@ -121,7 +121,7 @@ const undo = () => run("undo", () => store.undo(props.mod.name));
       <template #details>
         <button
           type="button"
-          class="inline-flex items-center gap-1 p-0 text-accent hover:enabled:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
+          class="inline-flex items-center gap-1 p-0 text-accent-text hover:enabled:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
           :disabled="busy !== null"
           :data-testid="`mod-turn-on-${mod.name}`"
           @click="setOn(true)"
@@ -142,7 +142,7 @@ const undo = () => run("undo", () => store.undo(props.mod.name));
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
       <button
         type="button"
-        class="inline-flex items-center gap-1 p-0 text-accent hover:enabled:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
+        class="inline-flex items-center gap-1 p-0 text-accent-text hover:enabled:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
         :disabled="busy !== null || undoDisabledReason !== null"
         :title="undoDisabledReason ?? undefined"
         :data-testid="`mod-undo-${mod.name}`"

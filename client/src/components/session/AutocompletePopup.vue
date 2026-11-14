@@ -487,7 +487,7 @@ function handleSelect(value: string): void {
 
 .autocomplete-popup__label mark {
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
