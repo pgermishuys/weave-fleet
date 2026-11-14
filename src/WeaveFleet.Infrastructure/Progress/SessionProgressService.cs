@@ -21,6 +21,17 @@ internal sealed partial class SessionProgressService(
     IEventBroadcaster broadcaster,
     ILogger<SessionProgressService> logger) : BackgroundService
 {
+    /// <summary>How many files <see cref="_lastSeen"/> remembers; the least recently seen is forgotten.</summary>
+    internal const int MaxRememberedFiles = 64;
+
+    /// <summary>
+    /// What each markdown file a session wrote last held as far as Fleet knows, by session and path relative to its
+    /// folder. Events are applied well after the calls that made them, so the file on disk may already hold the next
+    /// call's change too; an edit is applied to what the file held before it instead. Only <see cref="ApplyAsync"/>
+    /// touches it, one event at a time.
+    /// </summary>
+    private readonly OrderedDictionary<(string SessionId, string Path), string> _lastSeen = new();
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
@@ -55,10 +66,10 @@ internal sealed partial class SessionProgressService(
             TodosReported todos => SessionProgressTracker.ApplyTodos(
                 current, observed.SessionId, observed.UserId, todos.Payload.Items, observed.At),
             FilesWritten written => await ApplyPlanFilesAsync(
-                scope.ServiceProvider, current, observed, written.Payload.Paths, written.Payload.MessageId, ct).ConfigureAwait(false),
+                scope.ServiceProvider, current, observed, written.Payload.Paths, written.Payload.Changes, written.Payload.MessageId, ct).ConfigureAwait(false),
             // A turn ended: read the plans again, to catch ticks made by a shell command or in an editor.
             SessionIdled when current is { Plans.Count: > 0 } => await ApplyPlanFilesAsync(
-                scope.ServiceProvider, current, observed, [.. current.Plans.Select(plan => plan.Path)], messageId: null, ct).ConfigureAwait(false),
+                scope.ServiceProvider, current, observed, [.. current.Plans.Select(plan => plan.Path)], changes: [], messageId: null, ct).ConfigureAwait(false),
             DelegationCreated created => ApplyDelegation(current, observed, created.Payload.DelegationId, created.Payload.ChildSessionId, created.Payload.Title, created.Payload.Status, created.Payload.Description),
             DelegationUpdated updated => ApplyDelegation(current, observed, updated.Payload.DelegationId, updated.Payload.ChildSessionId, updated.Payload.Title, updated.Payload.Status),
             DelegationCompleted completed => ApplyDelegation(current, observed, completed.Payload.DelegationId, completed.Payload.ChildSessionId, completed.Payload.Title, completed.Payload.Status),
@@ -136,14 +147,17 @@ internal sealed partial class SessionProgressService(
     }
 
     /// <summary>
-    /// Reads each markdown file from the session's folder and applies what it says. Paths are absolute or relative
-    /// to the session's folder. Returns <see langword="null"/> when no plan changed.
+    /// Applies what each markdown file says now, or, for a file the call says what it did to, what that call left in
+    /// it: the whole file it wrote, or its edit applied to what the file held before. Otherwise the file is read from
+    /// the session's folder. Paths are absolute or relative to the session's folder. Returns <see langword="null"/>
+    /// when no plan changed.
     /// </summary>
-    private static async Task<SessionProgress?> ApplyPlanFilesAsync(
+    private async Task<SessionProgress?> ApplyPlanFilesAsync(
         IServiceProvider services,
         SessionProgress? current,
         ObservedProgressEvent observed,
         IReadOnlyList<string> paths,
+        IReadOnlyList<FileChange> changes,
         string? messageId,
         CancellationToken ct)
     {
@@ -159,7 +173,8 @@ internal sealed partial class SessionProgressService(
         var changed = false;
         foreach (var path in candidates)
         {
-            var read = await PlanFileReader.ReadAsync(session.Directory, path, ct).ConfigureAwait(false);
+            var read = await ReadAsync(observed.SessionId, session.Directory, path, changes.LastOrDefault(change => change.Path == path), ct)
+                .ConfigureAwait(false);
             if (read.Status == PlanFileStatus.Refused)
                 continue;
 
@@ -174,6 +189,57 @@ internal sealed partial class SessionProgressService(
         }
 
         return changed ? progress : null;
+    }
+
+    /// <summary>
+    /// What <paramref name="path"/> held right after the call that made <paramref name="change"/>, when that can be
+    /// worked out; otherwise what it holds now. Remembers the result for the next change to the file.
+    /// </summary>
+    private async Task<PlanFileRead> ReadAsync(string sessionId, string directory, string path, FileChange? change, CancellationToken ct)
+    {
+        var located = PlanFileReader.Locate(directory, path);
+        var key = (sessionId, located?.RelativePath ?? string.Empty);
+        var before = located is not null && _lastSeen.TryGetValue(key, out var seen) ? seen : null;
+
+        var read = change is not null && ContentAfter(change, before) is { } after
+            ? PlanFileReader.Accept(directory, path, after)
+            : await PlanFileReader.ReadAsync(directory, path, ct).ConfigureAwait(false);
+
+        if (located is not null)
+        {
+            _lastSeen.Remove(key);
+            if (read.Status == PlanFileStatus.Read)
+            {
+                _lastSeen.Add(key, read.Content!);
+                if (_lastSeen.Count > MaxRememberedFiles)
+                    _lastSeen.RemoveAt(0);
+            }
+        }
+
+        return read;
+    }
+
+    /// <summary>
+    /// The file a change left: the whole file it wrote, or its edit applied to <paramref name="before"/>. Null when
+    /// that can't be known: nothing is remembered, or the edit's text isn't there exactly as often as the edit needs
+    /// (once, or at least once to replace all), so what Fleet remembers isn't what the edit saw.
+    /// </summary>
+    internal static string? ContentAfter(FileChange change, string? before)
+    {
+        if (change.Content is not null)
+            return change.Content;
+        if (before is null || string.IsNullOrEmpty(change.OldString) || change.NewString is null)
+            return null;
+
+        var at = before.IndexOf(change.OldString, StringComparison.Ordinal);
+        if (at < 0)
+            return null;
+        if (change.ReplaceAll)
+            return before.Replace(change.OldString, change.NewString, StringComparison.Ordinal);
+        if (before.IndexOf(change.OldString, at + 1, StringComparison.Ordinal) >= 0)
+            return null;
+
+        return string.Concat(before.AsSpan(0, at), change.NewString, before.AsSpan(at + change.OldString.Length));
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't update progress for session {SessionId}.")]

@@ -32,26 +32,10 @@ internal static class PlanFileReader
 
     public static async Task<PlanFileRead> ReadAsync(string sessionDirectory, string path, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sessionDirectory) || string.IsNullOrWhiteSpace(path) || !IsMarkdown(path))
+        if (Locate(sessionDirectory, path) is not { } located)
             return new PlanFileRead(PlanFileStatus.Refused);
 
-        string root;
-        string file;
-        try
-        {
-            root = RealPath(Path.GetFullPath(sessionDirectory));
-            file = RealPath(Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(sessionDirectory, path)));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            return new PlanFileRead(PlanFileStatus.Refused);
-        }
-
-        var rootWithSeparator = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
-        if (!file.StartsWith(rootWithSeparator, PathComparison) || !IsMarkdown(file))
-            return new PlanFileRead(PlanFileStatus.Refused);
-
-        var relative = Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
+        var (file, relative) = located;
         var info = new FileInfo(file);
         if (!info.Exists)
             return new PlanFileRead(PlanFileStatus.Missing, relative);
@@ -74,6 +58,46 @@ internal static class PlanFileReader
         {
             return new PlanFileRead(PlanFileStatus.Refused);
         }
+    }
+
+    /// <summary>
+    /// Takes what a tool call says it left in a file instead of reading the file, under the same rules: inside the
+    /// session's folder, markdown, and no bigger than <see cref="MaxBytes"/>.
+    /// </summary>
+    public static PlanFileRead Accept(string sessionDirectory, string path, string content)
+    {
+        if (Locate(sessionDirectory, path) is not { } located || System.Text.Encoding.UTF8.GetByteCount(content) > MaxBytes)
+            return new PlanFileRead(PlanFileStatus.Refused);
+
+        return new PlanFileRead(PlanFileStatus.Read, located.RelativePath, content);
+    }
+
+    /// <summary>
+    /// The real path of <paramref name="path"/> and where it is relative to the session's folder, with <c>/</c>
+    /// separators; <see langword="null"/> when it's not a markdown file inside the folder.
+    /// </summary>
+    internal static (string File, string RelativePath)? Locate(string sessionDirectory, string path)
+    {
+        if (string.IsNullOrWhiteSpace(sessionDirectory) || string.IsNullOrWhiteSpace(path) || !IsMarkdown(path))
+            return null;
+
+        string root;
+        string file;
+        try
+        {
+            root = RealPath(Path.GetFullPath(sessionDirectory));
+            file = RealPath(Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(sessionDirectory, path)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+
+        var rootWithSeparator = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        if (!file.StartsWith(rootWithSeparator, PathComparison) || !IsMarkdown(file))
+            return null;
+
+        return (file, Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'));
     }
 
     /// <summary>The path with every symlink along it followed, as far as the path exists.</summary>

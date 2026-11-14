@@ -78,6 +78,34 @@ public sealed record FilesWrittenPayload
     /// Gets the absolute paths the call wrote.
     /// </summary>
     public IReadOnlyList<string> Paths { get; init; } = [];
+
+    /// <summary>
+    /// Gets what the call did to each file, when the harness says. Fleet may only read a file well after the call
+    /// wrote it, by which time a later call may have changed it again; a change says what this call left.
+    /// </summary>
+    public IReadOnlyList<FileChange> Changes { get; init; } = [];
+}
+
+/// <summary>
+/// What one tool call did to one file: wrote <see cref="Content"/> as the whole file, or replaced
+/// <see cref="OldString"/> with <see cref="NewString"/> (once, unless <see cref="ReplaceAll"/>).
+/// </summary>
+public sealed record FileChange
+{
+    /// <summary>Gets the absolute path of the file, as in <see cref="FilesWrittenPayload.Paths"/>.</summary>
+    public string Path { get; init; } = string.Empty;
+
+    /// <summary>Gets the whole file the call wrote, for a call that writes the whole file.</summary>
+    public string? Content { get; init; }
+
+    /// <summary>Gets the exact text the call replaced, for an edit.</summary>
+    public string? OldString { get; init; }
+
+    /// <summary>Gets the text the call put in its place, for an edit.</summary>
+    public string? NewString { get; init; }
+
+    /// <summary>Gets whether the edit replaced every occurrence of <see cref="OldString"/>, not exactly one.</summary>
+    public bool ReplaceAll { get; init; }
 }
 
 /// <summary>

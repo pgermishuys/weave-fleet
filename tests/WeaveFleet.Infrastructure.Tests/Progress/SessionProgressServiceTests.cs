@@ -297,6 +297,95 @@ public sealed class SessionProgressServiceTests
         fixture.Broadcaster.Broadcasts.Count.ShouldBe(4);
     }
 
+    private static ObservedProgressEvent Changed(PlanFixture fixture, string messageId, DateTimeOffset at, FileChange change)
+        => new(fixture.SessionId, OwnerId, new FilesWritten
+        {
+            Payload = new FilesWrittenPayload { SessionId = fixture.SessionId, MessageId = messageId, Paths = [change.Path], Changes = [change] },
+        }, at);
+
+    private static FileChange Tick(string path, string step) => new() { Path = path, OldString = $"- [ ] {step}", NewString = $"- [x] {step}" };
+
+    [Fact]
+    public async Task Each_call_shows_what_it_left_in_the_plan_even_when_the_file_already_holds_later_ticks()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+
+        // Fleet gets to the calls after the model has made them all: the file on disk already has steps 2 and 3 ticked.
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText
+            .Replace("- [ ] 2.", "- [x] 2.", StringComparison.Ordinal)
+            .Replace("- [ ] 3.", "- [x] 3.", StringComparison.Ordinal));
+        var wroteAt = new DateTimeOffset(2026, 11, 14, 15, 0, 0, TimeSpan.Zero);
+
+        var written = await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-write", wroteAt, new FileChange { Path = fixture.PlanPath, Content = PlanText }), CancellationToken.None);
+        var second = await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-tick-2", wroteAt.AddSeconds(1), Tick(fixture.PlanPath, "2. Map the messages")), CancellationToken.None);
+        var third = await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-tick-3", wroteAt.AddSeconds(2), Tick(fixture.PlanPath, "3. Replace the snapshot")), CancellationToken.None);
+
+        (written.ShouldNotBeNull().Done, second.ShouldNotBeNull().Done, third.ShouldNotBeNull().Done).ShouldBe((1, 2, 3));
+        fixture.Broadcaster.Broadcasts.Where(b => b.Topic == "sessions").Select(b => b.Payload.GetProperty("done").GetInt32()).ShouldBe([1, 2, 3]);
+
+        // Each tick has the time Fleet saw its call and the message that made it.
+        var steps = third.Plans.ShouldHaveSingleItem().Steps.ToDictionary(step => step.Key);
+        (steps["1"].TickedAt, steps["1"].TickedInMessageId).ShouldBe(((DateTimeOffset?)null, (string?)null));
+        (steps["2"].TickedAt, steps["2"].TickedInMessageId).ShouldBe((wroteAt.AddSeconds(1), "msg-tick-2"));
+        (steps["3"].TickedAt, steps["3"].TickedInMessageId).ShouldBe((wroteAt.AddSeconds(2), "msg-tick-3"));
+    }
+
+    [Fact]
+    public async Task An_edit_with_no_earlier_state_to_apply_to_reads_the_file()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+
+        // A shell wrote the plan, so Fleet never saw it before this edit; the edit's text isn't in what Fleet knows.
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText.Replace("- [ ] 2.", "- [x] 2.", StringComparison.Ordinal));
+        var progress = await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-tick", DateTimeOffset.UtcNow, Tick(fixture.PlanPath, "2. Map the messages")), CancellationToken.None);
+
+        progress.ShouldNotBeNull().Done.ShouldBe(2);
+
+        // Nor is it applied twice once Fleet has read it: an edit whose text is gone is read from the file again.
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText
+            .Replace("- [ ] 2.", "- [x] 2.", StringComparison.Ordinal)
+            .Replace("- [ ] 3.", "- [x] 3.", StringComparison.Ordinal));
+        var again = await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-tick-again", DateTimeOffset.UtcNow, Tick(fixture.PlanPath, "2. Map the messages")), CancellationToken.None);
+
+        again.ShouldNotBeNull().Done.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task What_a_call_wrote_outside_the_session_folder_or_too_big_for_a_plan_is_ignored()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+        var outside = Path.Combine(Path.GetTempPath(), $"outside-{Guid.NewGuid():N}.md");
+        var huge = PlanText + new string('x', (int)PlanFileReader.MaxBytes);
+
+        (await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-1", DateTimeOffset.UtcNow, new FileChange { Path = outside, Content = PlanText }), CancellationToken.None)).ShouldBeNull();
+        (await fixture.Service.ApplyAsync(
+            Changed(fixture, "msg-2", DateTimeOffset.UtcNow, new FileChange { Path = fixture.PlanPath, Content = huge }), CancellationToken.None)).ShouldBeNull();
+        fixture.Broadcaster.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("- [ ] 1.\n- [ ] 2.", "- [ ] 1.", "- [x] 1.", false, "- [x] 1.\n- [ ] 2.")]
+    [InlineData("- [ ] a\n- [ ] a", "- [ ] a", "- [x] a", true, "- [x] a\n- [x] a")]
+    [InlineData("- [ ] a\n- [ ] a", "- [ ] a", "- [x] a", false, null)]
+    [InlineData("- [x] 1.", "- [ ] 1.", "- [x] 1.", false, null)]
+    [InlineData(null, "- [ ] 1.", "- [x] 1.", false, null)]
+    public void An_edit_is_applied_only_where_its_text_is_exactly_as_often_as_it_needs(
+        string? before, string oldString, string newString, bool replaceAll, string? expected)
+        => SessionProgressService.ContentAfter(
+                new FileChange { Path = "/work/plan.md", OldString = oldString, NewString = newString, ReplaceAll = replaceAll },
+                before)
+            .ShouldBe(expected);
+
+    [Fact]
+    public void A_whole_file_write_is_taken_as_written_whatever_came_before()
+        => SessionProgressService.ContentAfter(new FileChange { Path = "/work/plan.md", Content = "new" }, before: null).ShouldBe("new");
+
     [Fact]
     public async Task Files_outside_the_session_folder_are_ignored()
     {
