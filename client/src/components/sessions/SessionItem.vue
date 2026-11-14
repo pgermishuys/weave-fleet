@@ -1390,6 +1390,7 @@ function removeSessionFromStore(): void {
   height: 14px;
   margin-right: -4px;
   border-radius: 4px;
+  /* Lineage (lines, kind labels, this caret) is always muted, on hover too (decided 17 October 2026, #573). */
   color: var(--muted);
 }
 
@@ -1399,10 +1400,6 @@ function removeSessionFromStore(): void {
   height: 14px;
   margin-right: -4px;
   flex-shrink: 0;
-}
-
-.session-caret:hover {
-  color: var(--text);
 }
 
 .session-caret svg {
