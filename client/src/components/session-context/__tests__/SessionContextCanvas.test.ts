@@ -99,6 +99,52 @@ describe("SessionContextCanvas", () => {
     wrapper.unmount();
   });
 
+  it("says it's loading, not that nothing is attached, until the links arrive", async () => {
+    let answer!: (response: Response) => void;
+    apiFetchMock.mockImplementation((url: string) =>
+      url.endsWith("/smart-links/all")
+        ? new Promise<Response>((resolve) => { answer = resolve; })
+        : Promise.resolve(new Response("[]", { status: 200 })));
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='context-links-loading']").exists()).toBe(true);
+    expect(wrapper.find("[data-slot='empty-state']").exists()).toBe(false);
+
+    answer(new Response(JSON.stringify([wire("187", "own")]), { status: 200 }));
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='context-links-loading']").exists()).toBe(false);
+    expect(wrapper.find("[data-slot='empty-state']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("This session's pull request");
+    wrapper.unmount();
+  });
+
+  it("says the links couldn't be loaded, not that nothing is attached, and tries again", async () => {
+    let fail = true;
+    apiFetchMock.mockImplementation((url: string) =>
+      url.endsWith("/smart-links/all") && fail
+        ? Promise.resolve(new Response("boom", { status: 500 }))
+        : Promise.resolve(new Response(url.endsWith("/smart-links/all") ? JSON.stringify([wire("187", "own")]) : "[]", { status: 200 })));
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    const note = wrapper.get("[data-slot='error-note']");
+    expect(note.text()).toContain("Couldn't load what's attached");
+    expect(note.text()).toContain("HTTP 500");
+    expect(wrapper.find("[data-slot='empty-state']").exists()).toBe(false);
+
+    fail = false;
+    await note.get("button").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("[data-slot='error-note']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("This session's pull request");
+    wrapper.unmount();
+  });
+
   it("explains an empty session", async () => {
     const wrapper = mountCanvas();
     await flushPromises();

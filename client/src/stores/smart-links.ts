@@ -30,6 +30,10 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
   const headerBySession = shallowRef<Record<string, SmartLink[]>>({})
   const headerLinksLoaded = shallowRef(false)
   const focusRequest = shallowRef<SmartLinkFocusRequest | null>(null)
+  // A session's full list is being asked for, or the last ask failed (and why): until one of them is settled the
+  // Context tab can't say "Nothing attached yet".
+  const loadingSessions = shallowRef<ReadonlySet<string>>(new Set())
+  const loadErrors = shallowRef<Record<string, string>>({})
   const loading = new Map<string, Promise<void>>()
   let loadingAll: Promise<void> | null = null
   let focusNonce = 0
@@ -156,17 +160,48 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
     if (pending) return pending
 
     const request = (async () => {
+      setLoading(sessionId, true)
+      setLoadError(sessionId, null)
       try {
         const response = await apiFetchOn(machine.connection, path(sessionId, "/all"))
         if (response.ok) setLinks(sessionId, (await response.json()) as SmartLinkWire[])
+        else setLoadError(sessionId, `Fleet answered HTTP ${response.status}.`)
       } catch {
-        // Links are optional context; the session works without them.
+        // Links are optional context; the session works without them, and the Context tab offers another try.
+        setLoadError(sessionId, "Couldn't reach Fleet.")
       } finally {
         loading.delete(sessionId)
+        setLoading(sessionId, false)
       }
     })()
     loading.set(sessionId, request)
     return request
+  }
+
+  function setLoading(sessionId: string, value: boolean): void {
+    if (loadingSessions.value.has(sessionId) === value) return
+    const next = new Set(loadingSessions.value)
+    if (value) next.add(sessionId)
+    else next.delete(sessionId)
+    loadingSessions.value = next
+  }
+
+  function setLoadError(sessionId: string, message: string | null): void {
+    if (message === null && !(sessionId in loadErrors.value)) return
+    const next = { ...loadErrors.value }
+    if (message === null) delete next[sessionId]
+    else next[sessionId] = message
+    loadErrors.value = next
+  }
+
+  /** The session's full list is on its way and hasn't arrived yet. */
+  function isLoading(sessionId: string): boolean {
+    return loadingSessions.value.has(sessionId)
+  }
+
+  /** Why the session's full list couldn't be loaded, or null; `ensureLoaded` tries again. */
+  function loadError(sessionId: string): string | null {
+    return loadErrors.value[sessionId] ?? null
   }
 
   function visibleLinks(sessionId: string): SmartLink[] {
@@ -253,6 +288,8 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
     upsertLink,
     applyPushed,
     ensureLoaded,
+    isLoading,
+    loadError,
     ensureHeaderLinksLoaded,
     reloadHeaderLinks,
     sessionPullRequest,

@@ -11,6 +11,7 @@ import { formatCheckedAgo, isPullRequest, type SmartLink } from "@/lib/smart-lin
 import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
@@ -73,7 +74,14 @@ const automationOrigin = computed(() => {
 
 const notConnected = computed(() => links.value.some((link) => link.enrichmentStatus === "not_connected"));
 const hasLinks = computed(() => links.value.length > 0);
-const isEmpty = computed(() => !hasLinks.value && !automationOrigin.value);
+// Until the links arrive there is nothing to say about them yet: the session isn't empty, its links are loading.
+const firstLoad = computed(() => !hasLinks.value && store.isLoading(props.sessionId));
+const loadError = computed(() => (hasLinks.value ? null : store.loadError(props.sessionId)));
+const isEmpty = computed(() => !hasLinks.value && !automationOrigin.value && !firstLoad.value && !loadError.value);
+
+function retryLoad(): void {
+  void store.ensureLoaded(machine, props.sessionId);
+}
 
 const workspace = computed(() => {
   const s = session.value;
@@ -292,8 +300,21 @@ watch(
       />
     </section>
 
+    <Spinner
+      v-if="firstLoad"
+      size="lg"
+      label="Loading what's attached…"
+      class="context-loading text-muted"
+      data-testid="context-links-loading"
+    />
+    <ErrorNote
+      v-else-if="loadError"
+      message="Couldn't load what's attached to this session."
+      :reason="loadError"
+      @retry="retryLoad"
+    />
     <EmptyState
-      v-if="isEmpty"
+      v-else-if="isEmpty"
       :icon="Paperclip"
       title="Nothing attached yet"
       description="Pull requests and issues mentioned in the conversation, and pull requests this session opens, show up here."
@@ -421,6 +442,11 @@ watch(
   gap: 18px;
   padding: 12px 14px 14px;
   overflow-y: auto;
+}
+
+.context-loading {
+  align-self: center;
+  margin-block: 12px;
 }
 
 .context-section {
