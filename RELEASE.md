@@ -65,7 +65,8 @@ gh workflow run ci.yml --ref <branch>       # the dry run checks CI on the commi
 gh workflow run release.yml --ref <branch>  # optional: -f version=0.72.0 -f compare_with=v0.72.0
 ```
 
-It runs every job a tag would: the CI check, the four platform builds with their smoke tests, the desktop installers
+It runs every job a tag would: the CI check (without the [tag checks](#a-release-checks-its-tag-and-its-commit-first),
+which only a pushed tag gets), the four platform builds with their smoke tests, the desktop installers
 with theirs, and the publish job's assembly (merged update feeds, `checksums.txt`, the unversioned installers, the
 install scripts). Then it compares that set with the latest published release, or the one given in `compare_with`:
 the same asset names once versions are lined up, each package within 80–125% of its size, and the files each package
@@ -74,6 +75,20 @@ contains. It writes the comparison to the run's summary. The version stamped on 
 
 It publishes nothing. Creating the GitHub Release, the vanity URL deploy and the website notification run only for a
 pushed `v*` tag. The packages are left as the run's artifacts for 7 days.
+
+## A release checks its tag and its commit first
+
+Before anything else, the Release workflow's first job checks two things about a pushed `v*` tag, and blocks the
+release if either is wrong. Nothing has been built or published then.
+
+- **The tag is the commit's version.** `vX.Y.Z` must be `v` plus `Directory.Build.props`' `<Version>` on the tagged
+  commit. Usually it means the tag went on a commit before the version bump. Remove it
+  (`git push origin :refs/tags/vX.Y.Z && git tag -d vX.Y.Z`) and tag the commit that has the bump.
+- **The commit is on main.** It must be main itself or a commit main contains. Releases come only from main: get the
+  change merged, remove the tag as above and tag main's commit.
+
+A [dry run](#trying-a-release-without-releasing-dry-run) by hand on a branch skips both checks, and its summary says
+so.
 
 ## A release needs CI to have passed on its commit
 
@@ -283,5 +298,6 @@ Do not treat `get.tryweave.io/fleet.sh` as a release blocker. Until a separate h
 - If the release was blocked because CI didn't pass on its commit, see
   [A release needs CI to have passed on its commit](#a-release-needs-ci-to-have-passed-on-its-commit).
 - If the workflow fails before publishing the GitHub Release, fix the issue and re-run or push a corrected tag only if necessary.
-- If the tag version does not match `Directory.Build.props`, delete the incorrect tag locally/remotely, fix the version, and create the correct tag.
+- If the tag version does not match `Directory.Build.props`, or the tagged commit isn't on main, the release is blocked
+  before anything is built: see [A release checks its tag and its commit first](#a-release-checks-its-tag-and-its-commit-first).
 - Do not hand-edit generated release assets; rebuild them through the workflow.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests scripts/release-ci-gate.sh against a fake `gh` that answers from fixture files, in a throwaway git repository:
-# green, red, cancelled, still running then green or red, never ran, a "CI passed" job that failed, and an API that
-# keeps failing. Needs no network and no token.
+# green, red, cancelled, still running then green or red, never ran, a "CI passed" job that failed, an API that keeps
+# failing, and the tag checks a real tag push gets (tag = Directory.Build.props' version, commit on main) next to a dry
+# run that skips them. Needs no network and no token.
 set -euo pipefail
 export LC_ALL=C
 
@@ -12,8 +13,8 @@ trap 'rm -rf "$WORK"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# The fake gh. `gh api <path> …` answers runs?head_sha=<sha> from runs-<sha> and runs/<id>/jobs from jobs-<id>
-# (already in the gate's --jq output shape). A file with ".seq" lines separated by "---" answers one block per call
+# The fake gh. `gh api <path> …` answers runs?head_sha=<sha> from runs-<sha>, runs/<id>/jobs from jobs-<id> and
+# compare/main...<sha> from compare-<sha> (already in the gate's --jq output shape). A file with ".seq" lines separated by "---" answers one block per call
 # and then repeats its last. A file named api-down makes every call fail.
 mkdir -p "$WORK/bin" "$WORK/fixtures"
 cat > "$WORK/bin/gh" <<'SH'
@@ -26,6 +27,7 @@ path="$2"
 case "$path" in
   *"/runs?head_sha="*) sha="${path#*head_sha=}"; key="runs-${sha%%&*}" ;;
   *"/jobs?"*) id="${path#*/runs/}"; key="jobs-${id%%/*}" ;;
+  *"/compare/"*) key="compare-${path##*...}" ;;
   *) echo "fake gh: unexpected $path" >&2; exit 2 ;;
 esac
 if [ -f "$dir/$key.seq" ]; then
@@ -40,10 +42,14 @@ fi
 SH
 chmod +x "$WORK/bin/gh"
 
-# A repository: a code commit, then a docs-only commit on top of it.
+# A repository: a commit with no Directory.Build.props, a code commit that sets the version to 9.9.9, then a docs-only
+# commit on top of it.
 REPO="$WORK/repo"
 git init -q "$REPO"
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m root
+ROOT=$(git -C "$REPO" rev-parse HEAD)
 mkdir -p "$REPO/src"
+printf '<Project>\n  <PropertyGroup>\n    <Version>9.9.9</Version>\n  </PropertyGroup>\n</Project>\n' > "$REPO/Directory.Build.props"
 echo one > "$REPO/src/app.cs"
 git -C "$REPO" add -A && git -C "$REPO" -c user.name=t -c user.email=t@t commit -q -m code
 CODE=$(git -C "$REPO" rev-parse HEAD)
@@ -58,20 +64,21 @@ run_gate() {
   case_no=$((case_no + 1))
   (cd "$REPO" && PATH="$WORK/bin:$PATH" FAKE_GH_DIR="$WORK/fixtures" GH_REPO=acme/fleet \
     GATE_POLL_SECONDS=0 GATE_RETRY_SECONDS=0 GATE_NO_RUN_GRACE_SECONDS="${GRACE:-0}" GATE_TIMEOUT_SECONDS="${TIMEOUT:-60}" \
-    GITHUB_STEP_SUMMARY="$WORK/summary" GITHUB_RUN_ID=777 bash "$GATE" "$sha" v9.9.9) > "$WORK/out" 2>&1 || got_exit=$?
+    GATE_CHECK_TAG="${CHECK:-false}" GITHUB_STEP_SUMMARY="$WORK/summary" GITHUB_RUN_ID=777 \
+    bash "$GATE" "$sha" "${TAG:-v9.9.9}") > "$WORK/out" 2>&1 || got_exit=$?
   if [ "$got_exit" != "$want_exit" ]; then
     cat "$WORK/out" >&2
     fail "$name: exit $got_exit, expected $want_exit"
   fi
   grep -qF -- "$want_text" "$WORK/out" || { cat "$WORK/out" >&2; fail "$name: output lacks '$want_text'"; }
-  # Every block says how to resume this very release run.
-  if [ "$want_exit" = 1 ] && ! grep -q "HTTP 502" "$WORK/out"; then
+  # Every CI block says how to resume this very release run. (A wrong tag is fixed by a new tag instead.)
+  if [ "$want_exit" = 1 ] && [ -z "${TAG_BLOCK:-}" ] && ! grep -q "HTTP 502" "$WORK/out"; then
     grep -qF "gh run rerun 777 --repo acme/fleet --failed" "$WORK/out" || { cat "$WORK/out" >&2; fail "$name: no resume command"; }
     grep -qF "Don't move, delete or re-push the tag" "$WORK/out" || fail "$name: doesn't say to leave the tag"
   fi
   echo "ok $case_no - $name"
 }
-reset() { rm -rf "$WORK/fixtures"; mkdir -p "$WORK/fixtures"; }
+reset() { rm -rf "$WORK/fixtures" "$WORK/summary"; mkdir -p "$WORK/fixtures"; }
 fx() { printf '%s\n' "$2" > "$WORK/fixtures/$1"; }
 
 reset; fx "runs-$CODE" "11 completed success push"
@@ -120,6 +127,36 @@ reset; touch "$WORK/fixtures/api-down"
 run_gate "an API that keeps failing blocks, never reads as no runs" "$CODE" 1 "HTTP 502"
 calls=$(grep -c "^api " "$WORK/fixtures/calls")
 [ "$calls" -eq 5 ] || fail "API down: expected 5 attempts, got $calls"
-echo "ok $((case_no + 1)) - the API is tried 5 times"
+echo "ok $((case_no += 1)) - the API is tried 5 times"
+
+# The tag checks, as a real tag push runs them.
+reset; fx "runs-$CODE" "30 completed success push"; fx "compare-$CODE" "identical"
+CHECK=true run_gate "tag push: tag matches the version, commit is main, CI green: passes" "$CODE" 0 "v9.9.9 is 9.9.9 on $CODE, which is on main."
+
+reset; fx "runs-$DOCS" "31 completed success push"; fx "compare-$DOCS" "behind"
+CHECK=true run_gate "tag push: a commit main has moved past is on main" "$DOCS" 0 "actions/runs/31"
+
+reset; fx "runs-$CODE" "32 completed success push"; fx "compare-$CODE" "identical"
+TAG=v9.9.10 TAG_BLOCK=1 CHECK=true run_gate "tag push: a tag that isn't the commit's version is blocked" "$CODE" 1 \
+  "The tag v9.9.10 doesn't match the version on its commit: Directory.Build.props at $CODE says 9.9.9."
+grep -qF "git push origin :refs/tags/v9.9.10" "$WORK/out" || fail "version mismatch: no command to remove the tag"
+grep -q "head_sha" "$WORK/fixtures/calls" 2>/dev/null && fail "version mismatch: still waited for CI"
+echo "ok $((case_no += 1)) - a wrong tag is blocked before waiting for CI"
+
+reset; fx "runs-$ROOT" "33 completed success push"; fx "compare-$ROOT" "behind"
+TAG_BLOCK=1 CHECK=true run_gate "tag push: a commit with no Directory.Build.props is blocked" "$ROOT" 1 "has no Directory.Build.props"
+
+for status in ahead diverged; do
+  reset; fx "runs-$CODE" "34 completed success push"; fx "compare-$CODE" "$status"
+  TAG_BLOCK=1 CHECK=true run_gate "tag push: a commit that isn't on main ($status) is blocked" "$CODE" 1 \
+    "$CODE (v9.9.9) isn't on main (compared with main: $status). Releases come only from main."
+  grep -qF "Tag the release commit on main" "$WORK/out" || fail "off main: no recovery"
+done
+
+reset; fx "runs-$CODE" "35 completed success push"; fx "compare-$CODE" "diverged"
+TAG=v1.2.3 run_gate "dry run: skips both tag checks, says so, and passes on green CI" "$CODE" 0 "Dry run: skipped the tag checks"
+grep -qF "Dry run: skipped the tag checks" "$WORK/summary" || fail "dry run: the summary doesn't say the tag checks were skipped"
+grep -q "/compare/" "$WORK/fixtures/calls" && fail "dry run: still asked whether the commit is on main"
+echo "ok $((case_no += 1)) - a dry run doesn't ask GitHub whether the commit is on main"
 
 echo "All release CI gate tests passed."
