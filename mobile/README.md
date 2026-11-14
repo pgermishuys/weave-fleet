@@ -26,7 +26,7 @@ type-checks the shared files.
 ```sh
 bun install
 bunx tsc --noEmit
-bun test src
+bun test src scripts
 bun run tokens:check               # fails when tokens.generated.ts is behind main.css; `bun run tokens` fixes it
 bunx expo start --web --port 8103  # the quickest look: the Kit renders in a browser, in both schemes
 ```
@@ -64,8 +64,19 @@ The screenshots are the artifacts `mobile-android-shots` and `mobile-ios-shots`,
   after the machine's id answers there (`src/fleet/routes-core.ts`; `plugins/with-home-network.ts` lets the platforms
   open them).
 
-The checks job (tokens, typecheck, tests) runs on every change to `mobile/**`, `client/src/lib/**`, the tool-card
-component and `main.css`.
+When it runs:
+
+- The checks job (tokens, typecheck, tests) runs on every change to `mobile/**`, `client/src/**` and the client's
+  `package.json` or lockfile: the typecheck follows the app's imports into the client's lib, api, composables, stores
+  and components.
+- The walk-throughs run on a pull request only when it can change what the phone draws: `mobile/**`, the workflow, or
+  one of the shared files the app's bundle loads. `bun scripts/phone-files.ts` lists those (it follows the app's
+  run-time imports the way Metro does; `--changed <file>` says which of a list of changed paths reach the phone), and
+  the checks job's summary says why the walks ran or didn't. A push publishes the over-the-air update on the same
+  answer.
+- Every night at 00:37 UTC both walk-throughs run on `main`. A red one opens an issue, "Nightly Android walk-through
+  failed" or "Nightly iOS walk-through failed" (or comments on the open one), and the next green night closes it. Run
+  the workflow by hand with "nightly" ticked to do the same.
 
 ## Install the preview build on an Android phone
 
