@@ -216,7 +216,7 @@ function main(argv: string[]): number {
   console.log("Design lint (ratchet against scripts/design-lint-baseline.json)");
   for (const m of result.messages) console.log(m);
   if (!result.ok) {
-    console.log("\nUse the design system instead (see DESIGN_SYSTEM.md); `--list <RULE>` prints every violation.");
+    console.log("\nUse the design system instead (see Design Rules in AGENTS.md); `--list <RULE>` prints every violation.");
   }
   return result.ok ? 0 : 1;
 }

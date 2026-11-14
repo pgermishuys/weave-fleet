@@ -59,11 +59,35 @@ A route no rail owns (`/welcome`, `/repositories`) renders full width.
 
 ### Resize Gutters
 
-Resize gutters exist only between specific panel pairs:
+Two gutters, both on the desktop only (a phone has none). Drag either to resize:
 
-- `[conversation]` ↔ `[content]`
+- **The rail's panel ↔ the page:** between whichever left panel the rail brings (`session-list`, `settings-menu`,
+  `fleet-menu`, …) and the page beside it. It's there whenever the panel is: not while the panel is collapsed, and not
+  for a view with no panel (a switched-off Labs feature, a route no rail owns).
+- **`[conversation]` ↔ `[content]`:** while the right panel sits beside the conversation (an open session, or Board).
+  Without room for a readable conversation beside it, the right panel opens as a sheet over the conversation instead,
+  with no gutter.
 
-No gutter between rail and context, or between session-list and conversation.
+No gutter between the rail and the context area.
+
+## Design Rules
+
+- **Use the shared pieces** in `client/src/components/ui/` (Button, Dialog, AlertDialog, DropdownMenu, Popover, Select,
+  Switch, Tabs, Tooltip, …) instead of hand-rolling them.
+- **Buttons:** `<Button>` with a variant (`default` primary, `destructive`, `outline`, `secondary`, `ghost`, `link`,
+  `toolbar-icon` / `toolbar-icon-danger` for icon-only toolbar buttons, `filter` for toggles) and a size (`default`,
+  `sm`, `lg`, `icon`, `icon-sm`, `icon-lg`, `toolbar`, `toolbar-lg`). They're defined in `ui/button/index.ts`.
+- **Colours:** theme tokens only (`--text`, `--muted`, `--accent`, `--border`, `--main-bg`, `--panel-bg`, `--card-bg`, …,
+  and the Tailwind classes built on them such as `text-muted`, `bg-card-bg`).
+  - Every theme in `client/src/assets/main.css` defines them.
+  - `theme-contrast.test.ts` holds text to 4.5:1 and the focus ring to 3:1 in each theme.
+- **Radius:** the tokens `rounded-btn` (8px), `rounded-card` (10px) and `rounded-panel` (12px); `rounded-full` for circles.
+- **Motion:** `var(--transition)` (150ms ease-out) for hover, focus and press.
+- **Keyboard focus:** the global 2px ring in `--focus-ring`. Never remove an outline without drawing another.
+- **Ratchet:** `bun run lint` includes the design lint (`client/scripts/lint-design-system.ts`).
+  - In a `.vue` file outside `components/ui/`, it fails a new raw `<button>`, a border-radius that isn't 0, 50% or a
+    token, and a duration that isn't `var(--transition…)`.
+  - The counts are compared with `scripts/design-lint-baseline.json`; `--list <RULE>` prints every one.
 
 ## Diagnostics and Testing
 
