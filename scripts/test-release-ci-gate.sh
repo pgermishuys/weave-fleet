@@ -64,12 +64,17 @@ run_gate() {
   case_no=$((case_no + 1))
   (cd "$REPO" && PATH="$WORK/bin:$PATH" FAKE_GH_DIR="$WORK/fixtures" GH_REPO=acme/fleet \
     GATE_POLL_SECONDS=0 GATE_RETRY_SECONDS=0 GATE_NO_RUN_GRACE_SECONDS="${GRACE:-0}" GATE_TIMEOUT_SECONDS="${TIMEOUT:-60}" \
-    GITHUB_STEP_SUMMARY="$WORK/summary" bash "$GATE" "$sha" v9.9.9) > "$WORK/out" 2>&1 || got_exit=$?
+    GITHUB_STEP_SUMMARY="$WORK/summary" GITHUB_RUN_ID=777 bash "$GATE" "$sha" v9.9.9) > "$WORK/out" 2>&1 || got_exit=$?
   if [ "$got_exit" != "$want_exit" ]; then
     cat "$WORK/out" >&2
     fail "$name: exit $got_exit, expected $want_exit"
   fi
   grep -qF -- "$want_text" "$WORK/out" || { cat "$WORK/out" >&2; fail "$name: output lacks '$want_text'"; }
+  # Every block says how to resume this very release run.
+  if [ "$want_exit" = 1 ] && ! grep -q "HTTP 502" "$WORK/out"; then
+    grep -qF "gh run rerun 777 --repo acme/fleet --failed" "$WORK/out" || { cat "$WORK/out" >&2; fail "$name: no resume command"; }
+    grep -qF "Don't move, delete or re-push the tag" "$WORK/out" || fail "$name: doesn't say to leave the tag"
+  fi
   echo "ok $case_no - $name"
 }
 reset() { rm -rf "$WORK/fixtures"; mkdir -p "$WORK/fixtures"; }
@@ -86,10 +91,12 @@ run_gate "green run whose CI passed job failed is blocked" "$CODE" 1 "its \"CI p
 
 reset; fx "runs-$CODE" "14 completed failure push"
 run_gate "red run is blocked at once" "$CODE" 1 "ci.yml didn't pass on $CODE (v9.9.9)"
-grep -qF "gh workflow run ci.yml --repo acme/fleet --ref v9.9.9" "$WORK/out" || fail "red run: no recovery command"
+grep -qF "gh run view 14 --repo acme/fleet --log-failed" "$WORK/out" || fail "red run: no log command"
+grep -qF "gh run rerun 14 --repo acme/fleet --failed" "$WORK/out" || fail "red run: no re-run command"
 
 reset; fx "runs-$CODE" "15 completed cancelled push"
 run_gate "cancelled run is blocked" "$CODE" 1 "run 15 (push): cancelled"
+grep -qF "gh workflow run ci.yml --repo acme/fleet --ref v9.9.9" "$WORK/out" || fail "cancelled run: no command to run CI on the tag"
 
 reset; fx "runs-$CODE" "$(printf '16 completed failure push\n17 completed success workflow_dispatch')"
 run_gate "a red run and a green re-run by dispatch passes" "$CODE" 0 "actions/runs/17"
@@ -103,9 +110,11 @@ run_gate "waits while CI runs, then blocks on red" "$CODE" 1 "run 19 (push): fai
 
 reset; fx "runs-$CODE" "20 in_progress none push"
 TIMEOUT=0 run_gate "gives up on a run that never finishes" "$CODE" 1 "still running after 0s"
+grep -qF "gh run watch 20 --repo acme/fleet --exit-status" "$WORK/out" || fail "still running: no watch command"
 
 reset
 run_gate "a commit CI never ran on is blocked" "$CODE" 1 "ci.yml never ran on $CODE (v9.9.9)"
+grep -qF "gh workflow run ci.yml --repo acme/fleet --ref v9.9.9" "$WORK/out" || fail "never ran: no command to run CI on the tag"
 
 reset; printf '\n---\n21 completed success push\n' > "$WORK/fixtures/runs-$CODE.seq"
 GRACE=60 run_gate "waits for a run that hasn't started yet" "$CODE" 0 "actions/runs/21"

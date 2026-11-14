@@ -70,13 +70,22 @@ The Release workflow builds and publishes nothing until `ci.yml` has passed on t
 - `ci.yml` skips pushes that only change `**/*.md` or `.weave/**`. A tag on such a commit is judged by the nearest
   commit before it that CI ran on, as long as everything since then is in those paths.
 
-When it blocks a release, the job's log says why and how to recover. The tag never has to move:
+When it blocks a release, the job's log says why and gives the exact commands, with the run ids filled in. Nothing
+has been built or published at that point. Don't move, delete or re-push the tag, and don't publish anything by hand.
 
-1. Get CI green on the commit. For a real failure, fix it on main and release a new version instead. For a flaky
-   failure or a cancelled run, re-run that run's failed jobs (`gh run rerun <id> --failed`), or run CI on the tag
-   itself: `gh workflow run ci.yml --ref vX.Y.Z`.
-2. Re-run the Release run's failed jobs: `gh run rerun <release run id> --failed`. The gate passes and the release
-   carries on.
+- **CI failed.** Read why: `gh run view <ci run id> --log-failed`.
+  - A check failed because of the code: this version can't ship. Fix it on main in a PR, then bump the version and tag
+    that. Leave the old tag as it is: it was never released.
+  - A known flaky test or a broken runner (lost runner, network, timeout): `gh run rerun <ci run id> --failed`, and
+    wait for it to finish green (`gh run watch <ci run id> --exit-status`).
+- **CI was cancelled** (usually a newer push to main) **or never ran:** run it on the tag,
+  `gh workflow run ci.yml --ref vX.Y.Z`, and wait for it to finish green
+  (`gh run list --workflow ci.yml --commit <sha>`, then `gh run watch <id> --exit-status`).
+- **CI was still running after an hour:** wait for it with `gh run watch <id> --exit-status`. If it's stuck, cancel it
+  and run CI on the tag as above.
+
+Once CI is green on the commit, let the release carry on: `gh run rerun <release run id> --failed`. That re-runs the
+check, then builds and publishes as usual.
 
 ## What the workflow publishes
 
