@@ -420,12 +420,10 @@ describe("Settings → Machines", () => {
       await wrapper.find("[data-testid='machines-setup-commands-toggle']").trigger("click");
       expect(wrapper.find("[data-testid='machines-setup-commands']").text()).toContain("$ curl -fsSL https://example.test/install.sh | sh");
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      await flushPromises();
-
-      expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false);
+      // Two polls 700 ms apart, each with a fetch between them: wait for the form to close, not for a guess at how long.
+      await vi.waitFor(() => expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false), { timeout: 8000, interval: 50 });
       expect(wrapper.text()).toContain("Added falcon. Its sessions are in the sessions list.");
-    });
+    }, 15_000);
 
     it("names the step that broke and offers the link and a retry", async () => {
       const wrapper = await openForm();
