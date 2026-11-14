@@ -5,7 +5,7 @@ on:
   # starts never reports it, so the PR could never merge. Jobs a PR's changes can't affect skip themselves instead
   # (the Changed paths job).
   pull_request:
-    branches: [main]
+    branches: [main, scratch/gates-base]
   # Main runs everything on every push: no paths-ignore (opencode/skills/**/SKILL.md and docs/workflows.md are .md
   # files the build embeds or a test reads).
   push:
