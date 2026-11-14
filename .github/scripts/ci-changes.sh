@@ -12,9 +12,10 @@
 #   client    Client checks, Client tests
 #   desktop   Desktop
 #   launchers Launchers
+#   phone     Phone app check (the phone app's tokens, typecheck and tests)
 set -euo pipefail
 
-groups=(dotnet aot e2e client desktop launchers)
+groups=(dotnet aot e2e client desktop launchers phone)
 declare -A run=()
 all() { for g in "${groups[@]}"; do run[$g]=1; done; }
 on() { for g in "$@"; do run[$g]=1; done; }
@@ -41,20 +42,24 @@ while IFS= read -r path; do
     .github/*|Directory.*|global.json|*.slnx|build.cs|_build/*|NuGet.config|.bun-version|.editorconfig|.gitignore|.gitattributes) all ;;
     *package-lock.json|*bun.lock|*bun.lockb|*packages.lock.json) all ;;
 
-    # Read by nothing in ci.yml: screenshots, the repository's own agent notes and plans, root docs, and the phone app
-    # (mobile.yml tests it). No project, test, script or client file reads these (searched every csproj, props,
-    # .cs file, client/ and mods/ source, scripts/ and ci.yml).
-    mockups/*|.weave/*|mobile/*) ;;
+    # Read by nothing in ci.yml: screenshots and the repository's own agent notes and plans. No project, test, script
+    # or client file reads these (searched every csproj, props, .cs file, client/ and mods/ source, scripts/ and ci.yml).
+    mockups/*|.weave/*) ;;
     README.md|AGENTS.md|RELEASE.md) ;;
 
     # docs/: only docs/workflows.md is read (WorkflowYamlWriterTests reads it through the repository root).
     docs/workflows.md) on "${net[@]}" ;;
     docs/*) ;;
 
+    # The phone app: its typecheck follows the app's imports into client/src (mobile/tsconfig.json maps @/* and
+    # @fleet/* there) with the client's own modules, and its tokens check reads client/src/assets/main.css.
+    mobile/*) on phone ;;
+
     # The API embeds the logo in every build (WeaveFleet.Api.csproj: EmbeddedResource weave_logo.png).
-    client/src/assets/weave_logo.png) on "${net[@]}" client ;;
+    client/src/assets/weave_logo.png) on "${net[@]}" client phone ;;
     # Otherwise no .NET project or test reads client/ (the API copies client/dist only when it exists, and no job but
-    # E2E builds it); E2E builds the SPA and drives it.
+    # E2E builds it); E2E builds the SPA and drives it. The phone app reads client/src and the client's modules.
+    client/src/*|client/package.json) on client e2e phone ;;
     client/*) on client e2e ;;
 
     desktop/*) on desktop ;;
