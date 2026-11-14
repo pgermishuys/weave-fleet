@@ -37,8 +37,8 @@ export const tokens = {
     "accent": "#5B6EC7",
     "accentDim": "rgba(91, 110, 199, 0.12)",
     "onAccent": "#ffffff",
-    "running": "#16a34a",
-    "waiting": "#d97706",
+    "running": "#16A149",
+    "waiting": "#D27306",
     "complete": "#2563eb",
     "error": "#dc2626",
     "queued": "#7c3aed",
@@ -48,8 +48,8 @@ export const tokens = {
     "tint9": "rgba(26, 25, 24, 0.09)",
     "rowText": "rgba(26, 25, 24, 0.86)",
     "waitingBg": "#fdf8f3",
-    "waitingEdge": "rgba(194, 108, 8, 0.454)",
-    "diffAdd": "#16a34a",
+    "waitingEdge": "rgba(188, 104, 8, 0.454)",
+    "diffAdd": "#16A149",
     "diffDel": "#dc2626"
   },
   "radius": {
