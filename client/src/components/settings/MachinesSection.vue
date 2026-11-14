@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
+import { Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
 import {
   agentWorkLevelName,
   useMachinesStore,
@@ -28,6 +28,7 @@ import { diagnosisOf, tunnelDownDiagnosis, type MachineDiagnosis } from "@/lib/m
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -37,7 +38,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
-const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-red-500/60 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-error/60 hover:text-error-text disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
@@ -508,13 +509,12 @@ onUnmounted(() => stopPolling?.());
             >
             <span class="text-xs text-muted">Or just the machine's address, then its code.</span>
           </label>
-          <p
+          <ErrorNote
             v-if="pasted?.kind === 'invalid'"
-            class="text-xs text-red-300"
+            :message="pasted.message"
+            compact
             data-testid="machines-add-link-invalid"
-          >
-            {{ pasted.message }}
-          </p>
+          />
           <template v-else-if="pasted?.kind === 'address'">
             <label
               v-if="!usesToken"
@@ -572,25 +572,18 @@ onUnmounted(() => stopPolling?.());
             />
             Looking for the machine…
           </p>
-          <div
+          <ErrorNote
             v-if="previewError"
-            class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-            role="alert"
+            :message="previewError"
             data-testid="machines-add-preview-error"
           >
-            <AlertCircle
-              :size="16"
-              class="mt-0.5 shrink-0"
-              aria-hidden="true"
-            />
-            <div>
-              <span>{{ previewError }}</span>
+            <template #details>
               <MachineDiagnosisPanel
                 v-if="previewDiagnosis"
                 :diagnosis="previewDiagnosis"
               />
-            </div>
-          </div>
+            </template>
+          </ErrorNote>
           <div
             v-if="found && !usesToken"
             class="grid gap-3 rounded-card border border-border bg-card-bg p-3"
@@ -618,25 +611,18 @@ onUnmounted(() => stopPolling?.());
             <MachineAddNote :name="found.name" />
           </div>
         </template>
-        <div
+        <ErrorNote
           v-if="addError"
-          class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-          role="alert"
+          :message="addError"
           data-testid="machines-add-error"
         >
-          <AlertCircle
-            :size="16"
-            class="mt-0.5 shrink-0"
-            aria-hidden="true"
-          />
-          <div>
-            <span>{{ addError }}</span>
+          <template #details>
             <MachineDiagnosisPanel
               v-if="addDiagnosis"
               :diagnosis="addDiagnosis"
             />
-          </div>
-        </div>
+          </template>
+        </ErrorNote>
         <div class="flex flex-wrap gap-2">
           <button
             v-if="addMode === 'link'"
@@ -861,13 +847,12 @@ onUnmounted(() => stopPolling?.());
                 @retry="machines.retryMachine(entry.key)"
               />
             </details>
-            <p
+            <ErrorNote
               v-if="rowError[entry.key]"
-              class="mt-1 text-xs text-red-400"
-              role="alert"
-            >
-              {{ rowError[entry.key] }}
-            </p>
+              :message="rowError[entry.key]"
+              compact
+              class="mt-1"
+            />
           </div>
 
           <div
@@ -918,13 +903,11 @@ onUnmounted(() => stopPolling?.());
       hint="Phones and devices, and the access token."
       data-testid="machine-access"
     >
-      <p
+      <ErrorNote
         v-if="accessError"
-        class="px-4 py-3 text-sm text-red-400"
-        role="alert"
-      >
-        {{ accessError }}
-      </p>
+        :message="accessError"
+        class="mx-4 my-3"
+      />
 
       <p
         v-else-if="!access"

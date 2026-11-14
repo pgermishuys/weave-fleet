@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
 import { onMounted, ref, shallowRef } from "vue";
-import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
+import { Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
 import { useMachineTarget } from "@/lib/machine-target";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // The machine Settings shows (Folders can be another machine's).
 const { api } = useMachineTarget();
@@ -172,18 +173,11 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
       <span>Loading your locations…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="workspaceRootsError"
-      class="mt-4 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ workspaceRootsError }}</span>
-    </div>
+      :message="workspaceRootsError"
+      class="mt-4"
+    />
 
     <EmptyState
       v-else-if="workspaceRoots.length === 0"
@@ -213,7 +207,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             </span>
             <span
               v-if="!root.exists"
-              class="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-red-200"
+              class="rounded-full border border-error/30 bg-error/10 px-2 py-1 text-error-text"
             >
               Missing on disk
             </span>
@@ -223,7 +217,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
         <button
           v-if="root.source === 'user' && root.id !== null"
           type="button"
-          class="inline-flex items-center justify-center gap-2 rounded-btn border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          class="inline-flex items-center justify-center gap-2 rounded-btn border border-error/40 bg-error/10 px-3 py-1.5 text-sm font-medium text-error-text transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60"
           :disabled="deletingRootId === root.id"
           @click="removeWorkspaceRoot(root)"
         >
@@ -309,18 +303,10 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
           </button>
         </div>
 
-        <div
+        <ErrorNote
           v-if="addWorkspaceRootError"
-          class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-          role="alert"
-        >
-          <AlertCircle
-            :size="16"
-            class="mt-0.5 shrink-0"
-            aria-hidden="true"
-          />
-          <span>{{ addWorkspaceRootError }}</span>
-        </div>
+          :message="addWorkspaceRootError"
+        />
       </div>
     </div>
   </section>

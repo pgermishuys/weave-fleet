@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle } from "lucide-vue-next";
+import { LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
 import { useNavigate } from "@tanstack/vue-router";
 import type { ProjectResponse } from "@/api/client";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * New Project. With more than one machine it asks which machine the project goes on ("Create on"), starting on
@@ -199,14 +200,10 @@ watch(open, async (isOpen) => {
           />
         </div>
 
-        <div
+        <ErrorNote
           v-if="errorMessage"
-          class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          role="alert"
-        >
-          <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{{ errorMessage }}</p>
-        </div>
+          :message="errorMessage"
+        />
 
         <DialogFooter>
           <Button

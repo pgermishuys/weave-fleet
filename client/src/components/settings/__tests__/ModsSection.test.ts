@@ -119,7 +119,7 @@ describe("ModsSection", () => {
     reject(new Error("Mods are off."));
     await flushPromises();
     expect(wrapper.get("[data-testid=mods-error]").text()).toContain("Mods are off.");
-    await wrapper.get("[data-testid=mods-retry]").trigger("click");
+    await wrapper.get("[data-testid=mods-error] button").trigger("click");
     expect(store.state.loadKept).toHaveBeenCalledTimes(2);
   });
 

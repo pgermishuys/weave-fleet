@@ -8,6 +8,7 @@ import type { FleetMessage } from "@/lib/pagination-utils";
 import type { RunningWorkItem } from "@/lib/running-work";
 import type { AnswerOutcome, AnswerTarget } from "@/lib/push/answer";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const props = defineProps<{
   tile: Tile;
@@ -159,13 +160,11 @@ function nudge(): void {
       >
         {{ sent === "queued" ? "Queued: it goes when the turn ends." : "Sent." }}
       </p>
-      <p
+      <ErrorNote
         v-if="error"
-        class="text-xs text-destructive"
-        role="alert"
-      >
-        {{ error }}
-      </p>
+        :message="error"
+        compact
+      />
       <Button
         size="sm"
         @click="emit('open', tile)"

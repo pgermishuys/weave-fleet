@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertCircle, Wrench, Download, LoaderCircle } from "lucide-vue-next";
+import { Wrench, Download, LoaderCircle } from "lucide-vue-next";
 import { useToolCatalog } from "@/composables/use-tool-catalog";
 import { useTools } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import type { InstallToolRequest } from "@/composables/use-tool-catalog";
 import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-target";
 import InstallTargetPicker from "../InstallTargetPicker.vue";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const target = defineModel<InstallTarget>("target", { required: true });
 
@@ -79,18 +80,10 @@ async function handleInstall(toolName: string): Promise<void> {
       <span>Loading catalog…</span>
     </div>
 
-    <div
+    <ErrorNote
       v-else-if="error && !hasCatalog"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+    />
 
     <EmptyState
       v-else-if="!hasCatalog"
@@ -207,30 +200,14 @@ async function handleInstall(toolName: string): Promise<void> {
       </article>
     </div>
 
-    <div
+    <ErrorNote
       v-if="installError"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ installError }}</span>
-    </div>
+      :message="installError"
+    />
 
-    <div
+    <ErrorNote
       v-else-if="error && hasCatalog"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+    />
   </div>
 </template>

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { AlertCircle, Check, LoaderCircle } from "lucide-vue-next";
+import { Check, LoaderCircle } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorktreeNamingStore } from "@/stores/worktree-naming";
 import { resolveWorktreeName, type WorktreeNamingTemplates } from "@/lib/worktree-naming";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 font-mono text-[12.5px] text-text outline-none transition-colors placeholder:text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -240,17 +241,11 @@ async function resetToDefaults(): Promise<void> {
       </p>
     </div>
 
-    <div
+    <ErrorNote
       v-if="error"
-      class="mt-4 flex items-start gap-2 rounded-card border border-error/30 bg-error/10 p-3 text-sm text-error"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ error }}</span>
-    </div>
+      :message="error"
+      class="mt-4"
+    />
 
     <div class="mt-5 flex items-center gap-3">
       <button

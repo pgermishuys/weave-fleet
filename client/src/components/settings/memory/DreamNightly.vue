@@ -18,6 +18,7 @@ import {
   type NightlyDreamingChange,
   type NightlyDreamingView,
 } from "@/lib/dreaming";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** The harness Dream each night uses, so Dream now can follow it. */
 const emit = defineEmits<{ harness: [type: string | null] }>();
@@ -170,13 +171,12 @@ watch(() => nightly.value?.enabled && harnessType.value, (type) => emit("harness
           Paused in Automations
         </span>
       </div>
-      <p
+      <ErrorNote
         v-if="error"
-        class="mt-2 text-xs text-red-300"
-        role="alert"
-      >
-        {{ error }}
-      </p>
+        :message="error"
+        compact
+        class="mt-2"
+      />
     </div>
     <div class="flex items-center gap-2">
       <LoaderCircle

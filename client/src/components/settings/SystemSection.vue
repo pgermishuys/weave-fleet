@@ -8,6 +8,7 @@ import SettingRow from "@/components/settings/SettingRow.vue";
 import { getDesktopBridge } from "@/lib/desktop";
 import { useWhatsNew } from "@/composables/use-whats-new";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
 const { openWhatsNew } = useWhatsNew();
@@ -163,7 +164,7 @@ const downloadProgressLabel = computed(() => {
           <AlertCircle
             v-else-if="statusVariant === 'error'"
             :size="15"
-            class="text-error"
+            class="text-error-text"
             aria-hidden="true"
           />
           <Download
@@ -179,7 +180,7 @@ const downloadProgressLabel = computed(() => {
               'text-text': statusVariant === 'ok' || statusVariant === 'muted',
               'text-accent': statusVariant === 'info',
               'text-idle': statusVariant === 'warn',
-              'text-error': statusVariant === 'error',
+              'text-error-text': statusVariant === 'error',
             }"
           >
             {{ statusLabel }}
@@ -245,11 +246,9 @@ const downloadProgressLabel = computed(() => {
     <!-- Error detail -->
     <div
       v-if="updateStatus?.status === 'error' && updateStatus.error"
-      class="bg-error/5 px-4 py-3"
+      class="px-4 py-3"
     >
-      <p class="text-xs text-error">
-        {{ updateStatus.error }}
-      </p>
+      <ErrorNote :message="updateStatus.error" />
     </div>
 
     <!-- Staged restart note -->

@@ -80,6 +80,33 @@ describe("ad-hoc empty states", () => {
   });
 });
 
+describe("error red written by hand", () => {
+  const sfc = `<script setup lang="ts">
+const danger = "border border-red-500/40 text-red-300";
+</script>
+
+<template>
+  <p class="mt-2 text-xs text-error">Words in --error</p>
+  <span class="hover:text-red-400">Hover</span>
+  <AlertTriangle class="text-destructive" />
+  <ErrorNote message="The design system" />
+  <Button class="bg-destructive text-destructive-foreground">Delete</Button>
+  <p class="text-error-text">AA error words</p>
+</template>
+
+<style scoped>
+.x { color: var(--error); }
+</style>
+`;
+  const lines = lintFile("src/components/Example.vue", sfc)
+    .filter((v) => v.rule === "RAW_ERROR_RED")
+    .map((v) => v.line);
+
+  it("counts the red palette and --error / --destructive as a text colour, in template and script", () => {
+    expect(lines).toEqual([2, 2, 6, 7, 8]);
+  });
+});
+
 describe("design lint ratchet", () => {
   const baseline: Baseline = countsOf([
     { rule: "RAW_BUTTON", file: "a.vue", line: 1, detail: "" },

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle, Sparkles } from "lucide-vue-next";
+import { LoaderCircle, Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import { DRAFT_COST_NOTE, slugOf, type WorkflowFile } from "@/lib/workflow-draft
 import { modelShortName } from "@/lib/workflows";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * New workflow, or Duplicate a built-in: a name, and the file Fleet makes in the repository's `.weave/workflows/`,
@@ -271,15 +272,11 @@ async function create(): Promise<void> {
         >
           Pick a repository in the Run box first: the file goes in that repository.
         </p>
-        <div
+        <ErrorNote
           v-if="error"
-          class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          role="alert"
+          :message="error"
           data-testid="workflow-create-error"
-        >
-          <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{{ error }}</p>
-        </div>
+        />
 
         <DialogFooter>
           <Button

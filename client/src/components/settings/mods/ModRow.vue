@@ -6,6 +6,7 @@ import { formatAbsoluteTimestamp, formatRelativeTime } from "@/lib/format-utils"
 import type { KeptMod } from "@/lib/mods/kept";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** One kept mod: its switch, Undo and why it is off. */
 const props = defineProps<{ mod: KeptMod }>();
@@ -109,31 +110,33 @@ const undo = () => run("undo", () => store.undo(props.mod.name));
       </div>
     </div>
 
-    <p
+    <ErrorNote
       v-if="offByStrikes"
-      class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-error"
+      compact
+      class="mt-2"
       :data-testid="`mod-strikes-${mod.name}`"
     >
-      <span>Turned off after 3 failures: {{ mod.off?.error }}</span>
-      <button
-        type="button"
-        class="inline-flex items-center gap-1 p-0 text-accent hover:enabled:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
-        :disabled="busy !== null"
-        :data-testid="`mod-turn-on-${mod.name}`"
-        @click="setOn(true)"
-      >
-        Turn on again
-      </button>
-    </p>
+      Turned off after 3 failures: {{ mod.off?.error }}
+      <template #details>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 p-0 text-accent hover:enabled:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50"
+          :disabled="busy !== null"
+          :data-testid="`mod-turn-on-${mod.name}`"
+          @click="setOn(true)"
+        >
+          Turn on again
+        </button>
+      </template>
+    </ErrorNote>
 
-    <p
+    <ErrorNote
       v-if="error"
-      class="mt-2 text-xs text-error"
-      role="alert"
+      :message="error"
+      compact
+      class="mt-2"
       :data-testid="`mod-error-${mod.name}`"
-    >
-      {{ error }}
-    </p>
+    />
 
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
       <button

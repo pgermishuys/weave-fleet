@@ -288,7 +288,7 @@ describe("Mods row: turning Mods on", () => {
 
     expect(stateOf(wrapper)).toBe("failed");
     expect(panel(wrapper).get("h4").text()).toBe("⚠ Couldn't download Bun");
-    expect(panel(wrapper).get("h4").classes()).toContain("text-error");
+    expect(panel(wrapper).get("h4").classes()).toContain("text-error-text");
     expect(panel(wrapper).text()).toContain(message);
     expect(panel(wrapper).text()).toContain(hint);
     expect(buttons(wrapper)).toContain("Try again");

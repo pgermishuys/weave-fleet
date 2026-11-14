@@ -7,6 +7,7 @@ import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { Workflow } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const nav = useWorkflowsNav();
 const store = useWorkflowsStore(nav.machine.target.value);
@@ -178,13 +179,11 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
       <span class="sr-only">Loading workflows…</span>
     </div>
 
-    <p
+    <ErrorNote
       v-else-if="nav.libraryError.value"
-      class="empty-message workflows-nav-error"
-      role="alert"
-    >
-      {{ nav.libraryError.value }}
-    </p>
+      :message="nav.libraryError.value"
+      class="m-3"
+    />
   </section>
 </template>
 
@@ -364,18 +363,6 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   to {
     transform: rotate(360deg);
   }
-}
-
-.empty-message {
-  margin: 0;
-  padding: 4px 10px;
-  font-size: 0.85714rem;
-  color: var(--muted);
-}
-
-.workflows-nav-error {
-  padding: 16px;
-  color: var(--error);
 }
 
 .sr-only {

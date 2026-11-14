@@ -2,14 +2,18 @@
 import { computed } from "vue";
 import type { DailyAnalytics } from "@/api/client";
 import { formatAnalyticsCost } from "@/lib/format-utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface Props {
   daily: readonly DailyAnalytics[];
   emptyMessage?: string;
+  error?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   emptyMessage: "No daily analytics available for the selected range.",
+  error: null,
 });
 
 const integerFormatter = new Intl.NumberFormat("en-US");
@@ -94,12 +98,16 @@ const rows = computed(() =>
       </table>
     </div>
 
-    <p
+    <ErrorNote
+      v-else-if="props.error"
+      message="Unable to load analytics."
+      :reason="props.error"
+    />
+    <EmptyState
       v-else
-      class="daily-tab__empty"
-    >
-      {{ props.emptyMessage }}
-    </p>
+      :title="props.emptyMessage"
+      bordered
+    />
   </section>
 </template>
 
@@ -147,9 +155,4 @@ const rows = computed(() =>
   text-align: right;
 }
 
-.daily-tab__empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
 </style>

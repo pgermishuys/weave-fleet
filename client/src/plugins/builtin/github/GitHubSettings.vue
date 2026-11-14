@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { AlertCircle, CheckCircle2, ChevronDown, Copy, ExternalLink, Github, LoaderCircle, PlugZap, RefreshCw, Unplug } from "lucide-vue-next";
+import { CheckCircle2, ChevronDown, Copy, ExternalLink, Github, LoaderCircle, PlugZap, RefreshCw, Unplug } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { useGitHubRepos } from "./composables/use-github-repos";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-border bg-transparent px-3 text-[13px] font-medium text-text transition-colors hover:bg-text/6 disabled:cursor-not-allowed disabled:opacity-60";
-const buttonDangerClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-error/40 bg-transparent px-3 text-[13px] font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonDangerClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-error/40 bg-transparent px-3 text-[13px] font-medium text-error-text transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const {
@@ -346,22 +347,13 @@ async function handleRefreshRepos(): Promise<void> {
             v-else-if="deviceState.status === 'expired' || deviceState.status === 'denied' || deviceState.status === 'error'"
             class="space-y-3"
           >
-            <div class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              <AlertCircle
-                :size="16"
-                class="mt-0.5 shrink-0"
-                aria-hidden="true"
-              />
-              <span>
-                {{
-                  deviceState.status === 'expired'
-                    ? 'The GitHub code expired. Please try again.'
-                    : deviceState.status === 'denied'
-                      ? 'GitHub authorization was denied.'
-                      : deviceState.message
-                }}
-              </span>
-            </div>
+            <ErrorNote
+              :message="deviceState.status === 'expired'
+                ? 'The GitHub code expired. Please try again.'
+                : deviceState.status === 'denied'
+                  ? 'GitHub authorization was denied.'
+                  : deviceState.message"
+            />
 
             <button
               type="button"
@@ -405,21 +397,15 @@ async function handleRefreshRepos(): Promise<void> {
             :disabled="isConnectingWithPat"
           >
 
+          <ErrorNote
+            v-if="patMessage && isPatMessageError"
+            :message="patMessage"
+          />
           <div
-            v-if="patMessage"
-            class="flex items-start gap-2 rounded-card px-3 py-2 text-sm"
-            :class="isPatMessageError
-              ? 'border border-red-500/30 bg-red-500/10 text-red-200'
-              : 'border border-green-500/30 bg-green-500/10 text-green-300'"
+            v-else-if="patMessage"
+            class="flex items-start gap-2 rounded-card border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300"
           >
-            <AlertCircle
-              v-if="isPatMessageError"
-              :size="16"
-              class="mt-0.5 shrink-0"
-              aria-hidden="true"
-            />
             <CheckCircle2
-              v-else
               :size="16"
               class="mt-0.5 shrink-0"
               aria-hidden="true"

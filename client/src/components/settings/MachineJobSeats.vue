@@ -3,6 +3,7 @@ import { computed, onMounted, shallowRef, watch } from "vue";
 import { MAX_JOB_SEATS, parseLabels } from "@/lib/jobs";
 import { HOME_MACHINE_KEY } from "@/lib/machines";
 import { useJobsStore } from "@/stores/jobs";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** A machine's seats and labels for Jobs, on its card in Settings → Machines. Only drawn with Jobs on. */
 const props = defineProps<{ entryKey: string }>();
@@ -78,10 +79,10 @@ function saveLabels(): Promise<void> {
         @change="saveLabels"
       >
     </label>
-    <span
+    <ErrorNote
       v-if="errorMessage"
-      class="text-red-400"
-      role="alert"
-    >{{ errorMessage }}</span>
+      :message="errorMessage"
+      compact
+    />
   </div>
 </template>

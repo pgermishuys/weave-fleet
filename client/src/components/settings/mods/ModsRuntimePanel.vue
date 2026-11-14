@@ -8,6 +8,7 @@ import ModsConfirm from "./ModsConfirm.vue";
 import ModsFailed from "./ModsFailed.vue";
 import ModsProgress from "./ModsProgress.vue";
 import { CODE } from "./classes";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * What sits under the Mods description: the question before installing, the install's progress, why it failed, and
@@ -142,12 +143,10 @@ async function useMine(path: string): Promise<void> {
       </div>
     </template>
 
-    <p
+    <ErrorNote
       v-if="actionError"
-      role="alert"
-      class="mt-3 text-sm text-error"
-    >
-      {{ actionError }}
-    </p>
+      :message="actionError"
+      class="mt-3"
+    />
   </div>
 </template>

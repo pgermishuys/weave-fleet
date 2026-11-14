@@ -37,6 +37,7 @@ import {
   harnessStatusLabel as statusLabel,
   type HarnessStatus,
 } from "@/lib/harness-display";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface HarnessCard {
   id: string;
@@ -511,13 +512,12 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           :data-testid="`harness-setting-${setting.key}`"
         >
           <template #below>
-            <p
+            <ErrorNote
               v-if="settingError?.key === setting.key"
-              class="mt-2 text-xs text-red-300"
-              role="alert"
-            >
-              {{ settingError.message }}
-            </p>
+              :message="settingError.message"
+              compact
+              class="mt-2"
+            />
           </template>
           <template #control>
             <SettingSwitch

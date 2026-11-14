@@ -4,6 +4,7 @@ import { LoaderCircle } from "lucide-vue-next";
 import { apiFetchOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import type { KeptMod } from "@/lib/mods/kept";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Fleet's own sample mods, under the user's kept ones: what each does and where to see it, and Add to keep it. Adding
@@ -125,14 +126,13 @@ async function add(sample: Sample): Promise<void> {
             <p class="mt-1 text-xs text-muted">
               <span class="font-medium text-text">Try it:</span> {{ sample.tryIt }}
             </p>
-            <p
+            <ErrorNote
               v-if="failed?.name === sample.name"
-              class="mt-1 text-xs text-error"
-              role="alert"
+              :message="failed.text"
+              compact
+              class="mt-1"
               data-testid="mods-sample-error"
-            >
-              {{ failed.text }}
-            </p>
+            />
           </div>
 
           <span

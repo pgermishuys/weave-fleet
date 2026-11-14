@@ -14,6 +14,7 @@ import { useGoToFileStore } from '@/stores/go-to-file'
 import FileBrowserTreeNode from './FileBrowserTreeNode.vue'
 import FindInFilesResults from './FindInFilesResults.vue'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorNote } from '@/components/ui/error-note'
 
 interface Props {
   sessionId: string
@@ -221,9 +222,11 @@ function handleResultClick(path: string, keep = false) {
         <span class="file-browser-panel__loading-text">Searching…</span>
       </div>
 
-      <div v-else-if="findFiles.error.value" class="file-browser-panel__error">
-        <p class="file-browser-panel__error-text">{{ findFiles.error.value }}</p>
-      </div>
+      <ErrorNote
+        v-else-if="findFiles.error.value"
+        :message="findFiles.error.value"
+        class="m-3"
+      />
 
       <EmptyState
         v-else-if="foundFiles.length === 0"
@@ -251,9 +254,11 @@ function handleResultClick(path: string, keep = false) {
         <span class="file-browser-panel__loading-text">Loading files…</span>
       </div>
 
-      <div v-else-if="error" class="file-browser-panel__error">
-        <p class="file-browser-panel__error-text">{{ error }}</p>
-      </div>
+      <ErrorNote
+        v-else-if="error"
+        :message="error"
+        class="m-3"
+      />
 
       <EmptyState
         v-else-if="rootEntries.length === 0"
@@ -494,19 +499,6 @@ function handleResultClick(path: string, keep = false) {
 .file-browser-panel__loading-text {
   font-size: 12px;
   color: var(--muted);
-}
-
-.file-browser-panel__error {
-  padding: 16px;
-  background-color: rgba(239, 68, 68, 0.1);
-  border-radius: 4px;
-  margin: 0 8px;
-}
-
-.file-browser-panel__error-text {
-  margin: 0;
-  font-size: 13px;
-  color: #ef4444;
 }
 
 .file-browser-panel__tree {

@@ -98,30 +98,21 @@ const scopedTopProjects = computed<AnalyticsProjectOption[]>(() => {
 });
 
 const dailyEmptyMessage = computed(() => {
-  return formatFetchMessage(
-    dailyError.value,
-    projectId.value
-      ? "No daily analytics matched the selected date range and project."
-      : "No daily analytics matched the selected date range.",
-  );
+  return projectId.value
+    ? "No daily analytics matched the selected date range and project."
+    : "No daily analytics matched the selected date range.";
 });
 
 const modelsEmptyMessage = computed(() => {
-  return formatFetchMessage(
-    modelsError.value,
-    projectId.value
-      ? "No model analytics matched the selected date range and project."
-      : "No model analytics matched the selected date range.",
-  );
+  return projectId.value
+    ? "No model analytics matched the selected date range and project."
+    : "No model analytics matched the selected date range.";
 });
 
 const projectsEmptyMessage = computed(() => {
-  return formatFetchMessage(
-    summaryError.value,
-    projectId.value
-      ? "No projects matched the selected date range and project."
-      : "No project analytics matched the selected date range.",
-  );
+  return projectId.value
+    ? "No projects matched the selected date range and project."
+    : "No project analytics matched the selected date range.";
 });
 
 const overviewTabProps = computed(() => ({
@@ -132,16 +123,21 @@ const overviewTabProps = computed(() => ({
   dailyEmptyMessage: dailyEmptyMessage.value,
   modelsEmptyMessage: modelsEmptyMessage.value,
   projectsEmptyMessage: projectsEmptyMessage.value,
+  dailyError: dailyError.value,
+  modelsError: modelsError.value,
+  projectsError: summaryError.value,
 }));
 
 const dailyTabProps = computed(() => ({
   daily: daily.value,
   emptyMessage: dailyEmptyMessage.value,
+  error: dailyError.value,
 }));
 
 const projectsTabProps = computed(() => ({
   topProjects: scopedTopProjects.value,
   emptyMessage: projectsEmptyMessage.value,
+  error: summaryError.value,
 }));
 
 const sessionsTabProps = computed(() => ({
@@ -253,9 +249,6 @@ function withSelectedProject(
   return Array.from(options.values());
 }
 
-function formatFetchMessage(error: string | undefined, fallback: string): string {
-  return error ? `Unable to load analytics (${error}).` : fallback;
-}
 </script>
 
 <template>

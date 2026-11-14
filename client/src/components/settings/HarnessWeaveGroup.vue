@@ -15,6 +15,7 @@ import {
   weavePill,
 } from "@/lib/weave-flavors";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * One harness's Weave: whether its plugin list loads Weave (with Add Weave and Remove), and whose config Weave reads in
@@ -210,14 +211,14 @@ onBeforeUnmount(() => watcher?.disconnect());
         </div>
       </template>
       <template #below>
-        <p
+        <ErrorNote
           v-if="error"
-          class="mt-2 break-words text-xs text-error"
-          role="alert"
+          compact
+          class="mt-2"
           data-testid="weave-error"
         >
           Couldn't ask the harnesses again: {{ error }}
-        </p>
+        </ErrorNote>
         <p
           v-if="pluginBusy"
           class="mt-2 text-xs text-muted"
@@ -232,7 +233,7 @@ onBeforeUnmount(() => watcher?.disconnect());
           :class="{
             'text-muted': pluginNotice.tone === 'ok',
             'text-idle': pluginNotice.tone === 'warn',
-            'text-error': pluginNotice.tone === 'error',
+            'text-error-text': pluginNotice.tone === 'error',
           }"
           :role="pluginNotice.tone === 'error' ? 'alert' : 'status'"
           data-testid="weave-plugin-notice"

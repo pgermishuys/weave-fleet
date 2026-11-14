@@ -20,6 +20,7 @@ import {
   type DreamSessionRef,
   type DreamView,
 } from "@/lib/dreaming";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /** `harness` is the one Dream each night uses; Dream now follows it until a harness is picked here. */
 const props = defineProps<{ repository: string | null; nightlyHarness?: string | null }>();
@@ -202,13 +203,12 @@ function sessionLabel(session: DreamSessionRef): string {
       </div>
     </div>
 
-    <p
+    <ErrorNote
       v-if="error"
-      class="mt-3 text-xs text-red-300"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      :message="error"
+      compact
+      class="mt-3"
+    />
 
     <template v-if="dream">
       <p
@@ -236,13 +236,13 @@ function sessionLabel(session: DreamSessionRef): string {
       </p>
 
       <template v-else>
-        <p
+        <ErrorNote
           v-if="dream.status === 'failed'"
-          class="mt-3 text-sm text-red-300"
+          class="mt-3"
           data-testid="dream-failed"
         >
           The last dream failed: {{ dream.error ?? "no reason given." }}
-        </p>
+        </ErrorNote>
         <div
           v-else
           class="mt-3"

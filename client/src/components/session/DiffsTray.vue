@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { parseDiffLines } from "@/lib/diff-parser";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 export type DiffsTrayFileItem = FilesChangedFileListItem;
 
@@ -380,14 +381,11 @@ onUnmounted(stopTrayResize);
               role="status"
             />
 
-            <div
+            <ErrorNote
               v-else-if="mainState === 'error'"
-              class="diffs-tray__state diffs-tray__state--error"
-              role="alert"
-            >
-              <Info aria-hidden="true" />
-              <p>{{ error }}</p>
-            </div>
+              :message="error"
+              class="m-6"
+            />
 
             <EmptyState
               v-else-if="mainState === 'empty'"
@@ -603,10 +601,6 @@ onUnmounted(stopTrayResize);
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-}
-
-.diffs-tray__state--error {
-  color: color-mix(in srgb, var(--error) 76%, var(--text));
 }
 
 .diffs-tray__spinner {

@@ -18,6 +18,8 @@ import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars
 import type { AnalyticsSummary, DailyAnalytics, ModelAnalytics } from "@/api/client"
 import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters"
 import { useThemeStore } from "@/stores/theme"
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 ChartJS.register(CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip)
 
@@ -82,6 +84,9 @@ interface Props {
   dailyEmptyMessage?: string
   modelsEmptyMessage?: string
   projectsEmptyMessage?: string
+  dailyError?: string | null
+  modelsError?: string | null
+  projectsError?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -92,6 +97,9 @@ const props = withDefaults(defineProps<Props>(), {
   dailyEmptyMessage: "No daily analytics available for the selected range.",
   modelsEmptyMessage: "No model cost data available for the selected range.",
   projectsEmptyMessage: "No project cost data available for the selected range.",
+  dailyError: null,
+  modelsError: null,
+  projectsError: null,
 })
 
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
@@ -435,12 +443,17 @@ function getMaxCost(costs: readonly number[]): number {
         />
       </div>
 
-      <p
+      <ErrorNote
+        v-else-if="dailyError"
+        message="Unable to load analytics."
+        :reason="dailyError"
+      />
+      <EmptyState
         v-else
-        class="overview-tab__empty"
-      >
-        {{ dailyEmptyMessage }}
-      </p>
+        :title="dailyEmptyMessage"
+        bordered
+        class="min-h-60"
+      />
     </section>
 
     <div class="overview-tab__rankings">
@@ -456,6 +469,7 @@ function getMaxCost(costs: readonly number[]): number {
         <HorizontalCostBars
           :items="modelBarItems"
           :empty-message="modelsEmptyMessage"
+          :error="modelsError"
         />
       </section>
 
@@ -471,6 +485,7 @@ function getMaxCost(costs: readonly number[]): number {
         <HorizontalCostBars
           :items="projectBarItems"
           :empty-message="projectsEmptyMessage"
+          :error="projectsError"
         />
       </section>
     </div>
@@ -533,15 +548,4 @@ function getMaxCost(costs: readonly number[]): number {
   height: 300px;
 }
 
-.overview-tab__empty {
-  display: grid;
-  place-items: center;
-  min-height: 240px;
-  margin: 0;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-btn);
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-}
 </style>

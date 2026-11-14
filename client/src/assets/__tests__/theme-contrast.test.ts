@@ -9,6 +9,8 @@
 //   that keeps --row-<colour> of itself and takes the rest from --text, 4.5:1 on every background a row can have
 //   (resting, hovered, open, picked, and a chip's own tint). A quiet row's age was --muted at 60%: 2.24:1 in dark,
 //   and the open row's age 3.47:1 on its highlight.
+// - Error words: ErrorNote writes --error-text on a 10% --error tint, 4.5:1 on every surface (1.4.3). --error itself
+//   was 2.28:1 there in nord and 3.73:1 in light, and text-red-200 was near-invisible on the light theme.
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -239,5 +241,13 @@ describe("session row text", () => {
     expect(meta, "--row-meta under a resting title's 86%").toBeLessThan(86);
     expect(dim2, "the quietest row's age fades with it").toBeLessThanOrEqual(meta);
     expect(dim2).toBeLessThan(dim1);
+describe("error words", () => {
+  it.each(Object.entries(themes()))("reach 4.5:1 on the error tint over every surface in the %s theme", (_name, vars) => {
+    const error = resolveVar(vars, vars.error);
+    const text = resolveVar(vars, vars["error-text"]);
+    for (const surface of ["main-bg", "card-bg", "panel-bg"]) {
+      const tint = over(error, 10, resolveVar(vars, vars[surface]));
+      expect(contrast(text, tint), `${text} on 10% ${error} over --${surface} = ${tint}`).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

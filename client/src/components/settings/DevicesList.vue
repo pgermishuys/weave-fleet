@@ -3,6 +3,7 @@ import { shallowRef } from "vue";
 import { Button } from "@/components/ui/button";
 import { removeDevice, type PairedDevice } from "@/lib/devices-api";
 import { formatRelativeTime } from "@/lib/format-utils";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Settings → Machines → This machine → Devices with access: this computer, then each paired device with when it
@@ -89,13 +90,10 @@ async function remove(device: PairedDevice): Promise<void> {
         </Button>
       </li>
     </ul>
-    <p
+    <ErrorNote
       v-if="error"
-      class="text-sm text-error"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      :message="error"
+    />
   </div>
 </template>
 

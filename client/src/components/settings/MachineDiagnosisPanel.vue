@@ -46,7 +46,7 @@ async function copyDetails(): Promise<void> {
         <X
           v-else-if="step.state === 'failed'"
           :size="14"
-          class="mt-0.5 shrink-0 text-red-400"
+          class="mt-0.5 shrink-0 text-error-text"
           aria-hidden="true"
         />
         <Circle

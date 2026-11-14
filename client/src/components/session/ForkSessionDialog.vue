@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useForkSession } from "@/composables/use-session-actions";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface Props {
   sessionId: string;
@@ -129,13 +130,10 @@ watch(
           />
         </div>
 
-        <p
+        <ErrorNote
           v-if="error"
-          class="border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {{ error }}
-        </p>
+          :message="error"
+        />
 
         <DialogFooter>
           <Button

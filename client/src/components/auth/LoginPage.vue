@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, shallowRef } from "vue";
 import weaveLogo from "@/assets/weave_logo.png";
 import { apiFetch, apiUrl } from "@/lib/api-client";
+import { ErrorNote } from "@/components/ui/error-note";
 
 interface AuthStatusResponse {
   authEnabled?: boolean;
@@ -242,13 +243,10 @@ function isSafeReturnUrl(value: string): boolean {
               already signed in. This browser stays signed in for 30 days after your last visit.
             </p>
 
-            <p
+            <ErrorNote
               v-if="errorMessage"
-              class="text-sm text-destructive"
-              role="alert"
-            >
-              {{ errorMessage }}
-            </p>
+              :message="errorMessage"
+            />
 
             <button
               type="submit"

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { AlertCircle, Check, Circle, LoaderCircle, Minus, X } from "lucide-vue-next";
+import { Check, Circle, LoaderCircle, Minus, X } from "lucide-vue-next";
 import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
 import { diagnosisOf, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { useMachinesStore, type CandidateProbe, type MachineCandidate, type SetupStep } from "@/stores/machines";
+import { ErrorNote } from "@/components/ui/error-note";
 
 /**
  * Add a machine → Set it up from here: the machines Fleet can already see (ssh config, Tailscale), what is on each, and
@@ -258,7 +259,7 @@ function act(candidate: MachineCandidate): void {
             <X
               v-else-if="step.state === 'failed'"
               :size="16"
-              class="mt-0.5 shrink-0 text-red-300"
+              class="mt-0.5 shrink-0 text-error-text"
               aria-hidden="true"
             />
             <Circle
@@ -295,25 +296,18 @@ function act(candidate: MachineCandidate): void {
         >$ {{ command }}
 </template></pre>
       </div>
-      <div
+      <ErrorNote
         v-if="failure"
-        class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-        role="alert"
+        :message="failure.diagnosis?.headline ?? failure.message"
         data-testid="machines-setup-error"
       >
-        <AlertCircle
-          :size="16"
-          class="mt-0.5 shrink-0"
-          aria-hidden="true"
-        />
-        <div>
-          <span>{{ failure.diagnosis?.headline ?? failure.message }}</span>
+        <template #details>
           <MachineDiagnosisPanel
             v-if="failure.diagnosis"
             :diagnosis="failure.diagnosis"
           />
-        </div>
-      </div>
+        </template>
+      </ErrorNote>
       <div
         v-if="failure"
         class="flex flex-wrap gap-2"

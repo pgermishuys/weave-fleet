@@ -17,6 +17,7 @@ import {
   requestNotificationPermission,
 } from "@/composables/use-session-notifications";
 import { usePreferencesStore } from "@/stores/preferences";
+import { ErrorNote } from "@/components/ui/error-note";
 
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
@@ -161,20 +162,18 @@ async function toggleBoardFeature(): Promise<void> {
           is sent about the session in front of you.
         </template>
         <template #below>
-          <p
+          <ErrorNote
             v-if="notificationsError"
-            class="mt-2 text-xs text-red-300"
-            role="alert"
-          >
-            {{ notificationsError }}
-          </p>
-          <p
+            :message="notificationsError"
+            compact
+            class="mt-2"
+          />
+          <ErrorNote
             v-else-if="isNotificationsEnabled && notificationPermission() !== 'granted'"
-            class="mt-2 text-xs text-red-300"
-            role="alert"
-          >
-            Your browser is no longer allowing notifications for Fleet.
-          </p>
+            message="Your browser is no longer allowing notifications for Fleet."
+            compact
+            class="mt-2"
+          />
         </template>
         <template #control>
           <SettingSwitch
@@ -279,13 +278,12 @@ async function toggleBoardFeature(): Promise<void> {
           Show the Board entry in the left rail and enable the board workspace panels.
         </template>
         <template #below>
-          <p
+          <ErrorNote
             v-if="boardFeatureError"
-            class="mt-2 text-xs text-red-300"
-            role="alert"
-          >
-            {{ boardFeatureError }}
-          </p>
+            :message="boardFeatureError"
+            compact
+            class="mt-2"
+          />
         </template>
         <template #control>
           <SettingSwitch

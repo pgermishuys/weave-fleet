@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { shallowRef } from "vue";
-import { AlertCircle, LoaderCircle, Sparkles } from "lucide-vue-next";
+import { LoaderCircle, Sparkles } from "lucide-vue-next";
 import SkillDiff from "@/components/skills/SkillDiff.vue";
 import SkillEditorDialog from "@/components/skills/SkillEditorDialog.vue";
 import SkillHistoryDialog from "@/components/skills/SkillHistoryDialog.vue";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/skill-versions";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
+import { ErrorNote } from "@/components/ui/error-note";
 
 // Shown as a plugin page too, which hands it props it has no use for.
 defineOptions({ inheritAttrs: false });
@@ -217,18 +218,10 @@ async function toggleFleetChange(name: string): Promise<void> {
       </article>
     </div>
 
-    <div
+    <ErrorNote
       v-if="error || actionError"
-      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      role="alert"
-    >
-      <AlertCircle
-        :size="16"
-        class="mt-0.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span>{{ actionError ?? error }}</span>
-    </div>
+      :message="actionError ?? error"
+    />
 
     <SkillEditorDialog
       v-if="editing"

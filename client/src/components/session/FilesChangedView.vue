@@ -8,6 +8,7 @@ import { isEditableKeyboardTarget } from "@/composables/use-keyboard-shortcut";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { parseDiffLines } from "@/lib/diff-parser";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 
 export type FileDiffViewItem = FilesChangedFileListItem;
 
@@ -407,34 +408,14 @@ function getActiveElement(): HTMLElement | null {
             role="status"
           />
 
-          <div
+          <ErrorNote
             v-else-if="mainState === 'error'"
-            class="files-changed-view__state files-changed-view__state--error"
-            role="alert"
-          >
-            <Info
-              class="files-changed-view__state-icon"
-              aria-hidden="true"
-            />
-            <div class="files-changed-view__state-copy">
-              <p class="files-changed-view__state-title">
-                Changed files could not be loaded.
-              </p>
-              <p
-                v-if="resolvedError !== null"
-                class="files-changed-view__state-detail"
-              >
-                {{ resolvedError }}
-              </p>
-              <button
-                type="button"
-                class="files-changed-view__retry-button"
-                @click="retryLoadingFiles"
-              >
-                Try again
-              </button>
-            </div>
-          </div>
+            message="Changed files could not be loaded."
+            :reason="resolvedError"
+            class="m-6"
+            data-testid="files-changed-error"
+            @retry="retryLoadingFiles"
+          />
 
           <EmptyState
             v-else-if="mainState === 'empty'"
@@ -631,26 +612,12 @@ function getActiveElement(): HTMLElement | null {
   text-align: center;
 }
 
-.files-changed-view__state--error {
-  align-items: flex-start;
-  color: color-mix(in srgb, var(--error) 76%, var(--text));
-  text-align: left;
-}
-
 .files-changed-view__state-icon {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
   margin-top: 2px;
   opacity: 0.78;
-}
-
-.files-changed-view__state-copy {
-  display: flex;
-  max-width: 460px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
 }
 
 .files-changed-view__state-title,
@@ -676,29 +643,6 @@ function getActiveElement(): HTMLElement | null {
   border-top-color: var(--accent);
   border-radius: 999px;
   animation: files-changed-view-spin 0.8s linear infinite;
-}
-
-.files-changed-view__retry-button {
-  min-height: 30px;
-  padding: 5px 12px;
-  border: 1px solid color-mix(in srgb, var(--error) 42%, var(--border));
-  border-radius: 0;
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: color-mix(in srgb, var(--error) 78%, var(--text));
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  transition: background var(--transition), border-color var(--transition);
-}
-
-.files-changed-view__retry-button:hover {
-  background: var(--bg);
-}
-
-.files-changed-view__retry-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .files-changed-view__diff-placeholder {
