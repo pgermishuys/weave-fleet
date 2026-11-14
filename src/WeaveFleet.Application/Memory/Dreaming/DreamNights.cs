@@ -17,10 +17,18 @@ public interface IDreamStarter
     Task<Result<DreamView>> StartAsync(StartDreamRequest request, CancellationToken ct = default);
 }
 
+/// <summary>Stops a dream whose session reached its token limit (<see cref="DreamService.StopForBudgetAsync"/>).</summary>
+public interface IDreamStopper
+{
+    Task StopForBudgetAsync(string sessionId, string dreamId);
+}
+
 /// <summary>
 /// Dreaming as a built-in automation: each night it starts one dream for every repository with sessions started since
-/// the last night, one after another, and stops starting them once the night's token budget is spent. A night with
-/// nothing new is skipped and costs nothing. The run's summary says what each repository's dream did.
+/// the last night, one after another, the repository dreamed about longest ago first. Each dream may use what's left of
+/// the night's token budget and is stopped at the model call that reaches it; once it's spent, the rest wait for the
+/// next night, when they go first. A night with nothing new is skipped and costs nothing. The run's summary says what
+/// each repository's dream did.
 /// </summary>
 public sealed partial class DreamingAutomation(
     DreamingFeature feature,
@@ -72,7 +80,7 @@ public sealed partial class DreamingAutomation(
         var since = earlier.Count > 0 && DateTimeOffset.TryParse(earlier[0].StartedAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var last)
             ? last
             : time.GetUtcNow() - FirstNightReadsBack;
-        var repositories = await RepositoriesSinceAsync(since).ConfigureAwait(false);
+        var repositories = await RepositoriesSinceAsync(automation.UserId, since).ConfigureAwait(false);
         if (repositories.Count == 0)
             return AutomationExecutionOutcome.SkippedBecause("Skipped: no new sessions since the last night, nothing to read.");
 
@@ -100,19 +108,33 @@ public sealed partial class DreamingAutomation(
     }
 
     /// <summary>
-    /// The repositories with sessions started since <paramref name="since"/>, the busiest first. Dreaming sessions don't
-    /// count, and neither do sessions outside a git repository: a quick chat's folder, or any other plain folder.
+    /// The repositories with sessions started since <paramref name="since"/>, in the order a night dreams about them:
+    /// the one whose last dream started longest ago first (never dreamed about, first of all), then the busiest. So a
+    /// repository the budget ran out before is first the next night, and a busy one can't keep the others waiting.
+    /// Dreaming sessions don't count, and neither do sessions outside a git repository: a quick chat's folder, or any
+    /// other plain folder.
     /// </summary>
-    internal async Task<List<(string Repository, int Sessions)>> RepositoriesSinceAsync(DateTimeOffset since)
+    internal async Task<List<(string Repository, int Sessions)>> RepositoriesSinceAsync(string userId, DateTimeOffset since)
     {
         var started = await sessions.ListCreatedSinceAsync(since.UtcDateTime.ToString("O"), DreamRules.NightSessionsScanned).ConfigureAwait(false);
-        return [.. started
+        var worked = started
             .Where(s => !s.IsHidden && !s.Tags.Contains(DreamRules.SessionTag) && !string.IsNullOrWhiteSpace(s.Directory)
                 && !IsQuickChat(s.Directory) && GitPaths.MainCheckoutOf(s.Directory) is not null)
             .GroupBy(s => AgentMemory.RepositoryOf(s.Directory), PathComparer)
             .Where(group => Directory.Exists(group.Key))
             .Select(group => (Repository: group.Key, Sessions: group.Count()))
-            .OrderByDescending(r => r.Sessions)
+            .ToList();
+
+        var lastDreamed = new Dictionary<string, DateTimeOffset>(PathComparer);
+        foreach (var (repository, _) in worked)
+        {
+            if (await dreams.ListAsync(userId, repository, 1).ConfigureAwait(false) is [var last, ..])
+                lastDreamed[repository] = last.Started;
+        }
+
+        return [.. worked
+            .OrderBy(r => lastDreamed.TryGetValue(r.Repository, out var at) ? at : DateTimeOffset.MinValue)
+            .ThenByDescending(r => r.Sessions)
             .ThenBy(r => r.Repository, StringComparer.Ordinal)];
     }
 
@@ -145,7 +167,8 @@ public sealed partial class DreamingAutomation(
             }
 
             await runs.SetSummaryAsync(runId, string.Join(" · ", [.. parts, $"Dreaming about {name} ({i + 1} of {repositories.Count})…"])).ConfigureAwait(false);
-            var started = await starter.StartAsync(new StartDreamRequest(repository, automation.HarnessType, providerId, modelId, since, runId)).ConfigureAwait(false);
+            var started = await starter.StartAsync(
+                new StartDreamRequest(repository, automation.HarnessType, providerId, modelId, since, runId, TokenLimit: budget - spent)).ConfigureAwait(false);
             if (started.IsFailure)
             {
                 parts.Add($"{name}: {started.Error.Description}");

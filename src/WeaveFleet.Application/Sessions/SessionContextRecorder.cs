@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Memory.Dreaming;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -16,14 +17,18 @@ namespace WeaveFleet.Application.Sessions;
 /// Each session's reports are handled one at a time in the order its harness sent them, off the relay's pump: a turn's
 /// end handled before its last call would leave that call off the list.
 /// </remarks>
-public sealed partial class SessionContextRecorder(IServiceScopeFactory scopeFactory, ILogger<SessionContextRecorder> logger)
+public sealed partial class SessionContextRecorder(IServiceScopeFactory scopeFactory, ILogger<SessionContextRecorder> logger, DreamFinisher? dreams = null)
 {
     private readonly ConcurrentDictionary<string, Task> _tails = new(StringComparer.Ordinal);
     private readonly Lock _sync = new();
 
     /// <summary>A model call's size, or the model's limits, for session <paramref name="sessionId"/>.</summary>
     public void Observe(string sessionId, string? userId, ContextUsageReport report)
-        => Queue(sessionId, userId, (sp, ct) => sp.GetRequiredService<SessionContextService>().RecordUsageAsync(sessionId, report, ct));
+    {
+        // A dream with a token limit is stopped by the call that reaches it; with none running this is one check.
+        dreams?.ObserveCall(sessionId, report.Call);
+        Queue(sessionId, userId, (sp, ct) => sp.GetRequiredService<SessionContextService>().RecordUsageAsync(sessionId, report, ct));
+    }
 
     /// <summary>A compaction of session <paramref name="sessionId"/>'s context started, ended or failed.</summary>
     public void Observe(string sessionId, string? userId, ContextCompactionReport report)

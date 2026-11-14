@@ -33,6 +33,9 @@ public static class DreamRules
 
     public const int DefaultBudgetTokens = 300_000;
 
+    /// <summary>Why a night's dream failed when its session used what was left of the night's budget.</summary>
+    public const string StoppedAtBudget = "Stopped at the night's token budget.";
+
     /// <summary>The most sessions a night looks at to find the repositories worked in.</summary>
     public const int NightSessionsScanned = 500;
 
@@ -250,13 +253,18 @@ public sealed record DreamListView(IReadOnlyList<DreamView> Dreams);
 
 /// <param name="Since">A night's dream reads the sessions started since then; null reads the newest.</param>
 /// <param name="RunId">The night (automation run) starting it; set by Fleet only.</param>
+/// <param name="TokenLimit">
+/// What the dreaming session may use: Fleet stops it at the model call that reaches this. A night sets it to what's
+/// left of its budget.
+/// </param>
 public sealed record StartDreamRequest(
     string? Repository,
     string? HarnessType,
     string? ProviderId,
     string? ModelId,
     DateTimeOffset? Since = null,
-    string? RunId = null);
+    string? RunId = null,
+    long? TokenLimit = null);
 
 /// <summary>Where a user's dreams are kept.</summary>
 public interface IDreamStore
