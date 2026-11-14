@@ -5,6 +5,7 @@ import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
 import { useMachineTarget } from "@/lib/machine-target";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // The machine Settings shows (Folders can be another machine's).
 const { api } = useMachineTarget();
@@ -184,22 +185,14 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
       <span>{{ workspaceRootsError }}</span>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="workspaceRoots.length === 0"
-      class="mt-4 rounded-card border border-dashed border-border p-6 text-center"
-    >
-      <FolderGit2
-        :size="28"
-        class="mx-auto text-muted"
-        aria-hidden="true"
-      />
-      <p class="mt-3 text-sm font-medium text-text">
-        No locations yet
-      </p>
-      <p class="mt-1 text-xs text-muted">
-        Add the folder you keep your code in, such as ~/source, and Fleet lists the repositories inside it.
-      </p>
-    </div>
+      :icon="FolderGit2"
+      title="No locations yet"
+      description="Add the folder you keep your code in, such as ~/source, and Fleet lists the repositories inside it."
+      bordered
+      class="mt-4"
+    />
 
     <div
       v-else

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ChevronRight } from "lucide-vue-next";
+import { ChevronRight, History } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import { useFileStats } from "@/composables/use-file-stats";
 import { useSessionsStore } from "@/stores/sessions";
@@ -10,6 +10,7 @@ import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { runSessionCommand } from "@/lib/session-commands";
 import { formatCost, formatDuration, formatTokens } from "@/lib/format-utils";
 import { deriveTurns, fileEditsOf, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * The Turns tab: the rounds of this session, newest first — your prompt and everything the agent did
@@ -120,19 +121,20 @@ function showInChat(turn: SessionTurn): void {
     </div>
 
     <div class="turns-canvas__list">
-      <p
+      <EmptyState
         v-if="turns.length === 0"
-        class="turns-canvas__empty"
-      >
-        No turns yet. The first prompt of this session starts one.
-      </p>
+        :icon="History"
+        title="No turns yet"
+        description="The first prompt of this session starts one."
+        compact
+      />
 
-      <p
+      <EmptyState
         v-else-if="shown.length === 0"
-        class="turns-canvas__empty"
-      >
-        No turn in the loaded history changed a file.
-      </p>
+        :icon="History"
+        title="No turn in the loaded history changed a file"
+        compact
+      />
 
       <div
         v-for="turn in shown"
@@ -414,13 +416,6 @@ function showInChat(turn: SessionTurn): void {
   flex-direction: column;
   padding: 6px;
   scrollbar-width: thin;
-}
-
-.turns-canvas__empty {
-  margin: 0;
-  padding: 14px 12px;
-  font-size: 13px;
-  color: var(--muted);
 }
 
 .turn {

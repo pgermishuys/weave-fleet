@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { Download, LoaderCircle, Plus } from "lucide-vue-next";
+import { Download, LoaderCircle, MessageSquare, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useRelativeTime } from "@/composables/use-relative-time";
@@ -19,6 +19,7 @@ import { useWorkflowsStore } from "@/stores/workflows";
 import DashboardSessionRow from "./DashboardSessionRow.vue";
 import RetentionFilter from "./RetentionFilter.vue";
 import SummaryBar from "./SummaryBar.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** How many quiet sessions show before "Show more". */
 const RECENT_LIMIT = 8;
@@ -236,18 +237,16 @@ function handleNewSession(): void {
       Loading sessions…
     </div>
 
-    <div
+    <EmptyState
       v-else-if="isEmpty"
       data-testid="empty-state"
-      class="dashboard__empty"
+      :icon="MessageSquare"
+      :title="retentionStatus === 'archived' ? 'No archived sessions' : 'No sessions yet'"
+      description="Start a session to put an agent to work. It shows up here while it runs, and when it needs you."
+      bordered
+      class="py-14"
     >
-      <h2 class="dashboard__empty-title">
-        {{ retentionStatus === "archived" ? "No archived sessions" : "No sessions yet" }}
-      </h2>
-      <p class="dashboard__empty-copy">
-        Start a session to put an agent to work. It shows up here while it runs, and when it needs you.
-      </p>
-      <div class="dashboard__empty-actions">
+      <template #action>
         <Button
           size="sm"
           @click="handleNewSession"
@@ -256,8 +255,8 @@ function handleNewSession(): void {
           New session
         </Button>
         <RetentionFilter v-model="retentionStatus" />
-      </div>
-    </div>
+      </template>
+    </EmptyState>
 
     <template v-else>
       <section
@@ -335,12 +334,11 @@ function handleNewSession(): void {
             @changed="handleSessionChanged"
           />
         </div>
-        <p
+        <EmptyState
           v-else
-          class="dashboard__none"
-        >
-          Nothing else here.
-        </p>
+          title="Nothing else here"
+          compact
+        />
         <button
           v-if="recent.length > RECENT_LIMIT"
           type="button"
@@ -452,38 +450,6 @@ function handleNewSession(): void {
   font-size: 13px;
 }
 
-.dashboard__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 56px 24px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-card);
-  text-align: center;
-}
-
-.dashboard__empty-title {
-  margin: 0;
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.dashboard__empty-copy {
-  max-width: 420px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.dashboard__empty-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .dashboard__section {
   display: flex;
   flex-direction: column;
@@ -534,13 +500,6 @@ function handleNewSession(): void {
 .dashboard__rows {
   display: flex;
   flex-direction: column;
-}
-
-.dashboard__none {
-  margin: 0;
-  padding: 8px 10px;
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .dashboard__more {

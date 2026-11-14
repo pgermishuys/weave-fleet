@@ -170,7 +170,7 @@ describe("ProgressCanvas", () => {
   it("explains where progress comes from when there's nothing yet", async () => {
     const wrapper = await mountWith(null);
 
-    expect(wrapper.get(".progress-canvas__empty").text()).toContain("Nothing to track yet");
-    expect(wrapper.get(".progress-canvas__empty").text()).toContain(".weave/plans/");
+    expect(wrapper.get("[data-slot='empty-state']").text()).toContain("Nothing to track yet");
+    expect(wrapper.get("[data-slot='empty-state']").text()).toContain(".weave/plans/");
   });
 });

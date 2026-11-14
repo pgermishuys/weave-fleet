@@ -6,6 +6,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { setPluginEnabledEverywhere } from "@/plugins/use-plugin-switch";
 import { usePluginRuntime } from "@/plugins/composable";
 import { describeContributions, getConfigPage, isPluginEnabled } from "@/plugins/slots";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // Everything here is read from the plugin registry and each plugin's contribution points; no plugin is named.
 const pluginRuntime = usePluginRuntime();
@@ -54,12 +55,11 @@ const rows = computed(() =>
     </div>
 
     <div class="overflow-hidden rounded-card border border-border bg-card-bg">
-      <p
+      <EmptyState
         v-if="rows.length === 0"
-        class="p-4 text-sm text-muted"
-      >
-        No plugins are installed.
-      </p>
+        :icon="Puzzle"
+        title="No plugins are installed"
+      />
       <article
         v-for="row in rows"
         :key="row.id"

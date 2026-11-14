@@ -12,6 +12,7 @@ import { autoName, parseSchedule, promptFrom } from "@/lib/automation-schedule";
 import { automationRowStatus } from "@/lib/automations";
 import type { Automation } from "@/stores/automations";
 import { useMachinesStore } from "@/stores/machines";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface Props {
   modelValue: string | null;
@@ -217,14 +218,12 @@ function handleCreate(): void {
       </Button>
     </div>
 
-    <div
+    <EmptyState
       v-else
-      class="automations-nav-empty"
-    >
-      <p class="empty-message">
-        No automations yet
-      </p>
-    </div>
+      title="No automations yet"
+      compact
+      class="flex-1"
+    />
   </section>
 </template>
 

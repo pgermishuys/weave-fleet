@@ -10,6 +10,8 @@ import FleetViewStrip from "@/components/mission-control/FleetViewStrip.vue";
 import { groupTiles, type Grouping, type Tile } from "@/lib/mission-control";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { useMachinesStore } from "@/stores/machines";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Radar } from "lucide-vue-next";
 
 const router = useRouter();
 const machines = useMachinesStore();
@@ -114,12 +116,13 @@ function nudge(tile: Tile, text: string, done: (outcome: AnswerOutcome & { queue
             </button>
           </div>
         </div>
-        <p
+        <EmptyState
           v-if="!machineTiles.length"
-          class="text-sm text-muted"
-        >
-          No sessions are working or waiting on this machine. Start one from Sessions.
-        </p>
+          :icon="Radar"
+          title="No sessions are working or waiting on this machine"
+          description="Start one from Sessions."
+          bordered
+        />
         <div
           v-for="group in machineGroups"
           :key="group.key"

@@ -8,6 +8,7 @@ import { useSideConversation } from "@/composables/use-side-conversation";
 import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import { foldMessages } from "@/lib/phone/fold-steps";
 import { autogrow } from "@/lib/phone/keyboard";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * A side question (`/btw`) as a full-height sheet over the session: its own conversation and composer, a fork that
@@ -69,13 +70,12 @@ async function discard(): Promise<void> {
     </template>
 
     <div class="ph-convo scs__convo">
-      <p
+      <EmptyState
         v-if="!side.side.value && !side.starting.value"
-        class="scs__empty"
-      >
-        Ask something without interrupting the agent. It sees the conversation so far, but its answer stays here, and
-        the session carries on.
-      </p>
+        title="Ask something without interrupting the agent"
+        description="It sees the conversation so far, but its answer stays here, and the session carries on."
+        compact
+      />
       <template
         v-for="block in blocks"
         :key="block.key"
@@ -143,13 +143,6 @@ async function discard(): Promise<void> {
 <style scoped>
 .scs__convo {
   padding-top: 0;
-}
-
-.scs__empty {
-  margin: 4px 2px 0;
-  font-size: var(--ph-t-meta);
-  line-height: 1.4;
-  color: var(--muted);
 }
 
 .scs__error {

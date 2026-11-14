@@ -22,6 +22,8 @@ import { useSessionPinsStore } from "@/stores/session-pins";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /**
  * A machine that didn't serve the page: its sessions as it last listed them, refreshed on a timer, in the same tree the
@@ -282,55 +284,35 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
         @move-out-of-parent="handleMoveOutOfParent"
         @unpin-session="handleUnpin"
       />
-      <p
+      <EmptyState
         v-if="!state?.error && state?.loadedAt && projectGroups.length === 0 && pinnedGroup.sessionCount === 0"
-        class="machine-group__empty"
+        :title="query ? 'No sessions found' : 'No sessions yet'"
+        compact
       >
-        <template v-if="query">
-          No matching sessions
-        </template>
-        <template v-else>
-          No sessions ·
-          <button
-            type="button"
-            class="machine-group__start"
+        <template
+          v-if="!query"
+          #action
+        >
+          <Button
+            variant="outline"
+            size="sm"
             data-testid="machine-group-new-session"
             @click="emit('newSession')"
           >
             New session
-          </button>
+          </Button>
         </template>
-      </p>
+      </EmptyState>
     </template>
   </section>
 </template>
 
 <style scoped>
-.machine-group__error,
-.machine-group__empty {
+.machine-group__error {
   margin: 2px 10px 4px 26px;
   font-size: 0.82143rem;
   line-height: 1.4;
   color: var(--muted);
-}
-
-.machine-group__start {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--coral);
-  font: inherit;
-  cursor: pointer;
-}
-
-.machine-group__start:hover {
-  text-decoration: underline;
-}
-
-.machine-group__start:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
 }
 
 .machine-group__error {

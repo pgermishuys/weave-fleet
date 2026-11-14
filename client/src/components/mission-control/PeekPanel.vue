@@ -7,6 +7,7 @@ import { peekEvents, type PeekEvent } from "@/lib/mission-peek";
 import type { FleetMessage } from "@/lib/pagination-utils";
 import type { RunningWorkItem } from "@/lib/running-work";
 import type { AnswerOutcome, AnswerTarget } from "@/lib/push/answer";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const props = defineProps<{
   tile: Tile;
@@ -109,11 +110,11 @@ function nudge(): void {
         >
           {{ event.text }}
         </li>
-        <li
-          v-if="!events.length"
-          class="text-xs text-muted"
-        >
-          Nothing yet.
+        <li v-if="!events.length">
+          <EmptyState
+            title="Nothing yet"
+            compact
+          />
         </li>
       </ul>
     </section>

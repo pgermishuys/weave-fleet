@@ -5,6 +5,8 @@
 //   RAW_BUTTON        a raw <button> where the <Button> component would do
 //   HARDCODED_RADIUS  a border-radius that isn't 0, 50% or a var(--…) token
 //   HARDCODED_TIMING  a transition or animation duration that isn't a var(--transition…) token
+//   AD_HOC_EMPTY_STATE an element with its own empty-state class (`x__empty`, `x-empty`, `empty-message`, …)
+//                     where <EmptyState> would do
 //
 // The counts are compared with design-lint-baseline.json. A count above its baseline fails (the output names
 // the files that grew); a count below it passes and asks you to lower the baseline, so it only ever goes down.
@@ -16,7 +18,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING"] as const;
+export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE"] as const;
 export type Rule = (typeof RULES)[number];
 
 export interface Violation {
@@ -142,9 +144,32 @@ export function checkTransitionTimings(file: string, style: Block[]): Violation[
   return out;
 }
 
+// A home-made empty state almost always names its container after it: `foo__empty`, `foo-empty`,
+// `empty-message`, `foo-empty-state`. Count one per element (the container's class, not its `__empty-text`
+// children). A BEM modifier (`foo--empty`) styles a row that happens to be empty, so it doesn't count.
+const EMPTY_CLASS = /^(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:__|-))?empty(?:-state|-message)?$/;
+
+export function checkEmptyStates(file: string, template: Block[]): Violation[] {
+  const out: Violation[] = [];
+  for (const block of template) {
+    for (const m of block.text.matchAll(/(?<![:\w-])class="([^"]*)"/g)) {
+      const token = m[1].split(/\s+/).find((c) => !c.includes("--") && EMPTY_CLASS.test(c));
+      if (token) {
+        out.push({ rule: "AD_HOC_EMPTY_STATE", file, line: lineAt(block, m.index), detail: `class "${token}"; use <EmptyState>` });
+      }
+    }
+  }
+  return out;
+}
+
 export function lintFile(file: string, content: string): Violation[] {
   const { template, style } = extractBlocks(content);
-  return [...checkRawButtons(file, template), ...checkBorderRadius(file, style), ...checkTransitionTimings(file, style)];
+  return [
+    ...checkRawButtons(file, template),
+    ...checkBorderRadius(file, style),
+    ...checkTransitionTimings(file, style),
+    ...checkEmptyStates(file, template),
+  ];
 }
 
 export function lintClient(root: string = clientRoot): Violation[] {

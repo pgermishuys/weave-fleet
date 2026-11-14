@@ -24,6 +24,7 @@ import {
 import type { WorkflowFile } from "@/lib/workflow-draft";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const router = useRouter();
 const nav = useWorkflowsNav();
@@ -436,12 +437,12 @@ function openRun(run: WorkflowRun): void {
             >{{ runText(run) }}</span>
           </button>
         </div>
-        <p
+        <EmptyState
           v-else
-          class="wf-detail__none"
-        >
-          No runs yet.
-        </p>
+          title="No runs yet"
+          bordered
+          compact
+        />
       </div>
 
       <WorkflowRunBox

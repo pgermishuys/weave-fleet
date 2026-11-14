@@ -56,6 +56,30 @@ describe("design lint rules", () => {
   });
 });
 
+describe("ad-hoc empty states", () => {
+  const template = `<template>
+  <p class="panel__empty">Nothing here</p>
+  <div
+    v-else
+    class="list-empty flex"
+  >
+    <p class="list-empty-text">No rows</p>
+  </div>
+  <p class="empty-message">No automations yet</p>
+  <li :class="{ 'row--empty': true }" class="row row--empty">Empty row</li>
+  <p class="mt-2 empty:hidden">Collapses when empty</p>
+  <EmptyState title="Design system" />
+</template>
+`;
+  const lines = lintFile("src/components/Example.vue", template)
+    .filter((v) => v.rule === "AD_HOC_EMPTY_STATE")
+    .map((v) => v.line);
+
+  it("counts each home-made empty-state container once, not its text children or row modifiers", () => {
+    expect(lines).toEqual([2, 5, 9]);
+  });
+});
+
 describe("design lint ratchet", () => {
   const baseline: Baseline = countsOf([
     { rule: "RAW_BUTTON", file: "a.vue", line: 1, detail: "" },

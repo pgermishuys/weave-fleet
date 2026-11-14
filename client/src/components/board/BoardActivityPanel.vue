@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type BoardActivityTone = "running" | "complete" | "error" | "queued" | "muted";
 
@@ -194,12 +195,11 @@ onUnmounted(() => {
     class="activity-feed"
     aria-label="Board activity feed"
   >
-    <p
+    <EmptyState
       v-if="orderedEntries.length === 0"
-      class="activity-feed-empty"
-    >
-      Waiting for activity events.
-    </p>
+      title="Waiting for activity events"
+      compact
+    />
 
     <article
       v-for="entry in orderedEntries"
@@ -232,13 +232,6 @@ onUnmounted(() => {
 .activity-feed {
   display: flex;
   flex-direction: column;
-}
-
-.activity-feed-empty {
-  margin: 0;
-  padding: 8px 0;
-  font-size: 11px;
-  color: var(--muted);
 }
 
 .activity-feed-item {

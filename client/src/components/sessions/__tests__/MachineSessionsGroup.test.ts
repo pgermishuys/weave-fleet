@@ -147,7 +147,7 @@ describe("MachineSessionsGroup", () => {
 
     expect(rowIds(mountGroup({ state, query: "tomatoes" }))).toEqual(["garden-1"]);
     expect(groupNames(mountGroup({ state, query: "light" }))).toEqual(["Lighthouse"]);
-    expect(mountGroup({ state, query: "nothing like it" }).text()).toContain("No matching sessions");
+    expect(mountGroup({ state, query: "nothing like it" }).text()).toContain("No sessions found");
   });
 
   it("folds its projects under its own keys", async () => {

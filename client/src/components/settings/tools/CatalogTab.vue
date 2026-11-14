@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { InstallToolRequest } from "@/composables/use-tool-catalog";
 import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-target";
 import InstallTargetPicker from "../InstallTargetPicker.vue";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const target = defineModel<InstallTarget>("target", { required: true });
 
@@ -91,22 +92,13 @@ async function handleInstall(toolName: string): Promise<void> {
       <span>{{ error }}</span>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="!hasCatalog"
-      class="rounded-card border border-dashed border-border p-6 text-center"
-    >
-      <Wrench
-        :size="28"
-        class="mx-auto text-muted"
-        aria-hidden="true"
-      />
-      <p class="mt-3 text-sm font-medium text-text">
-        No tools in catalog
-      </p>
-      <p class="mt-1 text-xs text-muted">
-        The tool catalog is empty or unavailable.
-      </p>
-    </div>
+      :icon="Wrench"
+      title="No tools in catalog"
+      description="The tool catalog is empty or unavailable."
+      bordered
+    />
 
     <div
       v-else

@@ -3,6 +3,7 @@ import { shallowRef } from "vue";
 import { Button } from "@/components/ui/button";
 import type { Tile } from "@/lib/mission-control";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
+import { EmptyState } from "@/components/ui/empty-state";
 
 defineProps<{ items: readonly Tile[]; wide?: boolean }>();
 const emit = defineEmits<{
@@ -47,12 +48,12 @@ function answerPermission(tile: Tile, reply: PermissionReply): void {
       </h3>
       <span class="text-sm font-semibold text-accent">{{ items.length }}</span>
     </div>
-    <p
+    <EmptyState
       v-if="!items.length"
-      class="text-sm text-muted"
-    >
-      Nothing is waiting on you.
-    </p>
+      title="Nothing is waiting on you"
+      bordered
+      compact
+    />
     <article
       v-for="tile in items"
       :key="tile.key"

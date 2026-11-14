@@ -7,6 +7,7 @@ import HarnessProfileEditor from "@/components/settings/HarnessProfileEditor.vue
 import { profileSummary } from "@/lib/harness-profile";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
+import { EmptyState } from "@/components/ui/empty-state";
 
 /** A harness's profiles in Settings: list, default, and an editor that opens in place. */
 const props = defineProps<{
@@ -107,19 +108,16 @@ function usage(profile: HarnessProfile): string {
       {{ listError }}
     </p>
 
-    <div
+    <EmptyState
       v-if="profiles.length === 0 && !editing"
-      class="rounded-card border border-dashed border-border p-4 text-xs text-muted"
+      :icon="Layers"
+      title="No profiles yet"
+      bordered
       data-testid="harness-profiles-empty"
     >
-      <p class="text-sm font-medium text-text">
-        No profiles yet
-      </p>
-      <p class="mt-1 max-w-2xl">
-        Every {{ harnessName }} session uses your opencode.json as it is, and the new-session box has no profile chip.
-        Make a profile when some sessions need other providers, models or MCP servers.
-      </p>
-    </div>
+      Every {{ harnessName }} session uses your opencode.json as it is, and the new-session box has no profile chip.
+      Make a profile when some sessions need other providers, models or MCP servers.
+    </EmptyState>
 
     <ul
       v-else

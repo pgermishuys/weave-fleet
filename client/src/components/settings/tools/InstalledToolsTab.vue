@@ -5,6 +5,7 @@ import { useTools, type ToolRef } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { targetKey, targetLabel } from "@/lib/install-target";
+import { EmptyState } from "@/components/ui/empty-state";
 
 const { tools, isLoading, error, removeTool } = useTools();
 
@@ -72,22 +73,13 @@ function formatCommand(command: string | null | undefined, args: readonly string
       <span>{{ error }}</span>
     </div>
 
-    <div
+    <EmptyState
       v-else-if="!hasTools"
-      class="rounded-card border border-dashed border-border p-6 text-center"
-    >
-      <Wrench
-        :size="28"
-        class="mx-auto text-muted"
-        aria-hidden="true"
-      />
-      <p class="mt-3 text-sm font-medium text-text">
-        No tools installed
-      </p>
-      <p class="mt-1 text-xs text-muted">
-        Install a tool from the Catalog or Custom tab.
-      </p>
-    </div>
+      :icon="Wrench"
+      title="No tools installed"
+      description="Install a tool from the Catalog or Custom tab."
+      bordered
+    />
 
     <div
       v-else

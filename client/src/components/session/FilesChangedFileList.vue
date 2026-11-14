@@ -2,6 +2,7 @@
 import { computed, useTemplateRef } from "vue";
 import { FilePenLine, FilePlus2, FileX2 } from "lucide-vue-next";
 import type { Component } from "vue";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export type FileDiffStatus = "added" | "deleted" | "modified";
 
@@ -221,13 +222,11 @@ function normalizeLineCount(value: number | null | undefined): number {
       Changed files could not be loaded.
     </p>
 
-    <p
+    <EmptyState
       v-else-if="displayFiles.length === 0"
-      class="files-changed-file-list__empty"
-      :class="`${classPrefix}__empty`"
-    >
-      No changes
-    </p>
+      title="No changes"
+      compact
+    />
 
     <ul
       v-else
@@ -328,20 +327,6 @@ function normalizeLineCount(value: number | null | undefined): number {
   height: 100%;
   max-height: 100%;
   contain: strict;
-}
-
-.files-changed-file-list__empty {
-  margin: 0;
-  padding: 10px 12px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.files-changed-file-list--full .files-changed-file-list__empty {
-  margin: 12px;
-  padding: 0;
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .files-changed-file-list__notice {

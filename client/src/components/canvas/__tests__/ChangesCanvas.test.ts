@@ -74,7 +74,7 @@ describe("ChangesCanvas", () => {
     const wrapper = mountCanvas();
     await flushPromises();
 
-    expect(wrapper.text()).toContain("No changes in this session yet.");
+    expect(wrapper.text()).toContain("No changes in this session yet");
   });
 
   it("says it is loading, not empty, until the first answer arrives", async () => {
@@ -89,7 +89,7 @@ describe("ChangesCanvas", () => {
     sharedDiffs.hasLoaded.value = true;
     await flushPromises();
 
-    expect(wrapper.text()).toContain("No changes in this session yet.");
+    expect(wrapper.text()).toContain("No changes in this session yet");
     expect(wrapper.text()).not.toContain("Loading changes");
   });
 
@@ -102,7 +102,7 @@ describe("ChangesCanvas", () => {
     const base = wrapper.get("[data-testid='changes-base']");
     expect(base.text()).toBe("Compared with main8a61fdd");
     expect(base.attributes("title")).toContain("since it left main at 8a61fdd");
-    expect(wrapper.text()).toContain("No changes on this branch yet.");
+    expect(wrapper.text()).toContain("No changes on this branch yet");
   });
 
   it("says a folder off any branch is compared with the session start", async () => {
@@ -112,7 +112,7 @@ describe("ChangesCanvas", () => {
     await flushPromises();
 
     expect(wrapper.get("[data-testid='changes-base']").text()).toBe("Since this session started");
-    expect(wrapper.text()).toContain("No changes in this session yet.");
+    expect(wrapper.text()).toContain("No changes in this session yet");
   });
 
   it("leaves the base line out when changes show: the scope select carries it", async () => {

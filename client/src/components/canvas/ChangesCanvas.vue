@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, inject, shallowRef } from "vue";
-import { GitBranch, History } from "lucide-vue-next";
+import { GitBranch, GitCompare, History } from "lucide-vue-next";
 import ChangesReview from "@/components/canvas/ChangesReview.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { diffBaseLabel } from "@/lib/diff-base";
+import { EmptyState } from "@/components/ui/empty-state";
 
 defineProps<{
   sessionId: string;
@@ -109,12 +110,12 @@ async function retry(): Promise<void> {
         {{ copied ? "Copied" : "Copy command" }}
       </button>
     </div>
-    <p
+    <EmptyState
       v-else-if="!hasChanges"
-      class="changes-canvas__empty"
-    >
-      {{ base?.kind === "branch" ? "No changes on this branch yet." : "No changes in this session yet." }}
-    </p>
+      :icon="GitCompare"
+      :title="base?.kind === 'branch' ? 'No changes on this branch yet' : 'No changes in this session yet'"
+      compact
+    />
     <ChangesReview
       v-else
       :session-id="sessionId"
