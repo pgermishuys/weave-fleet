@@ -68,14 +68,14 @@ public sealed class PiTranscriptReplayTests
     {
         var events = ReplayFixture("tool-validation.jsonl");
 
-        // After wrapping tool-result events, the count increased by 1
-        events.Count.ShouldBe(96);
+        // The tool's result message (created, ended, and again in agent_end) is the tool row's output instead.
+        events.Count.ShouldBe(93);
         AssertTypeCounts(events, new Dictionary<string, int>
         {
             [EventTypes.SessionUpdated] = 2,
             [EventTypes.SessionStatus] = 5,
-            [EventTypes.MessageCreated] = 4,
-            [EventTypes.MessageUpdated] = 10,
+            [EventTypes.MessageCreated] = 3,
+            [EventTypes.MessageUpdated] = 8,
             [EventTypes.MessagePartUpdated] = 50,
             [EventTypes.MessagePartDelta] = 25,
         });
@@ -87,10 +87,12 @@ public sealed class PiTranscriptReplayTests
             ("tool pending named", evt => IsTool(evt, "pending") && ToolName(evt) == "bash" && ToolCallId(evt) == "toolu_bdrk_01FyZaRDQHHxCpfMaZmr5Pwc"),
             ("tool running", evt => IsTool(evt, "running") && ToolName(evt) == "bash" && HasObjectToolInput(evt) && ToolInput(evt).GetProperty("command").GetString() == "ls -la"),
             ("tool completed", evt => IsTool(evt, "completed") && ToolOutput(evt).GetString()!.Contains("resume-validation.jsonl", StringComparison.Ordinal)),
-            ("tool result created", evt => evt.Type == EventTypes.MessageCreated && MessageAgent(evt) == "tool:bash"),
             ("summary text delta", evt => evt.Type == EventTypes.MessagePartDelta && Delta(evt).Contains("Summary", StringComparison.Ordinal)),
             ("summary final text", evt => IsPart(evt, "text") && PartText(evt).Contains("resume-validation.jsonl", StringComparison.Ordinal)),
             ("turn idle once Pi answered", evt => IsStatus(evt, "idle") && StatusReason(evt) == "stop"));
+
+        // The tool's result is the tool row's output, not a message of its own under it.
+        events.ShouldNotContain(evt => (evt.Type == EventTypes.MessageCreated || evt.Type == EventTypes.MessageUpdated) && MessageAgent(evt) == "tool:bash");
 
         // The turn that called the tool isn't the run's last: the session stays busy while Pi runs it and goes on.
         events.ShouldNotContain(evt => IsStatus(evt, "idle") && StatusReason(evt) == "toolUse");
