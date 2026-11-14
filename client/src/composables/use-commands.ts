@@ -381,7 +381,7 @@ export function useCommands() {
       {
         id: "add-machine",
         label: "Add a machine",
-        description: "Connect another computer to this Fleet.",
+        description: "Connect another machine to this Fleet.",
         icon: Monitor,
         category: "Navigation",
         keywords: ["machine", "computer", "pair", "pairing link", "ssh", "remote", "connect"],

@@ -106,7 +106,7 @@ async function share(): Promise<void> {
       v-else
       class="ph-foot ooc__hint"
     >
-      This harness can't run one-off commands. Terminals open on the computer.
+      This harness can't run one-off commands. Terminals open on the machine.
     </p>
     <div
       v-if="link"

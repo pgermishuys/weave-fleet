@@ -38,13 +38,13 @@ const size = computed(() => (props.release.size ? ` (about ${megabytes(props.rel
       v-else-if="!release.hasBuild"
       class="max-w-xl text-sm leading-6 text-muted"
     >
-      Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.
+      Fleet has no Bun build for this machine. Install Bun yourself and point Fleet at it.
     </p>
     <p
       v-else
       class="max-w-xl text-sm leading-6 text-muted"
     >
-      Mods run in a small Bun program beside Fleet. To turn them on, Fleet downloads Bun {{ release.version }}{{ size }} from <code :class="CODE">{{ release.source }}</code>, checks it against a checksum built into Fleet, and installs it in <code :class="CODE">{{ release.installFolder }}</code>. Nothing else on your computer changes.
+      Mods run in a small Bun program beside Fleet. To turn them on, Fleet downloads Bun {{ release.version }}{{ size }} from <code :class="CODE">{{ release.source }}</code>, checks it against a checksum built into Fleet, and installs it in <code :class="CODE">{{ release.installFolder }}</code>. Nothing else on this machine changes.
     </p>
 
     <div class="flex flex-wrap items-center gap-2">

@@ -113,7 +113,7 @@ function onOpenChange(open: boolean): void {
             </h2>
             <p class="harness-setup__lede">
               Fleet runs your sessions through a harness: a coding tool like OpenCode or Claude Code, installed on
-              this computer. Let's get one ready. It takes a minute or two.
+              this machine. Let's get one ready. It takes a minute or two.
             </p>
           </div>
           <button

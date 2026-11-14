@@ -448,7 +448,7 @@ onMounted(load);
               v-model="draft"
               rows="2"
               maxlength="400"
-              :placeholder="group.list === 'machine' ? 'Something true for every repository on this machine' : `Something true for ${repositoryName} on any computer`"
+              :placeholder="group.list === 'machine' ? 'Something true for every repository on this machine' : `Something true for ${repositoryName} on any machine`"
               class="w-full resize-none rounded-md border border-border bg-card-bg p-2 text-sm text-text outline-none focus:border-accent"
               :data-testid="`memory-draft-${group.list}`"
               @keydown.enter.exact.prevent="saveDraft"

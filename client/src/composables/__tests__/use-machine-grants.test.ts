@@ -25,7 +25,7 @@ describe("machinesNeedingGrants", () => {
     expect(machinesNeedingGrants([home, falcon, osprey], credentials, "https:").map((m) => m.id)).toEqual(["falcon"]);
     expect(machinesNeedingGrants([home, falcon, osprey], withFalcon, "https:")).toEqual([]);
     expect(machinesNeedingGrants([osprey], credentials, "http:").map((m) => m.id)).toEqual(["osprey"]);
-    expect(unreachableReason(osprey, "https:")).toContain("Reachable only from computers");
+    expect(unreachableReason(osprey, "https:")).toContain("This phone can't reach its http:// address");
   });
 });
 

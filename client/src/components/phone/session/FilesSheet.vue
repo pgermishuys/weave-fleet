@@ -44,7 +44,7 @@ async function read(entry: Entry): Promise<void> {
     file.value = {
       path: entry.relativePath,
       text: content.isBinary ? null : content.content,
-      note: content.isBinary ? "A binary file: open it on the computer." : content.isTruncated ? "Only the start of this file is shown." : null,
+      note: content.isBinary ? "A binary file: open it on the machine." : content.isTruncated ? "Only the start of this file is shown." : null,
     };
   } catch (failure) {
     error.value = failure instanceof Error ? failure.message : String(failure);

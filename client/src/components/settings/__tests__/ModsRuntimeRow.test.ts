@@ -96,7 +96,7 @@ describe("Mods row: turning Mods on", () => {
 
     expect(stateOf(wrapper)).toBe("confirm");
     expect(panel(wrapper).text()).toContain("Fleet downloads Bun 1.4.2 (about 35 MB) from github.com/oven-sh/bun");
-    expect(panel(wrapper).text()).toContain("installs it in ~/.weave/runtimes/bun/1.4.2. Nothing else on your computer changes.");
+    expect(panel(wrapper).text()).toContain("installs it in ~/.weave/runtimes/bun/1.4.2. Nothing else on this machine changes.");
     expect(toggle(wrapper).attributes("aria-checked")).toBe("false");
     expect(toggle(wrapper).classes()).toContain("ring-2");
     expect(putMock).not.toHaveBeenCalled();
@@ -127,12 +127,12 @@ describe("Mods row: turning Mods on", () => {
     expect(called("install")).toHaveLength(0);
   });
 
-  it("2 confirm: with no build for this computer it says so and only offers Cancel", async () => {
+  it("2 confirm: with no build for this machine it says so and only offers Cancel", async () => {
     const wrapper = await mountRow(makeView({ release: { ...makeView().release, hasBuild: false } }));
 
     await toggle(wrapper).trigger("click");
 
-    expect(panel(wrapper).text()).toContain("Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.");
+    expect(panel(wrapper).text()).toContain("Fleet has no Bun build for this machine. Install Bun yourself and point Fleet at it.");
     expect(buttons(panel(wrapper))).toEqual(["Cancel"]);
   });
 
@@ -296,7 +296,7 @@ describe("Mods row: turning Mods on", () => {
   });
 
   it("5 failed with no build: shows the message and hides Retry", async () => {
-    const failed = job({ phase: "failed", reason: "no-build", message: "Fleet has no Bun build for this computer." });
+    const failed = job({ phase: "failed", reason: "no-build", message: "Fleet has no Bun build for this machine." });
     const wrapper = await mountRow(makeView({ job: failed }), "false");
 
     expect(stateOf(wrapper)).toBe("failed");

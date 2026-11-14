@@ -41,10 +41,10 @@ export function phoneReadiness(input: ReadinessInput): ReadinessItem[] {
     {
       id: "tailscale",
       ok: onTailnet,
-      title: "Tailscale on this computer and your phone",
+      title: "Tailscale on this machine and your phone",
       detail: onTailnet
         ? `Your phone reaches ${input.machineName} over your own private network, from anywhere. Nothing goes through Weave.`
-        : "A free private network, so your phone reaches this computer from anywhere without opening it to the internet. Install it on both and sign in to the same account.",
+        : "A free private network, so your phone reaches this machine from anywhere without opening it to the internet. Install it on both and sign in to the same account.",
       ...(onTailnet ? {} : { link: { href: "https://tailscale.com/download", label: "Get Tailscale" } }),
     },
     {
@@ -62,7 +62,7 @@ export function phoneReadiness(input: ReadinessInput): ReadinessItem[] {
       title: "Fleet asks every device for a key",
       detail: input.requiresToken
         ? "Only devices you add here get in, and you can remove any of them."
-        : "Through tailscale serve every request looks like it comes from this computer, so Fleet has to ask for a key. Start Fleet with:",
+        : "Through tailscale serve every request looks like it comes from this machine, so Fleet has to ask for a key. Start Fleet with:",
       ...(input.requiresToken ? {} : { command: `fleet --port ${input.port} --require-token` }),
     },
   ];

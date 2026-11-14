@@ -342,7 +342,7 @@ const options = computed<FolderOption[]>(() => {
       id: "path",
       group: "Other",
       title: props.allowCreate ? "Open or create a folder…" : "Open a folder…",
-      detail: props.allowCreate ? "Type a path; Fleet lists what's there" : "Any repository or folder on this computer",
+      detail: props.allowCreate ? "Type a path; Fleet lists what's there" : "Any repository or folder on this machine",
       mono: false,
       icon: "browse",
       isSelected: false,

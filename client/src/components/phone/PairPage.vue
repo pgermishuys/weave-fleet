@@ -228,9 +228,9 @@ function enterCode(): void {
             :src="weaveLogo"
             alt="Fleet"
           >
-          <h1>Enter the code from your computer</h1>
+          <h1>Enter the code from your machine</h1>
           <p class="ph-center-page__lede">
-            On the computer, open Settings&nbsp;→&nbsp;Machines&nbsp;→&nbsp;Add a phone. Opened Fleet from the Home
+            In Fleet on the machine, open Settings&nbsp;→&nbsp;Machines&nbsp;→&nbsp;Add a phone. Opened Fleet from the Home
             Screen? Enter the code shown there; the camera link may not reach the Home Screen app.
           </p>
           <label
@@ -276,7 +276,7 @@ function enterCode(): void {
         <div class="pair__body">
           <h1>This code has expired or was already used</h1>
           <p class="ph-center-page__lede">
-            Ask for a new code on the computer: Settings&nbsp;→&nbsp;Machines&nbsp;→&nbsp;Add a phone. Each code works
+            Ask for a new code in Fleet on the machine: Settings&nbsp;→&nbsp;Machines&nbsp;→&nbsp;Add a phone. Each code works
             once, for 10 minutes.
           </p>
           <div class="ph-actions">

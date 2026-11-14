@@ -40,7 +40,7 @@ public sealed partial class DeviceGrantService(
         var self = identity.Get();
         var homeName = self.Name ?? Environment.MachineName;
         if (machines.TryTokenOf(machine) is not { } machineToken)
-            return GrantResult.Fail(GrantFailure.Refused, $"{homeName} can't read its token for {machine.Name}. Enter it again in Settings › Machines on the computer.");
+            return GrantResult.Fail(GrantFailure.Refused, $"{homeName} can't read its token for {machine.Name}. Enter it again in Settings › Machines on {homeName}.");
 
         // The old token goes before a new one is made: the grant row only remembers one, and a token this machine
         // forgets about could never be removed when the phone is.
@@ -73,7 +73,7 @@ public sealed partial class DeviceGrantService(
         using (response)
         {
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                return GrantResult.Fail(GrantFailure.Refused, $"{machine.Name} turned {homeName}'s token away. Update it in Settings › Machines on the computer.");
+                return GrantResult.Fail(GrantFailure.Refused, $"{machine.Name} turned {homeName}'s token away. Update it in Settings › Machines on {homeName}.");
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return GrantResult.Fail(GrantFailure.Refused, $"{machine.Name} runs a Fleet too old for phones. Update it.");
             if (!response.IsSuccessStatusCode)

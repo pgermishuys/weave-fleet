@@ -20,7 +20,7 @@ export interface ListedMachine {
 export function unreachableReason(machine: ListedMachine, pageProtocol: string): string | null {
   // An https page can't call an http address (mixed content).
   if (pageProtocol === "https:" && machine.baseUrl.startsWith("http://")) {
-    return "Reachable only from computers. Add it with its https://….ts.net address.";
+    return "This phone can't reach its http:// address. Add it with its https://….ts.net address.";
   }
   return null;
 }

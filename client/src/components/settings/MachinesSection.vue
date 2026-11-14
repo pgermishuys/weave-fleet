@@ -931,7 +931,7 @@ onUnmounted(() => stopPolling?.());
         class="px-4 py-3 text-sm text-muted"
       >
         <template v-if="isDevice">
-          This browser is signed in as a paired device. Adding phones and seeing the token happen on the computer.
+          This browser is signed in as a paired device. Adding phones and seeing the token happen on the machine itself.
         </template>
         <template v-else>
           {{ accessLoaded ? "This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines." : "Loading…" }}
@@ -965,7 +965,7 @@ onUnmounted(() => stopPolling?.());
           class="max-w-prose px-4 py-3 text-sm text-muted"
           data-testid="machine-access-loopback"
         >
-          Only this computer can reach it: Fleet listens on {{ access.host }}:{{ access.port }}. To add it from
+          Only this machine can reach it: Fleet listens on {{ access.host }}:{{ access.port }}. To add it from
           another device, start Fleet with <code class="machine-code">--host 0.0.0.0</code> (or your tailnet
           address), or put <code class="machine-code">tailscale serve</code> in front of it and start Fleet with
           <code class="machine-code">--require-token</code>.

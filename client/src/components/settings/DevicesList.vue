@@ -57,7 +57,7 @@ async function remove(device: PairedDevice): Promise<void> {
       <li class="devices__row">
         <div class="min-w-0 flex-1">
           <div class="text-sm text-text">
-            This computer
+            This machine
           </div>
           <div class="text-xs text-muted">
             {{ thisComputer }}
