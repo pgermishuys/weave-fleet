@@ -75,8 +75,8 @@ railPoint.contribute("core", [
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardControlsPanel, hidden: boardOff, noPanel: boardOff },
   { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff, noPanel: workflowsOff },
   // Jobs owns its context: the jobs-list (Running, Queued, Done) beside the selected job. It leaves the rail while it's
-  // switched off, like Board.
-  { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: JobsNavPanel, hidden: jobsOff },
+  // switched off, like Board, and its notice fills the context area (noPanel).
+  { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: JobsNavPanel, hidden: jobsOff, noPanel: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics owns its context: the analytics-menu (sections, filters, export) beside the selected section.
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: AnalyticsMachinePanel },
