@@ -115,8 +115,13 @@ For each tag, the workflow builds and publishes self-contained artifacts for:
 - `win-x64`
 - `win-arm64`
 
-It also builds the desktop app (`desktop/`, through `.github/workflows/desktop-packages.yml`) with the same AOT
-server inside, and smoke-tests each packaged app before anything is published.
+Each platform's build job compiles the AOT server once, packages and smoke-tests the CLI archive, then packages the
+desktop app (`desktop/`) around that same server folder (`.github/actions/package-desktop`, the steps the **Desktop
+packages** workflow uses too). Before the app is smoke-tested, `desktop/scripts/check-bundled-server.mjs` checks it
+ships the server byte for byte as built. On macOS, electron-builder's ad-hoc signing rewrites each Mach-O file's code
+signature, so those files must match byte for byte up to their signature. The CLI archive is uploaded before the
+desktop packaging starts, so a desktop failure never loses it. If a step after the compile fails, the job keeps the
+server as an artifact, and re-running the failed job reuses it instead of compiling again.
 
 It then publishes a GitHub Release containing:
 

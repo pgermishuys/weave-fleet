@@ -2,8 +2,9 @@ name: Desktop packages
 
 # Builds the desktop app's installers with the AOT Fleet server inside, and smoke-tests each packaged app: it has to
 # start its bundled Fleet, serve the UI, and take Fleet down with it when it's killed. Runs on pull requests that
-# touch the app, by hand (artifacts only, nothing is released), and from the Release workflow, whose publish job
-# picks up the release-desktop-* artifacts next to the CLI archives. The latest*.yml files are the app's update feed.
+# touch the app, and by hand (artifacts only, nothing is released). The Release workflow doesn't call it: each of its
+# build jobs packages the app from the server it has just built and smoke-tested, with the same steps
+# (.github/actions/package-desktop). The latest*.yml files are the app's update feed.
 
 on:
   pull_request:
@@ -11,18 +12,13 @@ on:
     paths:
       - 'desktop/**'
       - '.github/workflows/desktop-packages.yml'
+      - '.github/actions/package-desktop/**'
   workflow_dispatch:
     inputs:
       version:
         description: Version to stamp on the packages
         required: false
         default: 0.0.0-dev
-  workflow_call:
-    inputs:
-      version:
-        description: Version to stamp on the packages; a leading "v" is dropped
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -127,57 +123,12 @@ jobs:
             --runtime "${{ matrix.rid }}" \
             --output "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}"
 
-      - name: Check the server has the mod host
-        shell: bash
-        run: test -s "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}/mods-host/host.js"
-
-      - name: Install desktop dependencies
-        run: bun install --frozen-lockfile
-        working-directory: desktop
-
-      - name: Package desktop app
-        shell: bash
-        working-directory: desktop
-        env:
-          FLEET_SERVER_DIR: ${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}
-          # Ad-hoc signing on macOS needs no secrets, so pull request builds sign the way releases do.
-          CSC_FOR_PULL_REQUEST: 'true'
-        run: bun run dist -- ${{ matrix.builder_args }} -c.extraMetadata.version="$VERSION"
-
-      - name: Smoke test packaged app (Linux)
-        if: runner.os == 'Linux'
-        working-directory: desktop
-        run: xvfb-run -a node scripts/smoke.mjs ${{ matrix.app }} --no-sandbox
-
-      - name: Smoke test packaged app
-        if: runner.os != 'Linux' && !matrix.cross_compile
-        working-directory: desktop
-        run: node scripts/smoke.mjs ${{ matrix.app }}
-
-      - name: Collect release files
-        shell: bash
-        working-directory: desktop/release
-        run: |
-          # Both Windows builds write latest.yml; the Release workflow merges them back into one.
-          if [ -f latest.yml ]; then
-            mv latest.yml "latest-win-${RID#win-}.yml"
-          fi
-          for file in Fleet-*.AppImage Fleet-*.deb Fleet-*.dmg Fleet-*.zip Fleet-*-setup.exe; do
-            [ -f "$file" ] || continue
-            node -e 'const f=process.argv[1]; console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(f)).digest("hex") + "  " + f)' "$file" > "$file.sha256"
-          done
-          ls -la
-        env:
-          RID: ${{ matrix.rid }}
-
-      - name: Upload installers
-        uses: actions/upload-artifact@v4
+      - name: Package, check and upload the desktop app
+        uses: ./.github/actions/package-desktop
         with:
-          name: release-desktop-${{ matrix.rid }}
-          path: |
-            ${{ matrix.installers }}
-            desktop/release/*.sha256
-            desktop/release/latest*.yml
-            desktop/release/*.blockmap
-          if-no-files-found: error
-          retention-days: 7
+          rid: ${{ matrix.rid }}
+          builder-args: ${{ matrix.builder_args }}
+          app: ${{ matrix.app }}
+          installers: ${{ matrix.installers }}
+          version: ${{ env.VERSION }}
+          server-dir: ${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}
