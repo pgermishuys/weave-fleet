@@ -352,6 +352,27 @@ describe("Automations screen", () => {
       .toBe("Every Monday at 9am, summarise the open PRs");
   });
 
+  it("says a failed load failed, not that there are no automations, and loads on Try again", async () => {
+    list = [];
+    await useAutomationsNavRefresh();
+    expect(wrapper.text()).toContain("No automations yet");
+
+    refuseNext = { url: /^GET \/api\/automations$/, error: "Fleet is restarting" };
+    await useAutomationsNavRefresh();
+
+    expect(wrapper.text()).not.toContain("No automations yet");
+    expect(wrapper.get("[data-testid='automations-load-error']").text()).toContain("Fleet is restarting");
+    expect(wrapper.get("[data-testid='automation-load-error']").text()).toContain("Couldn't load automations");
+
+    list = [weekly];
+    await wrapper.get("[data-testid='automations-load-retry']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='automations-load-error']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='automation-load-error']").exists()).toBe(false);
+    expect(sidebarRows(wrapper).map((row) => row.name)).toEqual(["Weekly PR digest"]);
+  });
+
   it("shows each automation's next run, Running, Failed or Off in the sidebar, like session rows", async () => {
     list = [
       weekly,

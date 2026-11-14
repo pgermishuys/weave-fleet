@@ -48,7 +48,19 @@ const {
   runAutomation,
   fetchRuns,
   refresh,
+  error: loadError,
 } = useAutomations(target);
+// With nothing loaded, a failed load says so and offers another try, rather than "No automations yet".
+const retryingLoad = shallowRef(false);
+const loadFailed = computed(() => automations.value.length === 0 && (Boolean(loadError.value) || retryingLoad.value));
+async function retryLoad(): Promise<void> {
+  retryingLoad.value = true;
+  try {
+    await refresh();
+  } finally {
+    retryingLoad.value = false;
+  }
+}
 const store = useAutomationsStore(target);
 const { repositories } = useRepositories();
 const workflowRuns = useWorkflowsStore();
@@ -546,7 +558,28 @@ const firstRunHint = computed(() => {
       v-else
       class="automation-page__body"
     >
-      <div class="automation-page__empty">
+      <div
+        v-if="loadFailed"
+        class="automation-page__empty"
+        role="alert"
+        data-testid="automation-load-error"
+      >
+        <strong>Couldn't load automations</strong>
+        {{ loadError ?? "Trying again…" }}
+        <Button
+          size="sm"
+          variant="outline"
+          class="mx-auto mt-4 flex"
+          :disabled="retryingLoad"
+          @click="retryLoad"
+        >
+          Try again
+        </Button>
+      </div>
+      <div
+        v-else
+        class="automation-page__empty"
+      >
         <strong>{{ automations.length === 0 ? "No automations yet" : "Automations" }}</strong>
         {{ automations.length === 0
           ? "An automation runs a prompt or a workflow on a schedule, or when something happens in Fleet."
