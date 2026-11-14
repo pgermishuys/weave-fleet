@@ -26,9 +26,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Nothing is built or published unless CI (ci.yml) passed on the tagged commit. The release commit is usually
-  # tagged as soon as it's pushed, so this waits for its CI run (about 8 minutes) and blocks on a red, cancelled or
-  # missing one, saying how to recover. See RELEASE.md and scripts/release-ci-gate.sh.
+  # Nothing is built or published unless the tag is the commit's version, the commit is on main, and CI (ci.yml) passed
+  # on it. The release commit is usually tagged as soon as it's pushed, so this waits for its CI run (about 8 minutes)
+  # and blocks on a red, cancelled or missing one, saying how to recover. See RELEASE.md and scripts/release-ci-gate.sh.
   ci-gate:
     name: CI passed on this commit
     runs-on: ubuntu-latest
@@ -69,10 +69,13 @@ jobs:
       - name: Test the gate
         run: bash scripts/test-release-ci-gate.sh
 
-      - name: Wait for CI to pass on this commit
+      # A real tag push also checks the tag is Directory.Build.props' version and the commit is on main. A dry run by
+      # hand on a branch skips both (and its summary says so).
+      - name: Check the tag, then wait for CI to pass on this commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          GATE_CHECK_TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
         run: bash scripts/release-ci-gate.sh HEAD "${{ steps.version.outputs.tag }}"
 
   # One job per platform compiles the AOT server once, packages and smoke-tests the CLI archive, then packages the

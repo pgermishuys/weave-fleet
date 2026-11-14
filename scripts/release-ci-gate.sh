@@ -8,10 +8,15 @@
 #
 # There's no stand-in: ci.yml runs on every push to main, docs-only ones too, so the tagged commit itself needs its run.
 #
+# Before that, for a real tag push (GATE_CHECK_TAG, on unless "false"): the tag must be Directory.Build.props' version
+# on the tagged commit with a "v" in front, and the commit must be on main (main itself or an ancestor of it). A dry run
+# by hand on a branch sets GATE_CHECK_TAG=false and gets a note that these were skipped.
+#
 # Usage: release-ci-gate.sh <commit-ish> [<tag>]   (run inside a clone that has the commit)
 # Env:   GH_REPO (owner/name, required), GH_TOKEN (for gh), GATE_TIMEOUT_SECONDS (default 3600),
 #        GATE_NO_RUN_GRACE_SECONDS (default 300), GATE_POLL_SECONDS (default 30), GATE_CI_WORKFLOW (default ci.yml),
-#        GATE_REQUIRED_JOB (default "CI passed"), GATE_RETRY_SECONDS (API retry back-off step, default 5).
+#        GATE_REQUIRED_JOB (default "CI passed"), GATE_RETRY_SECONDS (API retry back-off step, default 5),
+#        GATE_CHECK_TAG (default true), GATE_MAIN_BRANCH (default main).
 set -euo pipefail
 # Command substitutions fail the script too, so an API error is never read as "no runs".
 shopt -s inherit_errexit
@@ -26,6 +31,8 @@ timeout_seconds="${GATE_TIMEOUT_SECONDS:-3600}"
 grace_seconds="${GATE_NO_RUN_GRACE_SECONDS:-300}"
 poll_seconds="${GATE_POLL_SECONDS:-30}"
 retry_seconds="${GATE_RETRY_SECONDS:-5}"
+check_tag="${GATE_CHECK_TAG:-true}"
+main_branch="${GATE_MAIN_BRANCH:-main}"
 
 summary() {
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
@@ -111,6 +118,46 @@ required_job_conclusion() {
   api "repos/${repo}/actions/runs/$1/jobs?filter=latest&per_page=100" --paginate \
     --jq ".jobs[] | select(.name == \"${required_job}\") | (.conclusion // .status)"
 }
+
+# The tag must name the version the commit builds, and the commit must be on main. Only for a real tag push.
+check_tag_and_branch() {
+  if [ "$check_tag" = "false" ]; then
+    echo "::notice::Dry run: skipped the tag checks (tag = Directory.Build.props' version, commit on ${main_branch})."
+    summary "Dry run: skipped the tag checks (the tag matches Directory.Build.props' version, the commit is on ${main_branch})."
+    return
+  fi
+  local leave="Nothing was built or published."
+  [ -n "$tag" ] || fail "No tag given: a release needs the tag to check it against Directory.Build.props." "$leave"
+
+  local props version
+  props="$(git show "${sha}:Directory.Build.props" 2>/dev/null)" ||
+    fail "${sha} has no Directory.Build.props, so there's no version to check ${tag} against." "$leave"
+  version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' <<< "$props")"
+  version="${version%%$'\n'*}"
+  if [ "v${version}" != "$tag" ]; then
+    fail "The tag ${tag} doesn't match the version on its commit: Directory.Build.props at ${sha} says ${version:-nothing}." \
+      "$leave" \
+      "What to do: the release commit must bump Directory.Build.props to ${tag#v} (see RELEASE.md, Release order)." \
+      "  1. Remove the wrong tag: git push origin :refs/tags/${tag} && git tag -d ${tag}" \
+      "  2. Bump the version on main if it isn't yet, then tag the commit that has it: git tag -a vX.Y.Z -m vX.Y.Z <commit>"
+  fi
+
+  # GitHub's compare: "identical" (the commit is main) or "behind" (main contains it) is on main.
+  local status
+  status="$(api "repos/${repo}/compare/${main_branch}...${sha}" --jq .status)"
+  case "$status" in
+    identical | behind) echo "${tag} is ${version} on ${sha}, which is on ${main_branch}." ;;
+    *)
+      fail "${sha} (${tag}) isn't on ${main_branch} (compared with ${main_branch}: ${status}). Releases come only from ${main_branch}." \
+        "$leave" \
+        "What to do: get the change merged to ${main_branch}, then tag ${main_branch}'s commit:" \
+        "  1. Remove this tag: git push origin :refs/tags/${tag} && git tag -d ${tag}" \
+        "  2. Tag the release commit on ${main_branch}: git tag -a ${tag} -m ${tag} <commit on ${main_branch}> && git push origin ${tag}"
+      ;;
+  esac
+}
+
+check_tag_and_branch
 
 start="$(date +%s)"
 while :; do
