@@ -50,6 +50,9 @@ jobs:
           sparse-checkout: .github
           sparse-checkout-cone-mode: false
 
+      - name: Check the rule against its cases
+        run: .github/scripts/ci-changes.test.sh
+
       - name: Work out which jobs to run
         id: paths
         shell: bash
