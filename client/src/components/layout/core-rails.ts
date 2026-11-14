@@ -70,12 +70,11 @@ railPoint.contribute("core", [
   // the fleet-menu (Needs you, one entry per machine) beside the selected view; off, the page's notice fills the area.
   { id: "fleet", label: "Fleet", icon: Radar, to: "/fleet", placement: "top", order: -10, panel: FleetNavPanel, hidden: missionControlOff, noPanel: missionControlOff },
   { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 0, panel: SessionsPanel },
-  // Board leaves the rail while it's switched off. Workflows stays, dimmed; with either off, the page's "turn it on"
-  // notice fills the whole context area (noPanel), so no other view's panel sits beside it.
+  // Every Labs feature acts the same while it's switched off: it leaves the rail, its address still opens, and the
+  // page's "turn it on" notice fills the whole context area (noPanel), so no other view's panel sits beside it.
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardControlsPanel, hidden: boardOff, noPanel: boardOff },
-  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff, noPanel: workflowsOff },
-  // Jobs owns its context: the jobs-list (Running, Queued, Done) beside the selected job. It leaves the rail while it's
-  // switched off, like Board, and its notice fills the context area (noPanel).
+  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, hidden: workflowsOff, noPanel: workflowsOff },
+  // Jobs owns its context: the jobs-list (Running, Queued, Done) beside the selected job. Off, it acts like Board.
   { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: JobsNavPanel, hidden: jobsOff, noPanel: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics owns its context: the analytics-menu (sections, filters, export) beside the selected section.
