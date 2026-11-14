@@ -21,6 +21,49 @@ public sealed class CdpConnectionTests
         error.Message.ShouldBe("The browser didn't answer Target.createTarget within 0.2 seconds.");
     }
 
+    [Fact]
+    public async Task A_browser_that_takes_the_connection_and_never_answers_fails_the_connect_instead_of_hanging_it()
+    {
+        // A Chrome that wrote its DevTools port and then wedged: the socket connects (the kernel accepts it), and the
+        // websocket upgrade is never answered. A macOS CI run sat on this until the job's 15 minutes ran out.
+        using var port = new MuteBrowser();
+
+        var connect = CdpConnection.ConnectAsync(port.Url, CancellationToken.None, connectTimeout: TimeSpan.FromMilliseconds(300));
+
+        var error = await Should.ThrowAsync<CdpException>(connect.WaitAsync(TimeSpan.FromSeconds(10)));
+        error.Message.ShouldBe("The browser didn't answer on its DevTools port within 0.3 seconds.");
+    }
+
+    [Fact]
+    public async Task A_caller_that_gives_up_on_the_connect_is_told_it_was_cancelled()
+    {
+        using var port = new MuteBrowser();
+        using var giveUp = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        var connect = CdpConnection.ConnectAsync(port.Url, giveUp.Token, connectTimeout: TimeSpan.FromSeconds(30));
+
+        await Should.ThrowAsync<OperationCanceledException>(connect.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    /// <summary>A port that takes the connection and never says anything back, not even to the websocket upgrade.</summary>
+    internal sealed class MuteBrowser : IDisposable
+    {
+        private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+
+        public MuteBrowser()
+        {
+            _listener.Start();
+            Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
+            Url = new Uri($"ws://127.0.0.1:{Port}/devtools/browser/mute");
+        }
+
+        public int Port { get; }
+
+        public Uri Url { get; }
+
+        public void Dispose() => _listener.Stop();
+    }
+
     /// <summary>A DevTools endpoint that accepts the websocket and then reads without ever replying.</summary>
     private sealed class SilentBrowser : IDisposable
     {

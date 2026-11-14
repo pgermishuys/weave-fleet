@@ -198,6 +198,64 @@ public sealed class HeadlessChromeScreenshotterTests
         stalling.Starts.ShouldBe(2);
     }
 
+    [Fact]
+    public async Task A_browser_that_never_answers_on_its_DevTools_port_is_tried_twice_and_said_so()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        // It writes its port, then wedges: the connection is taken and the websocket upgrade never answered. That used
+        // to hang the call for ever, and every screenshot and page check queued behind it.
+        using var mute = new CdpConnectionTests.MuteBrowser();
+        using var wedged = new WedgedBrowser(mute.Port);
+        var options = new FleetOptions();
+        options.Browser.ChromePath = wedged.Path;
+        await using var host = new ChromeHost(options, NullLogger<ChromeHost>.Instance) { LaunchTimeout = TimeSpan.FromSeconds(1) };
+        await using var screenshots = new HeadlessChromeScreenshotter(host, NullLogger<HeadlessChromeScreenshotter>.Instance);
+
+        var shot = await screenshots.CaptureAsync(new ScreenshotRequest("http://127.0.0.1:1/", 800, 600)).WaitAsync(TimeSpan.FromSeconds(30));
+
+        shot.Image.ShouldBeNull();
+        shot.Problem.ShouldBe($"{wedged.Path} opened its DevTools port but didn't answer on it within 1 s, so Fleet can't drive it.");
+        wedged.Starts.ShouldBe(2);
+    }
+
+    /// <summary>
+    /// A "browser" that writes a DevTools port (one that never answers) to its profile, as Chrome does once it listens,
+    /// and then sleeps; it counts its starts in a file.
+    /// </summary>
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private sealed class WedgedBrowser : IDisposable
+    {
+        private readonly string _folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fleet-wedged-" + Guid.NewGuid().ToString("n"));
+        private readonly string _starts;
+
+        public WedgedBrowser(int port)
+        {
+            Directory.CreateDirectory(_folder);
+            _starts = System.IO.Path.Combine(_folder, "starts");
+            Path = System.IO.Path.Combine(_folder, "chrome");
+            TestExecutable.Write(Path, $$"""
+                #!/bin/sh
+                echo x >> '{{_starts}}'
+                for a in "$@"; do case "$a" in --user-data-dir=*) profile="${a#--user-data-dir=}";; esac; done
+                printf '{{port}}\n/devtools/browser/wedged\n' > "$profile/DevToolsActivePort"
+                exec sleep 60
+
+                """);
+        }
+
+        public string Path { get; }
+
+        public int Starts => File.Exists(_starts) ? File.ReadAllLines(_starts).Length : 0;
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_folder, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
     /// <summary>
     /// A "browser" that sleeps without opening a DevTools port for its first <c>stalls</c> starts, then runs the real
     /// one; it counts its starts in a file.

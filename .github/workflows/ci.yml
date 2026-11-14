@@ -619,18 +619,44 @@ jobs:
       # On a Mac, headless Chrome under a HOME with no login keychain loaded nothing until it was told to use a stand-in
       # keychain (--use-mock-keychain): every page check waited out its 30 s timeout. Fleet runs that way on CI (the phone
       # app's walk-throughs) and for anyone who runs it with another HOME, so the check runs here under an empty HOME.
+      # It takes 8-33 s. On 14 November 2026 a run hung here until the job's 15 minutes ran out, and GitHub kept no log
+      # of it. Now a test that hangs is named and its test host stopped (with a dump) after 2 minutes, the step can't
+      # outlast 5, and a failure shows what the browser was doing.
       - name: Check pages in headless Chrome under an empty HOME
         if: runner.os == 'macOS'
+        timeout-minutes: 5
         shell: bash
         env:
           FLEET_TEST_CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
         run: |
           # The tests pass without running when there's no browser, so make sure there is one.
           test -x "$FLEET_TEST_CHROME" || { echo "::error::No Chrome at $FLEET_TEST_CHROME"; exit 1; }
+          "$FLEET_TEST_CHROME" --version || true
           mkdir -p "$RUNNER_TEMP/empty-home"
           HOME="$RUNNER_TEMP/empty-home" DOTNET_CLI_HOME="$RUNNER_TEMP/dotnet-home" NUGET_PACKAGES="$HOME/.nuget/packages" \
             dotnet test tests/WeaveFleet.Infrastructure.Tests --configuration Release --no-build \
-            --filter "FullyQualifiedName~HeadlessChromePageCheckerTests" -p:SkipFrontendBuild=true
+            --filter "FullyQualifiedName~HeadlessChromePageCheckerTests" -p:SkipFrontendBuild=true \
+            --logger "console;verbosity=normal" --results-directory test-results/page-check \
+            --blame-hang --blame-hang-timeout 2min --blame-hang-dump-type mini
+
+      - name: Show the browser's processes after a failed page check
+        if: failure() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          ps -axo pid,ppid,stat,etime,rss,command | grep -E '[C]hrome|[t]esthost|[v]stest' || echo "No Chrome or test host left running."
+          # Where the main browser process is stuck, if it's still there.
+          for pid in $(pgrep -f 'MacOS/Google Chrome --' | head -2); do
+            echo "::group::sample $pid"; sample "$pid" 2 2>&1 | head -150; echo "::endgroup::"
+          done
+
+      - name: Upload the page check's hang dump
+        if: failure() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-check-hang-${{ github.run_attempt }}
+          path: test-results/page-check/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ── Desktop app ──────────────────────────────────────────────────────────
   desktop:

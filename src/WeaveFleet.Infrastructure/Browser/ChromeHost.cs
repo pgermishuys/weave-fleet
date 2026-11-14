@@ -22,7 +22,7 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
     /// <summary>How long the browser waits, once nobody holds it, before quitting.</summary>
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(2);
 
-    /// <summary>How long a browser gets to open its DevTools port before Fleet tries another.</summary>
+    /// <summary>How long a browser gets to open its DevTools port, and then to answer on it, before Fleet tries another.</summary>
     internal TimeSpan LaunchTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
     private static readonly Action<ILogger, string, Exception?> LogBrowser =
@@ -34,7 +34,7 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
 
     private static readonly Action<ILogger, string, double, Exception?> LogStalled =
         LoggerMessage.Define<string, double>(LogLevel.Warning, new EventId(5, "ChromeStalled"),
-            "{Path} was still running but hadn't opened its DevTools port after {Seconds} s, so Fleet starts it again");
+            "{Path} was still running but hadn't opened or answered its DevTools port after {Seconds} s, so Fleet starts it again");
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _browser;
@@ -185,7 +185,15 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
 
         try
         {
-            _cdp = await CdpConnection.ConnectAsync(endpoint, ct);
+            // Bounded like the port itself: a browser that wrote its port and wedged takes the connection and never
+            // answers it, and a wait for ever here would hold the gate, and every screenshot and check behind it.
+            _cdp = await CdpConnection.ConnectAsync(endpoint, ct, connectTimeout: LaunchTimeout);
+        }
+        catch (CdpException) when (_browser is { HasExited: false })
+        {
+            // Stalled on its way up like a browser that never wrote its port: started again once, by the caller.
+            await QuitAsync();
+            return (false, $"{path} opened its DevTools port but didn't answer on it within {LaunchTimeout.TotalSeconds:0} s, so Fleet can't drive it.{complaints}", false, true);
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
