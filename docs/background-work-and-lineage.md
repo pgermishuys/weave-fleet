@@ -223,3 +223,4 @@ changes the UI. Migration numbers: `048` belongs to PR 2; later PRs take the nex
 ## Not verified yet
 
 - Whether `claude --resume` reports tasks lost in a restart (Fleet tells the agent itself now).
+
