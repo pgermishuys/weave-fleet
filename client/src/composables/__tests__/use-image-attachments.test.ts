@@ -10,9 +10,16 @@ function png(name = "shot.png", size = 8): File {
   return new File([bytes], name, { type: "image/png" });
 }
 
-async function settle(): Promise<void> {
-  await vi.waitFor(() => undefined);
-  await new Promise((resolve) => setTimeout(resolve, 20));
+/** The reads `addImage` has started and not yet been waited on, each done once its FileReader says `loadend`. */
+const reads: Promise<void>[] = [];
+
+/**
+ * Waits for every image read started so far to finish. jsdom's FileReader answers after three event-loop turns, so a
+ * fixed delay loses to it when the worker is starved; `loadend` fires after `onload`, so the attachment (or the error)
+ * is there by the time this returns.
+ */
+async function readsFinished(): Promise<void> {
+  await Promise.all(reads.splice(0));
 }
 
 describe("useImageAttachments", () => {
@@ -22,9 +29,18 @@ describe("useImageAttachments", () => {
     key = `draft-${Math.random()}`;
     URL.createObjectURL = vi.fn(() => "blob:preview");
     URL.revokeObjectURL = vi.fn();
+    const readAsDataURL = FileReader.prototype.readAsDataURL;
+    vi.spyOn(FileReader.prototype, "readAsDataURL").mockImplementation(function (this: FileReader, blob: Blob) {
+      reads.push(new Promise((resolve) => this.addEventListener("loadend", () => resolve(), { once: true })));
+      readAsDataURL.call(this, blob);
+    });
   });
 
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    reads.length = 0;
+  });
 
   function setup(supports = true) {
     const supportsImages = shallowRef(supports);
@@ -35,7 +51,7 @@ describe("useImageAttachments", () => {
     const { attachments, addImage, pasteError } = setup();
 
     addImage(png("login-error.png"));
-    await settle();
+    await readsFinished();
 
     expect(attachments.value).toHaveLength(1);
     expect(attachments.value[0]).toMatchObject({ mime: "image/png", filename: "login-error.png" });
@@ -48,11 +64,11 @@ describe("useImageAttachments", () => {
     const mislabelled = new File([new Uint8Array([...PNG_HEAD, 0, 0, 0, 0])], "shot.jpg", { type: "image/jpeg" });
 
     addImage(mislabelled);
-    await settle();
+    await readsFinished();
     expect(attachments.value[0]).toMatchObject({ mime: "image/png", filename: "shot.jpg" });
 
     addImage(new File(["<svg/>"], "logo.png", { type: "image/png" }));
-    await settle();
+    await readsFinished();
     expect(attachments.value).toHaveLength(1);
     expect(pasteError.value).toMatch(/isn't a PNG, JPEG, GIF or WebP/);
   });
@@ -61,8 +77,8 @@ describe("useImageAttachments", () => {
     const { attachments, addImage, pasteError } = setup(false);
 
     addImage(png());
-    await settle();
 
+    expect(reads).toHaveLength(0);
     expect(attachments.value).toHaveLength(0);
     expect(pasteError.value).toBe("This session's harness can't take images.");
   });
@@ -74,7 +90,7 @@ describe("useImageAttachments", () => {
     expect(pasteError.value).toBe("Unsupported image type: text/plain");
     addImage(png("big.png", 5 * 1024 * 1024 + 1));
     expect(pasteError.value).toMatch(/exceeds 5MB/);
-    await settle();
+    expect(reads).toHaveLength(0);
     expect(attachments.value).toHaveLength(0);
   });
 
@@ -95,7 +111,7 @@ describe("useImageAttachments", () => {
 
     addImage(png("a.png"));
     addImage(png("b.png"));
-    await settle();
+    await readsFinished();
     removeAttachment(attachments.value[0]!.id);
     expect(attachments.value.map((a) => a.filename)).toEqual(["b.png"]);
     clearAttachments();
