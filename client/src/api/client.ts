@@ -1032,3 +1032,4 @@ export interface ProjectResponse {
 export type BrowseDirectoryEntry = components["schemas"]["BrowseEntryDto"];
 export type BrowseDirectoryResponse = components["schemas"]["BrowseSessionDirectoryResponse"];
 export type FileContentResponse = components["schemas"]["ReadSessionFileResponse"];
+// scratch: trigger proof
