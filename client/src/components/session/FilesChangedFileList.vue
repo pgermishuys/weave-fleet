@@ -522,7 +522,7 @@ function normalizeLineCount(value: number | null | undefined): number {
 }
 
 .files-changed-file-list__stat--add {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .files-changed-file-list__stat--remove {

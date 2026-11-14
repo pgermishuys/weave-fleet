@@ -1200,7 +1200,7 @@ onUnmounted(() => stopPolling?.());
 }
 
 .machine-card__state--ok {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .machine-card__state--bad {

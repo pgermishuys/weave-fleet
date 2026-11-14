@@ -268,7 +268,7 @@ async function resetToDefaults(): Promise<void> {
       </button>
       <span
         v-if="saved"
-        class="flex items-center gap-1 text-sm text-running"
+        class="flex items-center gap-1 text-sm text-running-text"
       >
         <Check
           :size="15"

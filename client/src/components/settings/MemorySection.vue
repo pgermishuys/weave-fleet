@@ -941,7 +941,7 @@ onMounted(load);
 }
 
 .memory-tested {
-  color: var(--running);
+  color: var(--running-text);
   /* One line: a long "how" is cut with an ellipsis (the full text is the tooltip). */
   min-width: 0;
   max-width: 28rem;
@@ -951,16 +951,16 @@ onMounted(load);
 }
 
 .memory-untested {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .memory-kind--from-you {
   background: color-mix(in srgb, var(--queued) 15%, transparent);
-  color: var(--queued);
+  color: var(--queued-text);
 }
 
 .memory-kind--added {
   background: color-mix(in srgb, var(--running) 15%, transparent);
-  color: var(--running);
+  color: var(--running-text);
 }
 </style>

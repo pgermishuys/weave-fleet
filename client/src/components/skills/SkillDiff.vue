@@ -85,11 +85,11 @@ const stats = computed(() => {
 }
 
 .skill-diff__adds {
-  color: var(--diff-add);
+  color: var(--diff-add-text);
 }
 
 .skill-diff__removes {
-  color: var(--diff-del);
+  color: var(--diff-del-text);
 }
 
 .skill-diff__same {

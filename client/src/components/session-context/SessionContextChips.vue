@@ -261,7 +261,7 @@ function show(target: string): void {
 
 .context-chip__automation {
   flex-shrink: 0;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 

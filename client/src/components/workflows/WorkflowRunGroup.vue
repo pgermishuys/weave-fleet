@@ -169,11 +169,11 @@ function openRun(): void {
 }
 
 .wf-group__meta--wait {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .wf-group__meta--run {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .wf-group__meta--with {

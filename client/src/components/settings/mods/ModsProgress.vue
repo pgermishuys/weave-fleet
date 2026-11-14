@@ -78,7 +78,7 @@ const footer = computed(() => {
           :data-status="step.status"
           :aria-current="step.status === 'current' ? 'step' : undefined"
           class="flex items-center gap-1.5"
-          :class="step.status === 'done' ? 'text-running' : step.status === 'current' ? 'text-text' : 'text-muted'"
+          :class="step.status === 'done' ? 'text-running-text' : step.status === 'current' ? 'text-text' : 'text-muted'"
         >
           <Check
             v-if="step.status === 'done'"

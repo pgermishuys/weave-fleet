@@ -196,7 +196,7 @@ function handleClick(event: MouseEvent): void {
 }
 
 .agent-task--needs-input .agent-task__status {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-weight: 500;
 }
 
@@ -207,6 +207,6 @@ function handleClick(event: MouseEvent): void {
 .agent-task__done {
   width: 13px;
   height: 13px;
-  color: var(--running);
+  color: var(--running-text);
 }
 </style>

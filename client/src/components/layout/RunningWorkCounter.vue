@@ -128,7 +128,7 @@ function goTo(sessionId: string, instanceId: string, event: MouseEvent): void {
   border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--running) 14%, transparent);
-  color: var(--running);
+  color: var(--running-text);
   font: inherit;
   font-size: 0.78571rem;
   font-weight: 500;

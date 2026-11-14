@@ -80,7 +80,7 @@ const name = computed(() => descriptor.value?.displayName ?? props.pluginId);
           <p class="mt-0.5 text-sm text-muted">
             <span
               v-if="!switchless"
-              :class="enabled ? 'text-running' : ''"
+              :class="enabled ? 'text-running-text' : ''"
             >{{ enabled ? "On" : "Off" }}</span>
             <template v-if="!switchless && enabled && status"> · {{ status.status === "connected" ? "Connected" : status.status === "error" ? "Needs attention" : "Not connected" }}</template>
             <template v-if="descriptor?.description"><template v-if="!switchless"> · </template>{{ descriptor.description }}</template>

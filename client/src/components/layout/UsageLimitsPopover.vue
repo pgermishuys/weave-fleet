@@ -382,7 +382,7 @@ async function onAllow(provider: string): Promise<void> {
 
 .usage-chip--warn {
   background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .usage-chip--used {
@@ -479,7 +479,7 @@ async function onAllow(provider: string): Promise<void> {
 }
 
 .usage-pop__row--warn {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .usage-pop__row--used {
@@ -505,7 +505,7 @@ async function onAllow(provider: string): Promise<void> {
 .usage-pop__pace {
   grid-column: 1 / -1;
   margin: 0;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-size: 0.78571rem;
 }
 

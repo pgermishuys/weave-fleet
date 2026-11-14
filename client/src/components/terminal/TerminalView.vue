@@ -453,7 +453,7 @@ defineExpose({
   padding: 2px 8px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--idle) 14%, transparent);
-  color: var(--idle);
+  color: var(--idle-text);
   font-size: 11.5px;
   font-weight: 500;
   pointer-events: none;

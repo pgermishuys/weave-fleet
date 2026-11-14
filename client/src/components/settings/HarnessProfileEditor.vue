@@ -135,7 +135,7 @@ async function remove(): Promise<void> {
     </p>
     <p
       v-if="syntaxProblem"
-      class="text-xs text-idle"
+      class="text-xs text-idle-text"
     >
       {{ syntaxProblem }}
     </p>
@@ -143,7 +143,7 @@ async function remove(): Promise<void> {
     <div
       v-if="result"
       class="rounded-card border px-3 py-2 text-xs"
-      :class="result.ok ? 'border-running/30 bg-running/10 text-running' : 'border-error/30 bg-error/10 text-error-text'"
+      :class="result.ok ? 'border-running/30 bg-running/10 text-running-text' : 'border-error/30 bg-error/10 text-error-text'"
       role="status"
       data-testid="harness-profile-result"
     >

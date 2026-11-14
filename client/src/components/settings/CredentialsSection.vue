@@ -387,7 +387,7 @@ async function removeCredential(id: string): Promise<void> {
             </p>
           </div>
 
-          <span class="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[10px] font-medium text-green-300">
+          <span class="rounded-full border border-running/30 bg-running/10 px-2 py-1 text-[10px] font-medium text-running-text">
             Stored
           </span>
         </div>

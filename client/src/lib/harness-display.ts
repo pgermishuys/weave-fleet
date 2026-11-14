@@ -67,12 +67,12 @@ export function harnessStatusLabel(status: HarnessStatus): string {
 export function harnessStatusClasses(status: HarnessStatus): string {
   switch (status) {
     case "ready":
-      return "border-green-500/30 bg-green-500/10 text-green-300";
+      return "border-running/30 bg-running/10 text-running-text";
     case "sign-in-required":
     case "update-needed":
-      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
+      return "border-idle/30 bg-idle/10 text-idle-text";
     case "not-working":
-      return "border-red-500/30 bg-red-500/10 text-red-300";
+      return "border-error/30 bg-error/10 text-error-text";
     case "not-installed":
     case "disabled":
       return "border-border bg-main-bg text-muted";

@@ -484,7 +484,7 @@ onBeforeUnmount(() => {
   flex: none;
   align-items: center;
   gap: 5px;
-  color: var(--idle);
+  color: var(--idle-text);
   font-size: 11.5px;
 }
 

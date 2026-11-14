@@ -143,8 +143,8 @@ onBeforeUnmount(() => watcher?.disconnect());
         <span
           class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium"
           :class="{
-            'border-running/35 bg-running/10 text-running': weavePill(detection).tone === 'ok',
-            'border-idle/35 bg-idle/10 text-idle': weavePill(detection).tone === 'warn',
+            'border-running/35 bg-running/10 text-running-text': weavePill(detection).tone === 'ok',
+            'border-idle/35 bg-idle/10 text-idle-text': weavePill(detection).tone === 'warn',
             'border-border text-muted': weavePill(detection).tone === 'off',
           }"
         >
@@ -226,7 +226,7 @@ onBeforeUnmount(() => watcher?.disconnect());
           class="mt-2 break-words text-xs"
           :class="{
             'text-muted': pluginNotice.tone === 'ok',
-            'text-idle': pluginNotice.tone === 'warn',
+            'text-idle-text': pluginNotice.tone === 'warn',
             'text-error-text': pluginNotice.tone === 'error',
           }"
           :role="pluginNotice.tone === 'error' ? 'alert' : 'status'"
@@ -240,7 +240,7 @@ onBeforeUnmount(() => watcher?.disconnect());
           class="mt-2 rounded-btn border border-idle/35 bg-idle/10 px-3 py-2 text-xs text-text"
           data-testid="weave-outdated"
         >
-          <span class="font-semibold text-idle">
+          <span class="font-semibold text-idle-text">
             Update {{ WEAVE_FLAVORS[flavor].name }} to {{ WEAVE_FLAVORS[flavor].minimum }} to use a config kept in Fleet.
           </span>
           This version only reads <code class="font-mono">{{ WEAVE_FLAVORS[flavor].ownPath }}</code>. Update it in your

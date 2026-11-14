@@ -311,7 +311,7 @@ async function endRun(): Promise<void> {
 }
 
 .wf-finish__blocked {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .wf-finish__end {

@@ -191,7 +191,7 @@ function runNotes(run: AutomationRun): string[] {
 }
 
 .automation-run__state--working {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .automation-run__state--error {
@@ -199,7 +199,7 @@ function runNotes(run: AutomationRun): string[] {
 }
 
 .automation-run__state--warn {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .automation-run__why {

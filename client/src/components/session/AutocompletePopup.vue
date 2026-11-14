@@ -411,7 +411,7 @@ function handleSelect(value: string): void {
 }
 
 .autocomplete-popup__hint--warn {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .autocomplete-popup__row--disabled {

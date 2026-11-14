@@ -420,7 +420,7 @@ function selectItem(itemId: string): void {
 }
 
 .selector-dropdown__usage--warn {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .selector-dropdown__usage--used {

@@ -481,7 +481,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .wf-run__foot b {
-  color: var(--idle);
+  color: var(--idle-text);
   font-weight: 500;
 }
 

@@ -312,7 +312,7 @@ async function handleDelete(): Promise<void> {
   padding: 1px 7px;
   border-radius: var(--radius-btn);
   background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-weight: 500;
 }
 
@@ -322,7 +322,7 @@ async function handleDelete(): Promise<void> {
 }
 
 .dash-row__status--retry {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 /* Actions float over the right edge on hover, so the row doesn't reflow. */

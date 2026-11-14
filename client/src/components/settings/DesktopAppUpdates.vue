@@ -110,7 +110,7 @@ const actionLabel = computed(() => {
       <CheckCircle2
         v-else-if="state?.status === 'idle'"
         :size="15"
-        class="text-running"
+        class="text-running-text"
         aria-hidden="true"
       />
       <Download

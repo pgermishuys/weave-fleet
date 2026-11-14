@@ -40,7 +40,7 @@ async function copyDetails(): Promise<void> {
         <Check
           v-if="step.state === 'ok'"
           :size="14"
-          class="mt-0.5 shrink-0 text-green-400"
+          class="mt-0.5 shrink-0 text-running"
           aria-hidden="true"
         />
         <X

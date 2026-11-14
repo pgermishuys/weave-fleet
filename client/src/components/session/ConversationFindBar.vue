@@ -242,7 +242,7 @@ watch(() => props.docked, trackKeyboard);
 
 .find-bar__count {
   min-width: 56px;
-  color: var(--idle);
+  color: var(--idle-text);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
@@ -280,7 +280,7 @@ watch(() => props.docked, trackKeyboard);
   padding: 2px 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .find-bar__chip[aria-pressed="true"] {
@@ -294,7 +294,7 @@ watch(() => props.docked, trackKeyboard);
   align-items: center;
   gap: 5px;
   margin-left: auto;
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .find-bar__stop {

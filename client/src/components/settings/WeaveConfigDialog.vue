@@ -371,7 +371,7 @@ function folderName(directory: string): string {
           </div>
           <p
             v-if="promptNameProblem && addingPrompt"
-            class="mt-1.5 text-xs text-idle"
+            class="mt-1.5 text-xs text-idle-text"
           >
             {{ promptNameProblem }}
           </p>
@@ -407,7 +407,7 @@ function folderName(directory: string): string {
         >
           <p
             class="flex items-center gap-1.5 font-semibold"
-            :class="result.check.ok ? 'text-running' : 'text-error-text'"
+            :class="result.check.ok ? 'text-running-text' : 'text-error-text'"
           >
             <Check
               v-if="result.check.ok"
@@ -470,7 +470,7 @@ function folderName(directory: string): string {
             </span>
             <span
               class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium"
-              :class="folder.reloaded ? 'border-running/35 bg-running/10 text-running' : 'border-idle/35 bg-idle/10 text-idle'"
+              :class="folder.reloaded ? 'border-running/35 bg-running/10 text-running-text' : 'border-idle/35 bg-idle/10 text-idle-text'"
             >
               <span
                 class="size-1.5 rounded-full bg-current"
@@ -481,7 +481,7 @@ function folderName(directory: string): string {
           </div>
           <p
             v-if="view.apply?.error"
-            class="text-xs text-idle"
+            class="text-xs text-idle-text"
           >
             {{ view.apply.error }}
           </p>

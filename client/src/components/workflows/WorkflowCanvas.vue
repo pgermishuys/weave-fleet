@@ -584,7 +584,7 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
 
 .wf-outcome--loop {
   border-color: color-mix(in srgb, var(--queued) 40%, transparent);
-  color: var(--queued);
+  color: var(--queued-text);
 }
 
 .wf-node__error {
@@ -708,7 +708,7 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
   border: 1px solid color-mix(in srgb, var(--queued) 35%, transparent);
   border-radius: 999px;
   background: var(--panel-bg);
-  color: var(--queued);
+  color: var(--queued-text);
   font-size: 11px;
   white-space: nowrap;
   transform: translate(-50%, -50%) rotate(-90deg);

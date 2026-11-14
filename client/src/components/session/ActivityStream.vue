@@ -1042,7 +1042,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
   background: color-mix(in srgb, var(--idle) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--idle) 30%, transparent);
   border-radius: var(--radius-card);
-  color: var(--idle);
+  color: var(--idle-text);
   font-size: 13px;
   line-height: 1.4;
 }
@@ -1184,7 +1184,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
 .optimistic-retry {
   width: var(--activity-bubble-width);
   margin: 4px 0 8px;
-  color: var(--idle);
+  color: var(--idle-text);
   font-size: 12px;
 }
 
@@ -1320,7 +1320,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
 
 .background-note__state {
   flex-shrink: 0;
-  color: var(--complete);
+  color: var(--complete-text);
 }
 
 .background-note--error .background-note__state {

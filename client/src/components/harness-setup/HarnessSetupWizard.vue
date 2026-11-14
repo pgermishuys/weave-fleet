@@ -265,7 +265,7 @@ function onOpenChange(open: boolean): void {
   height: 64px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--running) 12%, transparent);
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .harness-setup__title {

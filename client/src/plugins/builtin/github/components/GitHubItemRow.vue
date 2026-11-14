@@ -297,7 +297,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .gh-row__reason {
-  color: var(--pr-blocked);
+  color: var(--pr-blocked-text);
   font-size: 11.5px;
   white-space: nowrap;
 }

@@ -266,7 +266,7 @@ onUnmounted(() => {
 }
 
 .af-action--complete {
-  color: var(--complete);
+  color: var(--complete-text);
 }
 
 .af-action--error {
@@ -274,7 +274,7 @@ onUnmounted(() => {
 }
 
 .af-action--queued {
-  color: var(--queued);
+  color: var(--queued-text);
 }
 
 .af-action--muted {

@@ -117,7 +117,7 @@ const retrying = computed(() => (props.retry ? describeRetry(props.retry, now.va
 
 .working__retry {
   min-width: 0;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   line-height: 1.45;
 }
 
@@ -148,7 +148,7 @@ const retrying = computed(() => (props.retry ? describeRetry(props.retry, now.va
 }
 
 .working__waiting {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-weight: 500;
 }
 

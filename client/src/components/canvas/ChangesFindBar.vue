@@ -146,7 +146,7 @@ function onKeydown(event: KeyboardEvent): void {
 .cfind__count {
   min-width: 64px;
   padding: 0 4px;
-  color: var(--idle);
+  color: var(--idle-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -176,7 +176,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 .cfind__note {
   margin-left: auto;
-  color: var(--idle);
+  color: var(--idle-text);
   white-space: nowrap;
 }
 </style>

@@ -373,7 +373,7 @@ function handleCreate(): void {
 }
 
 .automation-row__meta--working {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .automation-row__meta--error {

@@ -35,17 +35,17 @@ withDefaults(defineProps<{
   padding: 0 9px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--pr-tone) 14%, transparent);
-  color: var(--pr-tone);
+  color: var(--pr-tone-text);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
 }
 
-.pr-pill[data-pr="open"] { --pr-tone: var(--pr-open); }
-.pr-pill[data-pr="draft"] { --pr-tone: var(--pr-draft); }
-.pr-pill[data-pr="blocked"] { --pr-tone: var(--pr-blocked); }
-.pr-pill[data-pr="merged"] { --pr-tone: var(--pr-merged); }
-.pr-pill[data-pr="closed"] { --pr-tone: var(--pr-closed); }
+.pr-pill[data-pr="open"] { --pr-tone: var(--pr-open); --pr-tone-text: var(--pr-open-text); }
+.pr-pill[data-pr="draft"] { --pr-tone: var(--pr-draft); --pr-tone-text: var(--pr-draft); }
+.pr-pill[data-pr="blocked"] { --pr-tone: var(--pr-blocked); --pr-tone-text: var(--pr-blocked-text); }
+.pr-pill[data-pr="merged"] { --pr-tone: var(--pr-merged); --pr-tone-text: var(--pr-merged-text); }
+.pr-pill[data-pr="closed"] { --pr-tone: var(--pr-closed); --pr-tone-text: var(--pr-closed-text); }
 
 .pr-pill :deep(.gh-item-icon) {
   color: inherit;

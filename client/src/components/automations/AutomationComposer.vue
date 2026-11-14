@@ -868,7 +868,7 @@ defineExpose({ focusMessage });
 }
 
 .automation-composer__warn {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .automation-composer__linkish {

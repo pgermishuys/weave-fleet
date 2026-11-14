@@ -249,7 +249,7 @@ async function finishOnboarding(): Promise<void> {
           </template>
 
           <template v-else>
-            <div class="flex items-center gap-2 rounded-card border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
+            <div class="flex items-center gap-2 rounded-card border border-running/30 bg-running/10 px-3 py-2 text-sm text-running-text">
               <Check
                 :size="16"
                 aria-hidden="true"
@@ -275,7 +275,7 @@ async function finishOnboarding(): Promise<void> {
           v-else
           class="flex flex-1 flex-col items-center justify-center gap-6 py-4 text-center"
         >
-          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 text-green-400">
+          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-running/10 text-running-text">
             <CheckCircle2
               :size="32"
               aria-hidden="true"

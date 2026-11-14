@@ -447,11 +447,11 @@ function runState(run: CheckRun) {
   outline-offset: 1px;
 }
 
-.pr-pill-trigger[data-pr="open"] { --pr-tone: var(--pr-open); }
-.pr-pill-trigger[data-pr="draft"] { --pr-tone: var(--pr-draft); }
-.pr-pill-trigger[data-pr="blocked"] { --pr-tone: var(--pr-blocked); }
-.pr-pill-trigger[data-pr="merged"] { --pr-tone: var(--pr-merged); }
-.pr-pill-trigger[data-pr="closed"] { --pr-tone: var(--pr-closed); }
+.pr-pill-trigger[data-pr="open"] { --pr-tone: var(--pr-open); --pr-tone-text: var(--pr-open-text); }
+.pr-pill-trigger[data-pr="draft"] { --pr-tone: var(--pr-draft); --pr-tone-text: var(--pr-draft); }
+.pr-pill-trigger[data-pr="blocked"] { --pr-tone: var(--pr-blocked); --pr-tone-text: var(--pr-blocked-text); }
+.pr-pill-trigger[data-pr="merged"] { --pr-tone: var(--pr-merged); --pr-tone-text: var(--pr-merged-text); }
+.pr-pill-trigger[data-pr="closed"] { --pr-tone: var(--pr-closed); --pr-tone-text: var(--pr-closed-text); }
 
 .pr-pill-trigger__number {
   display: inline-flex;
@@ -459,7 +459,7 @@ function runState(run: CheckRun) {
   gap: 4px;
   padding: 0 8px;
   background: color-mix(in srgb, var(--pr-tone) 12%, transparent);
-  color: var(--pr-tone);
+  color: var(--pr-tone-text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
   font-weight: 500;
@@ -552,12 +552,12 @@ function runState(run: CheckRun) {
 }
 
 .pr-popover__line--merged {
-  color: var(--pr-merged);
+  color: var(--pr-merged-text);
 }
 
 .pr-popover__warn {
   flex-shrink: 0;
-  color: var(--pr-blocked);
+  color: var(--pr-blocked-text);
 }
 
 .pr-popover__note {

@@ -402,7 +402,7 @@ function openSession(sessionId: string): void {
   padding: 1px 8px;
   border: 1px solid color-mix(in srgb, var(--idle) 50%, transparent);
   border-radius: 999px;
-  color: var(--idle);
+  color: var(--idle-text);
   font-size: 11px;
   font-weight: 500;
 }

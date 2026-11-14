@@ -460,7 +460,7 @@ function openSettings(): void {
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -516,11 +516,11 @@ function openSettings(): void {
 }
 
 .pcard__add {
-  color: var(--diff-add);
+  color: var(--diff-add-text);
 }
 
 .pcard__del {
-  color: var(--diff-del);
+  color: var(--diff-del-text);
 }
 
 .pcard__lines {
