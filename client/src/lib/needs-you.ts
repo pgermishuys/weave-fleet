@@ -4,13 +4,13 @@
  */
 import type { SessionListItem } from "@/api/client";
 
-export type SessionBucket = "needs-you" | "working" | "recent";
+export type SessionGroup = "needs-you" | "working" | "recent";
 
 /**
  * Waiting on an answer, or stopped with an error: the user has to act. A workflow run waiting on the user counts too,
  * through the step session its card is in (`workflowWaiting`); that's the run's state, not the session's.
  */
-export function sessionBucket(item: SessionListItem, workflowWaiting?: ReadonlySet<string>): SessionBucket {
+export function sessionBucket(item: SessionListItem, workflowWaiting?: ReadonlySet<string>): SessionGroup {
   if (item.sessionStatus === "waiting_input" || item.sessionStatus === "error" || workflowWaiting?.has(item.session.id)) {
     return "needs-you";
   }
