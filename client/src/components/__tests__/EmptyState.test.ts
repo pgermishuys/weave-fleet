@@ -2,7 +2,11 @@ import { mount } from "@vue/test-utils";
 import { Inbox } from "lucide-vue-next";
 import { describe, expect, it } from "vitest";
 import { h } from "vue";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState as EmptyStateComponent } from "@/components/ui/empty-state";
+
+// CI's @vue/test-utils (2.2.7) can't type mount() of a component with named slots (TS2769).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const EmptyState = EmptyStateComponent as any;
 
 describe("EmptyState", () => {
   it("shows the title and one line of text, and nothing else unless asked", () => {
