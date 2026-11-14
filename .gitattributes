@@ -1,0 +1,2 @@
+# Shell scripts run in bash, also in Git Bash on Windows, where a checkout with CRLF endings would break them.
+*.sh text eol=lf

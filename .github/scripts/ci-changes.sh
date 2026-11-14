@@ -79,6 +79,8 @@ while IFS= read -r path; do
     # The client's mock API plugin reads opencode/built-in-skills (vite.config.ts loads it for every build).
     opencode/*) on "${net[@]}" client ;;
 
+    # The pre-push check: the Launchers job runs its tests, and nothing packs or builds it.
+    scripts/pre-push-check.sh|scripts/test-pre-push-check.sh|scripts/install-pre-push.sh) on launchers ;;
     # package.sh (AOT) packs launcher.sh; the Launchers job runs the launcher tests.
     scripts/*) on aot launchers ;;
 
