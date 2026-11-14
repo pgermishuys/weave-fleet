@@ -3,9 +3,12 @@
 //   global rule was `outline: none !important` in @layer base: 27 of 45 tab stops on a session showed nothing.
 // - Text on the accent (primary buttons, highlighted rows): --primary-foreground on --accent, 4.5:1 (1.4.3). White on
 //   the default #6366f1 was 4.46:1, and components wrote text-white on the accent instead of the theme's foreground.
+// - Age-dimmed session titles: a quiet session's row keeps --row-dim-1 / --row-dim-2 of --text, 4.5:1 on the surfaces
+//   the session list sits on (1.4.3). A fixed 40% was 3.34:1 in the default theme and 2.26:1 in solarized-light.
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import sessionItemSource from "../../components/sessions/SessionItem.vue?raw";
 
 const css = readFileSync(resolve(__dirname, "../main.css"), "utf8");
 
@@ -88,5 +91,36 @@ describe("text on the accent", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+/** `text` at `percent` over `bg`, as the browser draws color-mix(in srgb, text p%, transparent) on that surface. */
+function over(text: string, percent: number, bg: string): string {
+  const channels = (hex: string) => [0, 2, 4].map((i) => parseInt(hex.replace("#", "").slice(i, i + 2), 16));
+  const [t, b] = [channels(text), channels(bg)];
+  return `#${t.map((c, i) => Math.round(c * percent / 100 + b[i] * (1 - percent / 100)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+describe("age-dimmed session titles", () => {
+  it.each(Object.entries(themes()))("reach 4.5:1 at both dim levels in the %s theme, and still dim", (_name, vars) => {
+    const text = resolveVar(vars, vars.text);
+    const [dim1, dim2] = [parseFloat(vars["row-dim-1"]), parseFloat(vars["row-dim-2"])];
+    expect(dim2, "the deeper level dims more").toBeLessThan(dim1);
+    expect(dim1, "dimming is kept").toBeLessThan(100);
+    for (const surface of ["main-bg", "panel-bg"]) {
+      const bg = resolveVar(vars, vars[surface]);
+      for (const [level, percent] of [["--row-dim-1", dim1], ["--row-dim-2", dim2]] as const) {
+        const shown = over(text, percent, bg);
+        expect(contrast(shown, bg), `${level} ${percent}% of ${text} on --${surface} ${bg} = ${shown}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("are dimmed by those tokens in SessionItem, not a fixed percentage", () => {
+    const style = sessionItemSource.slice(sessionItemSource.indexOf("<style"));
+    for (const level of [1, 2]) {
+      const rule = new RegExp(`\\.session-item--dim-${level}\\s*\\{([^}]*)\\}`).exec(style)?.[1] ?? "";
+      expect(rule).toMatch(new RegExp(`color:\\s*color-mix\\(in srgb, var\\(--text\\) var\\(--row-dim-${level}\\), transparent\\)`));
+    }
   });
 });

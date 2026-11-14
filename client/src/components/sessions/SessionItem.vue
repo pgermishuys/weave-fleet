@@ -1290,13 +1290,14 @@ function removeSessionFromStore(): void {
 }
 
 /* Quiet sessions fade back: after a day without activity, and further after
-   three. Hover and the open session restore full contrast. */
+   three. Hover and the open session restore full contrast. Each theme sets how far
+   (--row-dim-1/2 in main.css), so a title never drops below 4.5:1. */
 .session-item--dim-1 {
-  color: color-mix(in srgb, var(--text) 55%, transparent);
+  color: color-mix(in srgb, var(--text) var(--row-dim-1), transparent);
 }
 
 .session-item--dim-2 {
-  color: color-mix(in srgb, var(--text) 40%, transparent);
+  color: color-mix(in srgb, var(--text) var(--row-dim-2), transparent);
 }
 
 .session-item--dim-1 .session-meta {
