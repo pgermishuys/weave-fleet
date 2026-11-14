@@ -1,30 +1,45 @@
 # Fleet's phone app (mobile/): checks, an Android and an iOS build walked through with Maestro against a scratch
 # Fleet (screenshots in light and dark as artifacts), and over-the-air updates to EAS from main.
+#
+# When what runs:
+# - Check (tokens, typecheck, tests) runs for every change to the app or to anything in client/src: the typecheck
+#   follows the app's imports through the web client's lib, api, composables, stores and components (84 files on
+#   14 November 2026), and one new import can pull in any other file there.
+# - The walk-throughs run on a pull request only when it can change what the phone draws: mobile/, this workflow, or
+#   a shared file the app's bundle loads. Check works that out (mobile/scripts/phone-files.ts follows the app's run-time
+#   imports, the way Metro does) and says why in its summary. The same answer gates the EAS update on a push.
+# - Every night both walk-throughs run on main, and a red night opens (or comments on) an issue named for the
+#   walk-through; a green night closes it. Run the workflow by hand with "nightly" ticked to do the same.
 name: Mobile
 
 on:
   pull_request:
-    paths:
+    paths: &paths
       - 'mobile/**'
-      - 'client/src/lib/**'
-      - 'client/src/components/session/activity-stream-tool-card*'
-      - 'client/src/assets/main.css'
+      - 'client/src/**'
+      # The typecheck reads the web client's files with the client's own modules.
+      - 'client/package.json'
+      - 'client/package-lock.json'
       - '.github/workflows/mobile.yml'
   push:
     branches: [main, 'mobile/**']
-    paths:
-      - 'mobile/**'
-      - 'client/src/lib/**'
-      - 'client/src/components/session/activity-stream-tool-card*'
-      - 'client/src/assets/main.css'
-      - '.github/workflows/mobile.yml'
+    paths: *paths
+  # 00:37 UTC: in by 02:00 UTC at the latest (03:00 or 04:00 in Amsterdam), off the busy top of the hour.
+  schedule:
+    - cron: '37 0 * * *'
   workflow_dispatch:
+    inputs:
+      nightly:
+        description: Run as the nightly (a red walk-through opens or comments on its issue, a green one closes it)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# The event is in the group so a push to main can't cancel the night's run.
 concurrency:
-  group: mobile-${{ github.ref }}
+  group: mobile-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -38,8 +53,13 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      phone: ${{ steps.reach.outputs.phone }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A pull request checks out its merge commit: the parent is the base it's compared with.
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -61,15 +81,43 @@ jobs:
         run: bunx tsc --noEmit
         working-directory: mobile
       - name: Tests
-        run: bun test src
+        run: bun test src scripts
         working-directory: mobile
+      - name: Can this change alter what the phone draws?
+        id: reach
+        working-directory: mobile
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          case "$EVENT" in
+            pull_request) base=$(git rev-parse HEAD^1) ;;
+            push)
+              if [[ ! "$BEFORE" =~ ^0+$ ]] && git fetch --no-tags --depth=1 origin "$BEFORE"; then base="$BEFORE"; fi ;;
+          esac
+          if [ -z "$base" ]; then
+            echo "phone=true" >> "$GITHUB_OUTPUT"
+            echo "### Walk-throughs run: a $EVENT run has nothing to compare with" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git diff --name-only "$base" HEAD > "$RUNNER_TEMP/changed.txt"
+          bun scripts/phone-files.ts --changed "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/reaching.txt"
+          if [ -s "$RUNNER_TEMP/reaching.txt" ]; then
+            echo "phone=true" >> "$GITHUB_OUTPUT"
+            { echo "### Walk-throughs run: these files can change what the phone draws"; sed 's/^/- /' "$RUNNER_TEMP/reaching.txt"; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "phone=false" >> "$GITHUB_OUTPUT"
+            echo "### No walk-throughs: none of the $(wc -l < "$RUNNER_TEMP/changed.txt") changed files is in mobile/ or loaded by the app" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          cat "$RUNNER_TEMP/reaching.txt"
 
   android:
     name: Android walk-through
     needs: check
-    # Pull requests and main walk the app; a push to a mobile/** branch only checks and publishes the update (its pull
-    # request walks it), so the macOS minutes aren't spent twice.
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    # A pull request walks the app when Check says the change can reach the phone; the night's run and a run by hand
+    # always do. A push only checks and publishes the update: its pull request walked it, and main walks every night.
+    if: github.event_name != 'push' && needs.check.outputs.phone == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -184,9 +232,9 @@ jobs:
   ios:
     name: iOS walk-through
     needs: check
-    # Pull requests and main walk the app; a push to a mobile/** branch only checks and publishes the update (its pull
-    # request walks it), so the macOS minutes aren't spent twice.
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    # A pull request walks the app when Check says the change can reach the phone; the night's run and a run by hand
+    # always do. A push only checks and publishes the update: its pull request walked it, and main walks every night.
+    if: github.event_name != 'push' && needs.check.outputs.phone == 'true'
     runs-on: macos-26
     timeout-minutes: 90
     env:
@@ -319,7 +367,7 @@ jobs:
   eas-update:
     name: EAS update
     needs: check
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.check.outputs.phone == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -356,3 +404,61 @@ jobs:
           for channel in preview development; do
             bunx eas-cli update --channel "$channel" --message "$msg" --non-interactive
           done
+
+  # Until a daily retro owns a red night, the night's run reports it here: one open issue per walk-through that isn't
+  # green, a comment on it each night it stays red, closed on the first green night. Only the run's link, commit and
+  # result go in it, never anything from the walk.
+  nightly-report:
+    name: Nightly report
+    needs: [check, android, ios]
+    if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.nightly))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      SHA: ${{ github.sha }}
+      REF: ${{ github.ref_name }}
+      CHECK: ${{ needs.check.result }}
+      ANDROID: ${{ needs.android.result }}
+      IOS: ${{ needs.ios.result }}
+    steps:
+      - name: Open, comment on or close the walk-through issues
+        run: |
+          set -euo pipefail
+          report() {
+            local walk="$1" result="$2" artifact="$3"
+            local title="Nightly $walk walk-through failed"
+            local open
+            open=$(gh issue list --state open --limit 500 --json number,title \
+              --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+            if [ "$result" = success ]; then
+              if [ -n "$open" ]; then
+                gh issue close "$open" --comment "Green again on \`$REF\` at ${SHA::7}: $RUN_URL"
+                echo "$walk: green, closed #$open"
+              else
+                echo "$walk: green"
+              fi
+              return
+            fi
+            local why="it ended \`$result\`"
+            [ "$result" = skipped ] && why="it didn't run: Check ended \`$CHECK\`"
+            local text="The nightly $walk walk-through of \`$REF\` at ${SHA::7} is red: $why.
+
+          Run: $RUN_URL
+          Screenshots and logs: the run's \`$artifact\` artifact.
+
+          This issue closes itself after the next green night."
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --body "$text"
+              echo "$walk: red ($result), commented on #$open"
+            else
+              gh issue create --title "$title" --body "$text"
+              echo "$walk: red ($result), opened an issue"
+            fi
+          }
+          report Android "$ANDROID" mobile-android-shots
+          report iOS "$IOS" mobile-ios-shots
