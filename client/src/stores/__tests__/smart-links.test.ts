@@ -60,6 +60,29 @@ describe("useSmartLinksStore", () => {
     expect(store.visibleLinks("s1")).toHaveLength(1);
   });
 
+  it("knows a session's links are loading, and why a load failed, until one succeeds", async () => {
+    let answer!: (response: Response) => void;
+    apiFetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    const store = useSmartLinksStore();
+
+    const first = store.ensureLoaded(home, "s1");
+    expect(store.isLoading("s1")).toBe(true);
+    answer(json({ error: "nope" }, 503));
+    await first;
+    expect(store.isLoading("s1")).toBe(false);
+    expect(store.loadError("s1")).toContain("503");
+
+    apiFetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    await store.ensureLoaded(home, "s1");
+    expect(store.loadError("s1")).toBe("Couldn't reach Fleet.");
+
+    apiFetchMock.mockResolvedValueOnce(json([]));
+    await store.ensureLoaded(home, "s1");
+    expect(store.isLoading("s1")).toBe(false);
+    expect(store.loadError("s1")).toBeNull();
+    expect(store.bySession.s1).toEqual([]);
+  });
+
   it("orders header links origin, own, pinned and leaves mentions out", () => {
     const store = useSmartLinksStore();
     store.setLinks("s1", [wire("1", "mentioned"), wire("2", "pinned"), wire("3", "own"), wire("4", "origin")]);
