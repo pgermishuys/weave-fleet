@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -158,6 +159,65 @@ internal static class ClaudeCodeTools
             ?? PermissionEvents.String(input, "notebook_path");
         return path is null ? null : Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(workingDirectory, path));
     }
+
+    /// <summary>
+    /// What a file tool's call did to <paramref name="path"/>: <c>Write</c>'s whole file, an <c>Edit</c>'s exact text
+    /// and its replacement, or a <c>MultiEdit</c>'s edits in the order it makes them. What Claude Code reports it did
+    /// (<paramref name="result"/>, its <c>tool_use_result</c>) comes first, as the user may have changed the edit when
+    /// asked (<c>userModified</c>); else what the call asked for. Fleet may read the file only after the next call changed
+    /// it again (a plan ticked straight after it's written); these say what this call left. None when the call doesn't
+    /// say, or says something Fleet can't apply (an edit with no text to find, which makes a new file), and Fleet reads
+    /// the file instead.
+    /// </summary>
+    internal static IReadOnlyList<FileChange> Changes(string claudeName, JsonElement input, JsonElement? result, string path)
+    {
+        if (input.ValueKind != JsonValueKind.Object)
+            return [];
+
+        var reported = result is { ValueKind: JsonValueKind.Object } r ? r : (JsonElement?)null;
+        if (claudeName.Equals("Write", StringComparison.OrdinalIgnoreCase))
+        {
+            var content = (reported is { } done ? PermissionEvents.String(done, "content") : null) ?? PermissionEvents.String(input, "content");
+            return content is null ? [] : [new FileChange { Path = path, Content = content }];
+        }
+
+        if (claudeName.Equals("Edit", StringComparison.OrdinalIgnoreCase))
+        {
+            var edit = reported is { } done && PermissionEvents.String(done, "oldString") is not null
+                ? EditChange(done, path, "oldString", "newString", "replaceAll")
+                : EditChange(input, path);
+            return edit is null ? [] : [edit];
+        }
+
+        if (!claudeName.Equals("MultiEdit", StringComparison.OrdinalIgnoreCase)
+            || !input.TryGetProperty("edits", out var edits) || edits.ValueKind != JsonValueKind.Array)
+            return [];
+
+        // One edit Fleet can't apply leaves the ones after it applied to the wrong text: say none, so Fleet reads the file.
+        var changes = new List<FileChange>();
+        foreach (var item in edits.EnumerateArray())
+        {
+            if (EditChange(item, path) is not { } edit)
+                return [];
+            changes.Add(edit);
+        }
+
+        return changes;
+    }
+
+    private static FileChange? EditChange(
+        JsonElement edit, string path, string oldName = "old_string", string newName = "new_string", string allName = "replace_all")
+        => edit.ValueKind == JsonValueKind.Object
+           && PermissionEvents.String(edit, oldName) is { Length: > 0 } oldString
+           && PermissionEvents.String(edit, newName) is { } newString
+            ? new FileChange
+            {
+                Path = path,
+                OldString = oldString,
+                NewString = newString,
+                ReplaceAll = edit.TryGetProperty(allName, out var all) && all.ValueKind == JsonValueKind.True,
+            }
+            : null;
 
     /// <summary>A <c>file.watcher.updated</c> payload saying <paramref name="path"/> changed, as OpenCode's watcher says it.</summary>
     internal static JsonElement FileChanged(string path) => Write(json =>

@@ -47,6 +47,9 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     // The arguments each call to one of Fleet's tools was sent with, before Fleet adds a path or a description for the row.
     private readonly Dictionary<string, JsonElement> _arguments = [];
     private readonly HashSet<string> _closedCalls = [];
+    // What each running edit call said it does to its files (its diff blocks), which an agent may send only when the call
+    // starts (weave-copilot does): files.written carries them when the call completes.
+    private readonly Dictionary<string, IReadOnlyList<FileChange>> _changes = [];
     // Calls a steer left running in the message it closed: message id and where that message sits in the history.
     private readonly Dictionary<string, (string MessageId, int HistoryIndex)> _detached = [];
     private IReadOnlyList<TodoEntry> _todos = [];
@@ -414,6 +417,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         }
 
         _closedCalls.Clear();
+        _changes.Clear();
         _turnRow = false;
         _promptId = null;
         events.Add(Status(ActivityStatuses.Idle));
@@ -536,6 +540,8 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             node["description"] = title;
 
         var status = Str(update, "status") ?? (prior is not null ? "in_progress" : "pending");
+        if (Changes(update) is { Count: > 0 } said)
+            _changes[callId] = said;
         var output = ToolOutput(update);
         // One of Fleet's own tools: its card's title and what it made, which Fleet's MCP server kept for it, since the
         // result the agent reports carries only what the model reads.
@@ -557,10 +563,11 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         var useState = status switch { "completed" => ToolUseState.Completed, "failed" => ToolUseState.Error, "pending" => ToolUseState.Pending, _ => ToolUseState.Running };
         UpsertTool(events, callId, name, node, state, useState, output, fleet);
 
+        var changes = status is "completed" or "failed" && _changes.Remove(callId, out var made) ? made : [];
         if (status == "completed" && name == "edit" && (FirstPath(update) ?? node["path"]?.GetValue<string>()) is { } written)
         {
             events.Add(Event(EventTypes.FilesWritten, JsonSerializer.SerializeToElement(
-                new FilesWrittenPayload { SessionId = sessionId, MessageId = _assistantId, Paths = [written] },
+                new FilesWrittenPayload { SessionId = sessionId, MessageId = _assistantId, Paths = [written], Changes = [.. changes.Where(change => change.Path == written)] },
                 InfrastructureJsonContext.Default.FilesWrittenPayload)));
             // The Changes panel on an open page refreshes on files.changed (OpenCode's file watcher says it), not on files.written.
             events.Add(Event(EventTypes.FileWatcherUpdated, Json(new JsonObject { ["file"] = written, ["event"] = "change" })));
@@ -938,6 +945,33 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         "think" => "task",
         _ => "tool",
     };
+
+    /// <summary>
+    /// What a call's ACP <c>diff</c> blocks say it does to each file: a block with no <c>oldText</c> writes the whole file
+    /// (<c>newText</c>); one with text replaces it once. ACP says a diff's texts are the whole file, but agents send the
+    /// replaced text only (weave-copilot sends Copilot's <c>old_str</c>/<c>new_str</c>); replacing it once is right
+    /// either way, and when the text isn't where Fleet expects it Fleet reads the file instead. An empty
+    /// <c>oldText</c> says nothing Fleet can apply (a new file, or text inserted somewhere), so it's left out.
+    /// </summary>
+    internal static IReadOnlyList<FileChange> Changes(JsonElement update)
+    {
+        if (!update.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var changes = new List<FileChange>();
+        foreach (var item in content.EnumerateArray())
+        {
+            if (Str(item, "type") != "diff" || Str(item, "path") is not { Length: > 0 } path || Str(item, "newText") is not { } newText)
+                continue;
+            var hasOld = item.TryGetProperty("oldText", out var old) && old.ValueKind != JsonValueKind.Null;
+            if (!hasOld)
+                changes.Add(new FileChange { Path = path, Content = newText });
+            else if (old.ValueKind == JsonValueKind.String && old.GetString() is { Length: > 0 } oldText)
+                changes.Add(new FileChange { Path = path, OldString = oldText, NewString = newText });
+        }
+
+        return changes;
+    }
 
     private static string? FirstPath(JsonElement update)
         => update.TryGetProperty("locations", out var locations) && locations.ValueKind == JsonValueKind.Array && locations.GetArrayLength() > 0

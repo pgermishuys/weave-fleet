@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Shouldly;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
@@ -75,6 +76,60 @@ public sealed class ClaudeCodeToolsTests
     [InlineData("Bash", """{"command":"touch x"}""", null, null)]
     public void A_file_tool_names_the_file_it_wrote(string claude, string input, string? result, string? expected)
         => ClaudeCodeTools.WrittenFile(claude, Json(input), result is null ? null : Json(result), "/w").ShouldBe(expected);
+
+    [Fact]
+    public void A_write_says_the_whole_file_it_wrote()
+        => ClaudeCodeTools.Changes("Write", Json("""{"file_path":"plan.md","content":"- [ ] 1. One\n"}"""), null, "/w/plan.md")
+            .ShouldBe([new FileChange { Path = "/w/plan.md", Content = "- [ ] 1. One\n" }]);
+
+    [Theory]
+    [InlineData("""{"file_path":"/w/plan.md","old_string":"- [ ] 1.","new_string":"- [x] 1.","replace_all":false}""", false)]
+    [InlineData("""{"file_path":"/w/plan.md","old_string":"- [ ] 1.","new_string":"- [x] 1."}""", false)]
+    [InlineData("""{"file_path":"/w/plan.md","old_string":"- [ ] 1.","new_string":"- [x] 1.","replace_all":true}""", true)]
+    public void An_edit_says_the_text_it_replaced_and_how_often(string input, bool replaceAll)
+        => ClaudeCodeTools.Changes("Edit", Json(input), null, "/w/plan.md")
+            .ShouldBe([new FileChange { Path = "/w/plan.md", OldString = "- [ ] 1.", NewString = "- [x] 1.", ReplaceAll = replaceAll }]);
+
+    [Fact]
+    public void What_Claude_Code_reports_it_did_comes_before_what_the_call_asked_for()
+    {
+        // The user changed the edit when asked: Claude Code applied "- [~] 1." instead.
+        ClaudeCodeTools.Changes(
+                "Edit",
+                Json("""{"file_path":"/w/plan.md","old_string":"- [ ] 1.","new_string":"- [x] 1."}"""),
+                Json("""{"filePath":"/w/plan.md","oldString":"- [ ] 1.","newString":"- [~] 1.","replaceAll":true,"userModified":true}"""),
+                "/w/plan.md")
+            .ShouldBe([new FileChange { Path = "/w/plan.md", OldString = "- [ ] 1.", NewString = "- [~] 1.", ReplaceAll = true }]);
+        ClaudeCodeTools.Changes(
+                "Write",
+                Json("""{"file_path":"/w/plan.md","content":"asked"}"""),
+                Json("""{"type":"update","filePath":"/w/plan.md","content":"written"}"""),
+                "/w/plan.md")
+            .ShouldBe([new FileChange { Path = "/w/plan.md", Content = "written" }]);
+    }
+
+    [Fact]
+    public void A_multi_edit_says_each_edit_in_the_order_it_makes_them()
+        => ClaudeCodeTools.Changes("MultiEdit", Json("""
+            {"file_path":"/w/plan.md","edits":[
+              {"old_string":"- [ ] 1.","new_string":"- [x] 1."},
+              {"old_string":"[ ]","new_string":"[x]","replace_all":true}]}
+            """), null, "/w/plan.md")
+            .ShouldBe([
+                new FileChange { Path = "/w/plan.md", OldString = "- [ ] 1.", NewString = "- [x] 1." },
+                new FileChange { Path = "/w/plan.md", OldString = "[ ]", NewString = "[x]", ReplaceAll = true },
+            ]);
+
+    [Theory]
+    // An edit with no text to find makes a new file; Fleet can't apply it to what it knows, so it reads the file.
+    [InlineData("Edit", """{"file_path":"/w/plan.md","old_string":"","new_string":"- [ ] 1."}""")]
+    // One edit Fleet can't apply would leave the ones after it applied to the wrong text.
+    [InlineData("MultiEdit", """{"file_path":"/w/plan.md","edits":[{"old_string":"","new_string":"a"},{"old_string":"a","new_string":"b"}]}""")]
+    [InlineData("Write", """{"file_path":"/w/plan.md"}""")]
+    [InlineData("NotebookEdit", """{"notebook_path":"/w/n.ipynb","new_source":"x"}""")]
+    [InlineData("Read", """{"file_path":"/w/plan.md"}""")]
+    public void A_call_that_says_nothing_Fleet_can_apply_has_no_changes(string claude, string input)
+        => ClaudeCodeTools.Changes(claude, Json(input), null, "/w/plan.md").ShouldBeEmpty();
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 }
