@@ -7,6 +7,7 @@ import { usePluginRuntime } from "@/plugins/composable";
 import { useStaleRailRedirect } from "@/composables/use-context-panel";
 import { useSidebarStore } from "@/stores/sidebar";
 import githubPluginManifest from "@/plugins/builtin/github";
+import { rails } from "@/lib/rails";
 
 const { navigate, pathname, boardOn, workflowsOn, missionOn, jobsOn } = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -208,6 +209,7 @@ describe("the context panel per rail", () => {
     boardOn.value = false;
     workflowsOn.value = false;
     missionOn.value = false;
+    jobsOn.value = false;
   });
 
   function shown(rail: string): string {
@@ -221,7 +223,6 @@ describe("the context panel per rail", () => {
     ["sessions", "panel-sessions"],
     ["analytics", "panel-analytics"],
     ["automations", "panel-automations"],
-    ["jobs", "panel-jobs"],
     ["settings", "panel-settings"],
     ["github", "panel-github"],
   ])("shows %s as %s", (rail, expected) => {
@@ -238,6 +239,20 @@ describe("the context panel per rail", () => {
     expect(shown("fleet")).toBe("");
     missionOn.value = true;
     expect(shown("fleet")).toBe("panel-fleet");
+  });
+
+  it("shows the jobs list for Jobs while Jobs is on, and no panel while it's off", () => {
+    expect(shown("jobs")).toBe("");
+    jobsOn.value = true;
+    expect(shown("jobs")).toBe("panel-jobs");
+  });
+
+  it("gives every rail that can be switched off no panel while it's off (its notice fills the context area)", () => {
+    // Every Labs rail is off here: none of them may leave a panel beside its notice.
+    for (const rail of rails.value.filter((r) => r.hidden || r.off)) {
+      expect(rail.noPanel, `${rail.id} needs noPanel`).toBeDefined();
+      expect(shown(rail.id), rail.id).toBe("");
+    }
   });
 
   it("shows no panel for Board while Board is off, so its notice fills the context area", () => {
