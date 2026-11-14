@@ -2318,7 +2318,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         var name = call.Name ?? string.Empty;
         if (ClaudeCodeTools.WrittenFile(name, call.Input, result, _workingDirectory) is { } written)
         {
-            foreach (var evt in ClaudeCodeMapper.CreateFileWrittenEvents(conversation.FleetSessionId, messageId, written))
+            var changes = ClaudeCodeTools.Changes(name, call.Input, result, written);
+            foreach (var evt in ClaudeCodeMapper.CreateFileWrittenEvents(conversation.FleetSessionId, messageId, written, changes))
                 await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
         }
 

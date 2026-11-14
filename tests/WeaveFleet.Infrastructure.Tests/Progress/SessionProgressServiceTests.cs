@@ -16,7 +16,7 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Progress;
 
-public sealed class SessionProgressServiceTests
+public sealed partial class SessionProgressServiceTests
 {
     private const string OwnerId = TestUserContext.DefaultUserId;
 
@@ -381,6 +381,19 @@ public sealed class SessionProgressServiceTests
                 new FileChange { Path = "/work/plan.md", OldString = oldString, NewString = newString, ReplaceAll = replaceAll },
                 before)
             .ShouldBe(expected);
+
+    [Fact]
+    public void A_calls_edits_to_one_file_are_applied_in_the_order_it_made_them()
+    {
+        FileChange Edit(string oldString, string newString) => new() { Path = "/work/plan.md", OldString = oldString, NewString = newString };
+
+        // A multi-edit: the second edit's text exists only once the first has run.
+        SessionProgressService.ContentAfter([Edit("- [ ] 1.", "- [x] 1."), Edit("- [x] 1.\n- [ ] 2.", "- [x] 1.\n- [x] 2.")], "- [ ] 1.\n- [ ] 2.")
+            .ShouldBe("- [x] 1.\n- [x] 2.");
+
+        // One that can't be applied makes the rest unknowable: Fleet reads the file instead.
+        SessionProgressService.ContentAfter([Edit("- [ ] 9.", "- [x] 9."), Edit("- [ ] 1.", "- [x] 1.")], "- [ ] 1.").ShouldBeNull();
+    }
 
     [Fact]
     public void A_whole_file_write_is_taken_as_written_whatever_came_before()

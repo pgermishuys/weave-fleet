@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.FleetTools;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
 using WeaveFleet.Infrastructure.Harnesses;
@@ -302,6 +303,49 @@ public sealed class AcpMapperTests
         asked.ShouldBe(0);
         var failed = mapper.Messages().Single().Parts.OfType<ToolUsePart>().Last();
         failed.Metadata.ShouldBeNull();
+    }
+
+    private static IReadOnlyList<FileChange> WrittenChanges(IEnumerable<HarnessEvent> events)
+        => events.Single(e => e.Type == EventTypes.FilesWritten).Payload!.Value.Deserialize(InfrastructureJsonContext.Default.FilesWrittenPayload)!.Changes;
+
+    [Fact]
+    public void A_finished_edit_says_what_its_diff_did_though_only_the_call_s_start_carried_it()
+    {
+        var mapper = new AcpMapper("s1");
+
+        // As weave-copilot reports Copilot's edit: the diff (old_str/new_str) comes with the call, the result is text.
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Edit plan.md","kind":"edit","status":"pending","rawInput":{"path":"/work/plan.md","old_str":"- [ ] 1.","new_str":"- [x] 1."},"locations":[{"path":"/work/plan.md"}],"content":[{"type":"diff","path":"/work/plan.md","oldText":"- [ ] 1.","newText":"- [x] 1."}]}"""));
+        var done = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"File updated"}}]}"""));
+
+        WrittenChanges(done).ShouldBe([new FileChange { Path = "/work/plan.md", OldString = "- [ ] 1.", NewString = "- [x] 1." }]);
+    }
+
+    [Fact]
+    public void A_diff_with_no_old_text_writes_the_whole_file()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Create plan.md","kind":"edit","status":"pending","locations":[{"path":"/work/plan.md"}]}"""));
+
+        var done = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","content":[{"type":"diff","path":"/work/plan.md","oldText":null,"newText":"- [ ] 1. One"}]}"""));
+
+        WrittenChanges(done).ShouldBe([new FileChange { Path = "/work/plan.md", Content = "- [ ] 1. One" }]);
+    }
+
+    [Fact]
+    public void An_edit_whose_diff_says_nothing_Fleet_can_apply_has_no_changes_and_a_failed_call_s_diff_is_forgotten()
+    {
+        var mapper = new AcpMapper("s1");
+
+        // An empty old text: a new file, or text inserted somewhere. Fleet reads the file instead.
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Write notes.md","kind":"edit","status":"in_progress","locations":[{"path":"/work/notes.md"}]}"""));
+        WrittenChanges(mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","content":[{"type":"diff","path":"/work/notes.md","oldText":"","newText":"hi"}]}""")))
+            .ShouldBeEmpty();
+
+        // A call that failed wrote nothing; its diff doesn't carry over to a later call with the same id.
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c2","title":"Edit plan.md","kind":"edit","status":"pending","locations":[{"path":"/work/plan.md"}],"content":[{"type":"diff","path":"/work/plan.md","oldText":"a","newText":"b"}]}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c2","status":"failed"}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c3","title":"Edit plan.md","kind":"edit","status":"pending","locations":[{"path":"/work/plan.md"}]}"""));
+        WrittenChanges(mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c3","status":"completed"}"""))).ShouldBeEmpty();
     }
 
     [Fact]

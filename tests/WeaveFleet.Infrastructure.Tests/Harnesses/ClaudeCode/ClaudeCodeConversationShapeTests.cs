@@ -6,6 +6,7 @@ using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -153,6 +154,12 @@ public sealed class ClaudeCodeConversationShapeTests : IAsyncLifetime
         written.Select(p => p.GetProperty("paths").EnumerateArray().Single().GetString())
             .ShouldBe(["/work/calc.py", "/work/calc.py", "/work/calc.py", "/work/notes.txt"]);
         written.ShouldAllBe(p => p.GetProperty("sessionId").GetString() == SessionId);
+
+        // With what each call did, so a file changed again by the very next call still shows this call's state.
+        var changes = written.Select(p => p.Deserialize(WeaveFleet.Infrastructure.InfrastructureJsonContext.Default.FilesWrittenPayload)!.Changes.ShouldHaveSingleItem()).ToList();
+        changes[0].ShouldBe(new FileChange { Path = "/work/calc.py", OldString = "def sub(a, b):", NewString = "def subtract(a, b):" });
+        changes[1].ShouldBe(new FileChange { Path = "/work/calc.py", OldString = "def add(a, b):\n    return a + b", NewString = "def add(a, b):\n    return b + a" });
+        changes[3].ShouldBe(new FileChange { Path = "/work/notes.txt", Content = "alpha\nbeta\n" });
 
         // Under the Fleet message that holds the call, so progress can tie the file to the step.
         var edits = Conversation().Where(m => m.Parts.OfType<ToolUsePart>().Any(t => t.ToolName is "edit" or "write")).Select(m => m.Id).ToList();

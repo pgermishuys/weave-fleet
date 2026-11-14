@@ -173,7 +173,7 @@ internal sealed partial class SessionProgressService(
         var changed = false;
         foreach (var path in candidates)
         {
-            var read = await ReadAsync(observed.SessionId, session.Directory, path, changes.LastOrDefault(change => change.Path == path), ct)
+            var read = await ReadAsync(observed.SessionId, session.Directory, path, [.. changes.Where(change => change.Path == path)], ct)
                 .ConfigureAwait(false);
             if (read.Status == PlanFileStatus.Refused)
                 continue;
@@ -192,16 +192,17 @@ internal sealed partial class SessionProgressService(
     }
 
     /// <summary>
-    /// What <paramref name="path"/> held right after the call that made <paramref name="change"/>, when that can be
-    /// worked out; otherwise what it holds now. Remembers the result for the next change to the file.
+    /// What <paramref name="path"/> held right after the call that made <paramref name="changes"/> (in the order it made
+    /// them, as a multi-edit does), when that can be worked out; otherwise what it holds now. Remembers the result for
+    /// the next change to the file.
     /// </summary>
-    private async Task<PlanFileRead> ReadAsync(string sessionId, string directory, string path, FileChange? change, CancellationToken ct)
+    private async Task<PlanFileRead> ReadAsync(string sessionId, string directory, string path, IReadOnlyList<FileChange> changes, CancellationToken ct)
     {
         var located = PlanFileReader.Locate(directory, path);
         var key = (sessionId, located?.RelativePath ?? string.Empty);
         var before = located is not null && _lastSeen.TryGetValue(key, out var seen) ? seen : null;
 
-        var read = change is not null && ContentAfter(change, before) is { } after
+        var read = changes.Count > 0 && ContentAfter(changes, before) is { } after
             ? PlanFileReader.Accept(directory, path, after)
             : await PlanFileReader.ReadAsync(directory, path, ct).ConfigureAwait(false);
 
@@ -217,6 +218,20 @@ internal sealed partial class SessionProgressService(
         }
 
         return read;
+    }
+
+    /// <summary>The file <paramref name="changes"/> left, made in order from <paramref name="before"/>; null when any of them can't be applied.</summary>
+    internal static string? ContentAfter(IReadOnlyList<FileChange> changes, string? before)
+    {
+        var content = before;
+        foreach (var change in changes)
+        {
+            if (ContentAfter(change, content) is not { } after)
+                return null;
+            content = after;
+        }
+
+        return content;
     }
 
     /// <summary>
