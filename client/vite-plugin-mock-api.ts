@@ -1167,6 +1167,9 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       handler: () => json({ entries: MOCK_TOOL_CATALOG, isStale: false, cachedAt: null }),
     },
     // ─── Priority 1: Session Detail & Interaction ───────────────────────────────
+    // What each session is doing this second (mission control's "now" lines); before /api/sessions/{id}, which would
+    // answer 404 for a session called "now". Empty, as the real API answers until agents do something.
+    { pattern: /^\/api\/sessions\/now$/, handler: () => json({}) },
     {
       pattern: /^\/api\/sessions\/([^/]+)$/,
       handler: (url) => {

@@ -40,6 +40,9 @@ while IFS= read -r path; do
   case "$path" in
     # Everything a build or a job's setup reads: run everything.
     .github/*|Directory.*|global.json|*.slnx|build.cs|_build/*|NuGet.config|.bun-version|.editorconfig|.gitignore|.gitattributes) all ;;
+    # The UI crawl (lockfile included): ui-crawl.yml runs it on a pull request that changes it, and nothing in ci.yml
+    # reads it.
+    scripts/ui-crawl/*) ;;
     *package-lock.json|*bun.lock|*bun.lockb|*packages.lock.json) all ;;
 
     # Read by nothing in ci.yml: screenshots and the repository's own agent notes and plans. No project, test, script

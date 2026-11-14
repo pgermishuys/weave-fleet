@@ -154,6 +154,13 @@ cd client && bun install && bun run build
 
 Skip rebuild on iteration: `dotnet test tests/WeaveFleet.E2E -p:SkipFrontendBuild=true`
 
+### The UI crawl (every screen, every night)
+
+`scripts/ui-crawl/run.sh` builds the client in mock mode and visits every screen in `scripts/ui-crawl/screens.mjs` in
+5 variants (dark/light, 1440/390 px, Labs on/off): page and console errors, failed requests and sideways overflow at
+390 px fail it; axe and screenshots are a report (`out/report.html`). `ui-crawl.yml` runs it every night on main and
+keeps one issue open while it's red. Add a screen there when you add a route.
+
 ### Decision Tree: Where to Start
 
 | Symptom | Start here |
