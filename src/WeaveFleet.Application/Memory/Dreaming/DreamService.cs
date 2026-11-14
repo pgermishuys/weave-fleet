@@ -6,26 +6,62 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Creation;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Sessions.Retention;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Memory.Dreaming;
 
-/// <summary>The dreaming sessions that are running: session id to dream id and owner.</summary>
+/// <summary>
+/// The dreaming sessions that are running: session id to dream id and owner, and for a dream with a token limit (a
+/// night's), what its model calls have used so far.
+/// </summary>
 public sealed class DreamSessions
 {
     private readonly ConcurrentDictionary<string, (string DreamId, string UserId)> _running = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Allowance> _allowances = new(StringComparer.Ordinal);
 
-    public void Register(string sessionId, string dreamId, string userId) => _running[sessionId] = (dreamId, userId);
+    public void Register(string sessionId, string dreamId, string userId, long? tokenLimit = null)
+    {
+        _running[sessionId] = (dreamId, userId);
+        if (tokenLimit is { } limit)
+            _allowances[sessionId] = new Allowance(limit);
+    }
 
     public bool TryGet(string sessionId, out (string DreamId, string UserId) entry) => _running.TryGetValue(sessionId, out entry);
 
-    public void Unregister(string sessionId) => _running.TryRemove(sessionId, out _);
+    public void Unregister(string sessionId)
+    {
+        _running.TryRemove(sessionId, out _);
+        _allowances.TryRemove(sessionId, out _);
+    }
 
     public bool IsEmpty => _running.IsEmpty;
+
+    /// <summary>
+    /// Counts one model call of the session's. True once, for the call that brings it to its token limit: the call
+    /// that should stop it. False for a session with no limit, or one already past it.
+    /// </summary>
+    public bool Spend(string sessionId, long tokens)
+        => tokens > 0 && _allowances.TryGetValue(sessionId, out var allowance) && allowance.Spend(tokens);
+
+    /// <summary>What the session's model calls have used so far, while it's registered with a limit.</summary>
+    public long Spent(string sessionId) => _allowances.TryGetValue(sessionId, out var allowance) ? allowance.Used : 0;
+
+    private sealed class Allowance(long limit)
+    {
+        private long _used;
+        private int _reached;
+
+        public long Used => Interlocked.Read(ref _used);
+
+        public bool Spend(long tokens)
+            => Interlocked.Add(ref _used, tokens) >= limit && Interlocked.Exchange(ref _reached, 1) == 0;
+    }
 }
 
 /// <summary>
@@ -60,8 +96,36 @@ public sealed partial class DreamFinisher(DreamSessions sessions, IServiceScopeF
         });
     }
 
+    /// <summary>
+    /// One model call of a session's, as its harness reported it (<see cref="Sessions.SessionContextRecorder"/>), on the
+    /// relay's pump. A dream with a token limit is stopped by the call that reaches it, so it spends at most that one
+    /// call past it; with no dream running this is one check.
+    /// </summary>
+    public void ObserveCall(string sessionId, ContextCall? call)
+    {
+        if (call is null || sessions.IsEmpty || !sessions.Spend(sessionId, call.Used) || !sessions.TryGet(sessionId, out var entry))
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(entry.UserId);
+                await scope.ServiceProvider.GetRequiredService<IDreamStopper>().StopForBudgetAsync(sessionId, entry.DreamId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogStopFailed(ex, sessionId);
+            }
+        });
+    }
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not finish the dream of session {SessionId}")]
     private partial void LogFinishFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not stop the dream of session {SessionId} at its token limit")]
+    private partial void LogStopFailed(Exception ex, string sessionId);
 }
 
 /// <summary>
@@ -82,7 +146,7 @@ public sealed partial class DreamService(
     IEventBroadcaster broadcaster,
     IServiceScopeFactory scopeFactory,
     TimeProvider time,
-    ILogger<DreamService> logger) : IDreamStarter
+    ILogger<DreamService> logger) : IDreamStarter, IDreamStopper
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
@@ -237,7 +301,7 @@ public sealed partial class DreamService(
             return;
         }
 
-        running.Register(result.Value.Session.Id, dream.Id, userId);
+        running.Register(result.Value.Session.Id, dream.Id, userId, request.TokenLimit);
         dream.SessionId = result.Value.Session.Id;
         dream.HarnessType = result.Value.Session.HarnessType;
         dream.Status = DreamRules.Statuses.Running;
@@ -250,7 +314,8 @@ public sealed partial class DreamService(
         var userId = user.UserId;
         var dream = await dreams.FindAsync(userId, dreamId).ConfigureAwait(false);
         var retried = dream is { Status: DreamRules.Statuses.Failed, Error: StoppedBeforeAnswer } && dream.SessionId == sessionId;
-        if (dream is null || !(dream.IsActive || retried))
+        var stoppedAtLimit = dream is { Status: DreamRules.Statuses.Failed, Error: DreamRules.StoppedAtBudget } && dream.SessionId == sessionId;
+        if (dream is null || !(dream.IsActive || retried || stoppedAtLimit))
         {
             running.Unregister(sessionId);
             return;
@@ -258,10 +323,17 @@ public sealed partial class DreamService(
 
         var snapshot = await messages.GetSnapshotAsync(sessionId, 20).ConfigureAwait(false);
         var last = snapshot.Messages.LastOrDefault(m => m.Info.Role == "assistant");
-        if (last is null)
+        if (last is null && !stoppedAtLimit)
             return; // A new session reads idle before its first turn starts.
 
-        var text = string.Join("\n", last.Parts.OfType<TextMessageEventPart>().Select(p => p.Text));
+        var text = last is null ? "" : string.Join("\n", last.Parts.OfType<TextMessageEventPart>().Select(p => p.Text));
+        if (stoppedAtLimit && DreamAnswer.Parse(text) is null)
+        {
+            // Stopped at the night's budget before it answered: it stays stopped. A call that both reached the limit
+            // and answered is applied below, since its tokens are spent either way.
+            running.Unregister(sessionId);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(text))
         {
             // The turn failed before the model said anything (a usage limit, say). The dream stops blocking another, but
@@ -280,6 +352,26 @@ public sealed partial class DreamService(
         }
 
         await BroadcastAsync(userId, dream).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The dream's session reached its token limit (<see cref="DreamFinisher.ObserveCall"/>): the dream fails at once,
+    /// so the night goes on, and its session is stopped. When the session's turn then ends,
+    /// <see cref="FinishAsync"/> still applies an answer the last call gave.
+    /// </summary>
+    public async Task StopForBudgetAsync(string sessionId, string dreamId)
+    {
+        var userId = user.UserId;
+        var dream = await dreams.FindAsync(userId, dreamId).ConfigureAwait(false);
+        if (dream is null || !dream.IsActive || dream.SessionId != sessionId)
+            return;
+
+        await FailAsync(userId, dreamId, DreamRules.StoppedAtBudget, dream).ConfigureAwait(false);
+        using var scope = scopeFactory.CreateScope();
+        using var background = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(userId);
+        var aborted = await scope.ServiceProvider.GetRequiredService<SessionPrompting>().AbortSessionAsync(sessionId).ConfigureAwait(false);
+        if (aborted.IsFailure)
+            LogAbortFailed(sessionId, aborted.Error.Description);
     }
 
     /// <summary>
@@ -347,6 +439,9 @@ public sealed partial class DreamService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not start dream {DreamId}")]
     private partial void LogStartFailed(Exception ex, string dreamId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Dreaming couldn't stop session {SessionId} at its token limit: {Error}")]
+    private partial void LogAbortFailed(string sessionId, string error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Dreaming couldn't read session {SessionId}")]
     private partial void LogReadFailed(Exception ex, string sessionId);

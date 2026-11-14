@@ -274,6 +274,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Memory.Dreaming.DreamingFeature>();
         services.AddScoped<WeaveFleet.Application.Memory.Dreaming.DreamService>();
         services.AddScoped<WeaveFleet.Application.Memory.Dreaming.IDreamStarter>(sp => sp.GetRequiredService<WeaveFleet.Application.Memory.Dreaming.DreamService>());
+        services.AddScoped<WeaveFleet.Application.Memory.Dreaming.IDreamStopper>(sp => sp.GetRequiredService<WeaveFleet.Application.Memory.Dreaming.DreamService>());
         services.AddScoped<WeaveFleet.Application.Memory.Dreaming.DreamingAutomation>();
         services.AddScoped<IBuiltinAutomations>(sp => sp.GetRequiredService<WeaveFleet.Application.Memory.Dreaming.DreamingAutomation>());
         services.AddScoped<WeaveFleet.Application.Memory.Dreaming.NightlyDreaming>();

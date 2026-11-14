@@ -81,7 +81,7 @@ public sealed class DreamingAutomationTests : IDisposable
         var since = _time.GetUtcNow().AddDays(-1);
         var run = await BeginRunAsync();
 
-        var repositories = await _sut.RepositoriesSinceAsync(since);
+        var repositories = await _sut.RepositoriesSinceAsync(Owner, since);
         await _sut.NightAsync(_automation, run.Id, since, repositories);
 
         _starter.Requests.Select(r => r.Repository).ShouldBe([alpha, beta]);
@@ -108,7 +108,7 @@ public sealed class DreamingAutomationTests : IDisposable
         var since = _time.GetUtcNow().AddDays(-1);
         var run = await BeginRunAsync();
 
-        var repositories = await _sut.RepositoriesSinceAsync(since);
+        var repositories = await _sut.RepositoriesSinceAsync(Owner, since);
         await _sut.NightAsync(_automation, run.Id, since, repositories);
 
         repositories.Select(r => r.Repository).ShouldBe([alpha]);
@@ -140,12 +140,62 @@ public sealed class DreamingAutomationTests : IDisposable
         var run = await BeginRunAsync();
         var since = _time.GetUtcNow().AddDays(-1);
 
-        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(since));
+        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(Owner, since));
 
         _starter.Requests.ShouldHaveSingleItem().Repository.ShouldBe(alpha);
         var settled = _runs.All.Single();
         settled.Summary.ShouldBe("alpha: 1 note added · beta: not read, the night's budget was spent · 1 min, 12k tokens");
         settled.SettledState.ShouldBe("done");
+    }
+
+    [Fact]
+    public async Task Each_dream_may_use_only_what_is_left_of_the_nights_budget()
+    {
+        var alpha = Folder("alpha");
+        var beta = Folder("beta");
+        var gamma = Folder("gamma");
+        Session("s1", alpha, TimeSpan.FromHours(1));
+        Session("s2", alpha, TimeSpan.FromHours(2));
+        Session("s3", beta, TimeSpan.FromHours(3));
+        Session("s4", gamma, TimeSpan.FromHours(4));
+        _preferences.Seed(DreamRules.BudgetPreferenceKey, "10000");
+        _starter.Plan[alpha] = new Night(Tokens: 4_000, Kinds: ["added"]);
+        _starter.Plan[beta] = new Night(Tokens: 6_800, Kinds: [], Status: "failed", Error: DreamRules.StoppedAtBudget);
+        var run = await BeginRunAsync();
+        var since = _time.GetUtcNow().AddDays(-1);
+
+        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(Owner, since));
+
+        _starter.Requests.Select(r => (r.Repository, r.TokenLimit)).ShouldBe([(alpha, 10_000L), (beta, 6_000L)]);
+        _runs.All.Single().Summary.ShouldBe(
+            "alpha: 1 note added · beta: Stopped at the night's token budget · gamma: not read, the night's budget was spent · 1 min, 11k tokens");
+    }
+
+    [Fact]
+    public async Task A_repository_the_budget_ran_out_before_goes_first_the_next_night()
+    {
+        var alpha = Folder("alpha");
+        var beta = Folder("beta");
+        _preferences.Seed(DreamRules.BudgetPreferenceKey, "10000");
+        _starter.Plan[alpha] = new Night(Tokens: 10_000, Kinds: ["added"]);
+        _starter.Plan[beta] = new Night(Tokens: 10_000, Kinds: ["added"]);
+
+        // Each night alpha is the busier, and each night one dream spends the whole budget.
+        var read = new List<string>();
+        for (var night = 1; night <= 4; night++)
+        {
+            Session($"a{night}-1", alpha, TimeSpan.FromHours(1));
+            Session($"a{night}-2", alpha, TimeSpan.FromHours(2));
+            Session($"a{night}-3", alpha, TimeSpan.FromHours(3));
+            Session($"b{night}", beta, TimeSpan.FromHours(4));
+            var since = _time.GetUtcNow().AddHours(-12);
+            var before = _starter.Requests.Count;
+            await _sut.NightAsync(_automation, (await BeginRunAsync($"night-{night}")).Id, since, await _sut.RepositoriesSinceAsync(Owner, since));
+            read.Add(AgentMemory.RepositoryName(_starter.Requests.Skip(before).Single().Repository!));
+            _time.Advance(TimeSpan.FromDays(1));
+        }
+
+        read.ShouldBe(["alpha", "beta", "alpha", "beta"]);
     }
 
     [Fact]
@@ -157,7 +207,7 @@ public sealed class DreamingAutomationTests : IDisposable
         var run = await BeginRunAsync();
         var since = _time.GetUtcNow().AddDays(-1);
 
-        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(since));
+        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(Owner, since));
 
         var settled = _runs.All.Single();
         settled.Summary.ShouldBe("alpha: The model wasn't found · 1 min, 500 tokens");
@@ -173,7 +223,7 @@ public sealed class DreamingAutomationTests : IDisposable
         var run = await BeginRunAsync();
         var since = _time.GetUtcNow().AddDays(-1);
 
-        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(since));
+        await _sut.NightAsync(_automation, run.Id, since, await _sut.RepositoriesSinceAsync(Owner, since));
 
         _runs.All.Single().Summary.ShouldStartWith("alpha: OpenCode 2 isn't installed");
         _runs.All.Single().SettledState.ShouldBe("failed");
