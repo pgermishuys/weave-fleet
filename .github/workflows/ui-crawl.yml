@@ -1,0 +1,162 @@
+# The UI crawl (scripts/ui-crawl): builds the web client in Vite mock mode (no API, no database) and visits every
+# screen in scripts/ui-crawl/screens.mjs in 5 variants (dark and light, 1440 and 390 px, Labs on and off), recording a
+# screenshot, console, requests, overflow and an axe-core pass for each.
+#
+# - Gates (a red run): page errors and screens the crawl couldn't reach, console errors, failed requests, and sideways
+#   overflow at 390 px. A red night opens (or comments on) the issue "Nightly UI crawl failed"; a green night closes it.
+# - Report only, until the counts come down (then a ratchet): axe WCAG 2 A/AA, unnamed controls, the screenshots. The
+#   run summary compares the counts with the previous run on the same branch.
+# - Every night on main, on a pull request that changes the crawl, and by hand (tick "nightly" to report like the night).
+name: UI crawl
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ui-crawl/**'
+      - '.github/workflows/ui-crawl.yml'
+  # 01:17 UTC: after the phone walk-throughs start (00:37), off the busy top of the hour.
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+    inputs:
+      nightly:
+        description: Run as the nightly (a red crawl opens or comments on its issue, a green one closes it)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# The event is in the group so nothing cancels the night's run; each run by hand gets its own group.
+concurrency:
+  group: ui-crawl-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || '' }}
+  cancel-in-progress: true
+
+jobs:
+  crawl:
+    name: Crawl
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Reads the previous run's summary to compare with.
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+      - run: corepack enable
+      - name: Client dependencies
+        run: corepack npm ci
+        working-directory: client
+      - name: Crawl dependencies
+        run: bun install --frozen-lockfile
+        working-directory: scripts/ui-crawl
+      # The headless shell is all the crawl launches (Playwright's default for headless Chromium).
+      - name: Chromium
+        run: bunx playwright install --with-deps --only-shell chromium
+        working-directory: scripts/ui-crawl
+
+      # The latest finished run on this branch (main for a pull request) that left a summary.
+      - name: Previous run's summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          branch="$BRANCH"
+          [ "$EVENT" = pull_request ] && branch=main
+          gh run list --workflow ui-crawl.yml --branch "$branch" --status completed --limit 10 \
+            --json databaseId,event,headSha,createdAt,url \
+            --jq '.[] | select(.event != "pull_request") | [.databaseId, .event, .headSha[0:7], .createdAt[0:10], .url] | @tsv' \
+            > "$RUNNER_TEMP/runs.tsv" || true
+          while IFS=$'\t' read -r id event sha day url; do
+            [ "$id" = "$RUN_ID" ] && continue
+            if gh run download "$id" -n ui-crawl-summary -D "$RUNNER_TEMP/previous" 2>/dev/null; then
+              echo "UI_CRAWL_PREVIOUS=$RUNNER_TEMP/previous/summary.json" >> "$GITHUB_ENV"
+              echo "UI_CRAWL_PREVIOUS_LABEL=[the $event run of $day]($url) at $sha" >> "$GITHUB_ENV"
+              echo "Comparing with run $id ($event, $day, $sha)"
+              exit 0
+            fi
+          done < "$RUNNER_TEMP/runs.tsv"
+          echo "No earlier summary on $branch"
+
+      - name: Crawl
+        run: UI_CRAWL_OUT="$RUNNER_TEMP/ui-crawl" bash scripts/ui-crawl/run.sh --workers=3
+
+      - name: Summary
+        if: always()
+        run: cat "$RUNNER_TEMP/ui-crawl/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "The crawl wrote no summary" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-crawl-report
+          path: |
+            ${{ runner.temp }}/ui-crawl/report.html
+            ${{ runner.temp }}/ui-crawl/summary.md
+            ${{ runner.temp }}/ui-crawl/crawl.json
+            ${{ runner.temp }}/ui-crawl/preview.log
+            ${{ runner.temp }}/ui-crawl/shots
+          retention-days: 14
+          if-no-files-found: warn
+      # Small and kept longer: what the next run compares with.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-crawl-summary
+          path: ${{ runner.temp }}/ui-crawl/summary.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # One open issue while the night's crawl is red, a comment on it each night it stays red, closed on the first green
+  # night (the same as mobile.yml's walk-throughs). Only the run's link, commit and result go in it.
+  nightly-report:
+    name: Nightly report
+    needs: crawl
+    if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.nightly))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      SHA: ${{ github.sha }}
+      REF: ${{ github.ref_name }}
+      RESULT: ${{ needs.crawl.result }}
+    steps:
+      - name: Open, comment on or close the issue
+        run: |
+          set -euo pipefail
+          title="Nightly UI crawl failed"
+          open=$(gh issue list --state open --limit 500 --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ "$RESULT" = success ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --comment "Green again on \`$REF\` at ${SHA::7}: $RUN_URL"
+              echo "green, closed #$open"
+            else
+              echo "green"
+            fi
+            exit 0
+          fi
+          text="The nightly UI crawl of \`$REF\` at ${SHA::7} is red: it ended \`$RESULT\`.
+
+          Run: $RUN_URL
+          The run's summary lists each failing gate and screen; screenshots and report.html are in its \`ui-crawl-report\` artifact.
+
+          This issue closes itself after the next green night."
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$text"
+            echo "red ($RESULT), commented on #$open"
+          else
+            gh issue create --title "$title" --body "$text"
+            echo "red ($RESULT), opened an issue"
+          fi

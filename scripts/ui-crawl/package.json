@@ -1,0 +1,12 @@
+{
+  "name": "weave-fleet-ui-crawl",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "crawl": "bash run.sh"
+  },
+  "dependencies": {
+    "axe-core": "4.13.0",
+    "playwright": "1.64.1"
+  }
+}
