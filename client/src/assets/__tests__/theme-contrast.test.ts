@@ -241,6 +241,9 @@ describe("session row text", () => {
     expect(meta, "--row-meta under a resting title's 86%").toBeLessThan(86);
     expect(dim2, "the quietest row's age fades with it").toBeLessThanOrEqual(meta);
     expect(dim2).toBeLessThan(dim1);
+  });
+});
+
 describe("error words", () => {
   it.each(Object.entries(themes()))("reach 4.5:1 on the error tint over every surface in the %s theme", (_name, vars) => {
     const error = resolveVar(vars, vars.error);
