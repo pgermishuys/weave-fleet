@@ -287,7 +287,7 @@ function selectFontSize(size: FontSize): void {
               class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
               :class="[
                 activeFontSize === size.id
-                  ? 'bg-accent text-white'
+                  ? 'bg-accent text-primary-foreground'
                   : 'text-muted hover:text-text hover:bg-card-bg',
                 index === 0 ? 'rounded-l-card' : '',
                 index === fontSizes.length - 1 ? 'rounded-r-card' : '',
@@ -324,7 +324,7 @@ function selectFontSize(size: FontSize): void {
               class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
               :class="[
                 activeThinking.id === option.id
-                  ? 'bg-accent text-white'
+                  ? 'bg-accent text-primary-foreground'
                   : 'text-muted hover:text-text hover:bg-card-bg',
                 index === 0 ? 'rounded-l-card' : '',
                 index === thinkingOptions.length - 1 ? 'rounded-r-card' : '',

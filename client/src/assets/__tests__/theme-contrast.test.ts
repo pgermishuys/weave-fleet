@@ -1,8 +1,10 @@
-// Keyboard focus must be visible: a 2px ring in --focus-ring on every focusable element, with at least 3:1 contrast
-// against every surface in every theme (WCAG 1.4.11). The old global rule was `outline: none !important` in
-// @layer base, which beat every component's own focus outline: 27 of 45 tab stops on a session showed nothing.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+// Contrast every shipped theme must keep (WCAG 2.1 AA), checked on main.css itself so a new theme can't miss it:
+// - Keyboard focus: a 2px ring in --focus-ring on every focusable element, 3:1 against every surface (1.4.11). The old
+//   global rule was `outline: none !important` in @layer base: 27 of 45 tab stops on a session showed nothing.
+// - Text on the accent (primary buttons, highlighted rows): --primary-foreground on --accent, 4.5:1 (1.4.3). White on
+//   the default #6366f1 was 4.46:1, and components wrote text-white on the accent instead of the theme's foreground.
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(resolve(__dirname, "../main.css"), "utf8");
@@ -57,5 +59,34 @@ describe("keyboard focus ring", () => {
       const bg = resolveVar(vars, vars[surface]);
       expect(contrast(ring, bg), `${ring} on --${surface} ${bg}`).toBeGreaterThanOrEqual(3);
     }
+  });
+});
+
+describe("text on the accent", () => {
+  it.each(Object.entries(themes()))("reaches 4.5:1 in the %s theme", (_name, vars) => {
+    const accent = resolveVar(vars, vars.accent);
+    const text = resolveVar(vars, vars["primary-foreground"]);
+    expect(contrast(text, accent), `${text} on ${accent}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("is the theme's --primary-foreground, never a hardcoded white", () => {
+    const src = resolve(__dirname, "../..");
+    const offenders: string[] = [];
+    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
+      (f) => /\.(vue|ts|css)$/.test(f) && !/__tests__/.test(f),
+    );
+    for (const file of files) {
+      const text = readFileSync(join(src, file), "utf8");
+      text.split("\n").forEach((line, i) => {
+        if (/\bbg-(accent|primary)\b/.test(line) && /(?<![:\w-])text-white\b/.test(line)) offenders.push(`${file}:${i + 1}`);
+      });
+      for (const rule of text.matchAll(/[^{}]+\{([^{}]*)\}/g)) {
+        const body = rule[1];
+        if (/background(-color)?:\s*var\(--(accent|primary)\)/.test(body) && /(?<![-\w])color:\s*(#fff\b|#ffffff\b|white\b)/i.test(body)) {
+          offenders.push(`${file}: ${rule[0].trim().split("{")[0].trim()}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

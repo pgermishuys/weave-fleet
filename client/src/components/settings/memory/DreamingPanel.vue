@@ -192,7 +192,7 @@ function sessionLabel(session: DreamSessionRef): string {
         </select>
         <button
           type="button"
-          class="rounded-btn bg-accent px-3 py-1 text-sm font-medium text-white disabled:opacity-60"
+          class="rounded-btn bg-accent px-3 py-1 text-sm font-medium text-primary-foreground disabled:opacity-60"
           :disabled="busy || isStarting"
           data-testid="dream-now"
           @click="dreamNow"
@@ -338,7 +338,7 @@ function sessionLabel(session: DreamSessionRef): string {
               <template v-if="editing?.id === change.id">
                 <button
                   type="button"
-                  class="rounded-btn bg-accent px-2 py-0.5 text-xs font-medium text-white disabled:opacity-60"
+                  class="rounded-btn bg-accent px-2 py-0.5 text-xs font-medium text-primary-foreground disabled:opacity-60"
                   :disabled="undoing === change.id || !editing.text.trim()"
                   data-testid="dream-flag-save"
                   @click="settleFlag(change, () => updateMemoryNote(change.noteId!, editing!.text.trim(), target))"

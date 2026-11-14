@@ -319,7 +319,7 @@ onBeforeUnmount(() => observer?.disconnect());
           <div class="mt-4 flex gap-2">
             <button
               type="button"
-              class="rounded-btn bg-accent px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              class="rounded-btn bg-accent px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               :disabled="isCleaning || removable.length === 0"
               data-testid="storage-confirm"
               @click="clean"

@@ -5,7 +5,7 @@ import { formatRelativeTime } from "@/lib/format-utils";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { useGitHubRepos } from "./composables/use-github-repos";
 
-const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-border bg-transparent px-3 text-[13px] font-medium text-text transition-colors hover:bg-text/6 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonDangerClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-error/40 bg-transparent px-3 text-[13px] font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
