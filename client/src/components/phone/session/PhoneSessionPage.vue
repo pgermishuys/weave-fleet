@@ -291,7 +291,7 @@ watch(sheet, (open) => {
 });
 // A machine without the web app (a node) has no page for the session: it opens from home's Fleet instead.
 const machineWebApp = useMachineWebApp();
-const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? "your computer");
+const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? "your machine");
 const computerLink = computed(() => machineWebApp.value
   ? `${machine.connection?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`
   : null);

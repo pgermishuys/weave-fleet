@@ -163,7 +163,7 @@ onUnmounted(stopTimer);
         Which address will the phone open?
       </h4>
       <p class="mt-1 max-w-prose text-sm text-muted">
-        This page is on this computer only. Give the address a phone reaches {{ machineName }} at — with
+        This page is on this machine only. Give the address a phone reaches {{ machineName }} at — with
         <code>tailscale serve</code> that's its https://….ts.net address.
       </p>
       <form
@@ -285,7 +285,7 @@ onUnmounted(stopTimer);
         <div class="mt-2 grid gap-2 text-xs text-muted">
           <p>
             The phone opens one address, the one saved for {{ machineName }}{{ publicUrl ? ` (${publicUrl})` : "" }}. Any
-            https:// address that reaches this computer will do: Tailscale, a tunnel you run yourself, or a domain of
+            https:// address that reaches this machine will do: Tailscale, a tunnel you run yourself, or a domain of
             your own.
           </p>
           <p>

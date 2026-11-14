@@ -44,7 +44,7 @@ const narrative = computed(() => (props.rolloutRunning && props.rollout ? descri
 
 /** "" is no chosen rule: a node updates when nothing has been in use for 15 minutes and a full Fleet asks first. */
 const RULE_OPTIONS: { value: string; label: string; detail: string }[] = [
-  { value: "", label: "Default: nodes when idle, Fleets ask", detail: "Until you choose, a node updates when nothing has been in use for 15 minutes and a full Fleet asks first." },
+  { value: "", label: "Default: by machine, when idle or ask", detail: "Until you choose, a machine with no web app (started with fleet node) updates when nothing has been in use for 15 minutes, and one with the web app asks first." },
   { value: "ask", label: "Ask me first, every machine", detail: UPDATE_RULES[0]!.detail },
   { value: "idle", label: "When nothing is in use, every machine", detail: UPDATE_RULES[1]!.detail },
   { value: "overnight", label: "Only overnight, 02:00–05:00", detail: UPDATE_RULES[2]!.detail },

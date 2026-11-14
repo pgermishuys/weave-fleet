@@ -184,7 +184,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var result = await installer.EnsureAsync(release, null, CancellationToken.None);
 
         result.Error.Description.ShouldBe(
-            "Fleet couldn't reach 127.0.0.1: the connection was refused. Check that this computer is online, then try again.");
+            "Fleet couldn't reach 127.0.0.1: the connection was refused. Check that this machine is online, then try again.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
         installer.Job.Reason.ShouldBe(BunInstallFailures.Offline);
         Everything().ShouldBeEmpty();
@@ -203,7 +203,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var result = await install.WaitAsync(TimeSpan.FromSeconds(10));
 
         result.Error.Description.ShouldBe(
-            "Fleet couldn't reach 127.0.0.1: the connection timed out. Check that this computer is online, then try again.");
+            "Fleet couldn't reach 127.0.0.1: the connection timed out. Check that this machine is online, then try again.");
         installer.Job!.Reason.ShouldBe(BunInstallFailures.Offline);
         Everything().ShouldBeEmpty();
     }
@@ -395,7 +395,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         var result = await installer.EnsureAsync(release, null, CancellationToken.None);
 
-        result.Error.Description.ShouldBe("Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.");
+        result.Error.Description.ShouldBe("Fleet has no Bun build for this machine. Install Bun yourself and point Fleet at it.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
         installer.Job.Reason.ShouldBe(BunInstallFailures.NoBuild);
         _server.Requests.ShouldBeEmpty();

@@ -144,7 +144,7 @@ watch(() => push.subscribed.value, () => {
           </div>
           <p class="ph-foot">
             iOS only lets web apps send notifications once they're on the Home Screen. Fleet opens there signed in. On
-            iOS older than 17.2 it asks to pair once more: make a new code on the computer.
+            iOS older than 17.2 it asks to pair once more: make a new code on the machine.
           </p>
         </template>
 
@@ -184,7 +184,7 @@ watch(() => push.subscribed.value, () => {
           data-testid="setup-insecure"
         >
           Notifications need HTTPS, through <code>tailscale serve</code>. This page still works in the browser. On the
-          computer, see docs/phone.md, then pair again from the https:// address.
+          machine, see docs/phone.md, then pair again from the https:// address.
         </p>
         <p
           v-else-if="push.state.value === 'denied'"

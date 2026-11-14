@@ -59,7 +59,7 @@ async function openFile(item: FileDiffItem): Promise<void> {
     if (!response.ok) throw new Error(`It answered ${response.status}.`);
     const full = await response.json() as FileDiffItem;
     if (full.isBinary || full.binary) {
-      failed.value = "A binary file: open it on the computer.";
+      failed.value = "A binary file: open it on the machine.";
       return;
     }
     lines.value = parseDiffLines(full.before ?? "", full.after ?? "");

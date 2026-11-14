@@ -43,7 +43,7 @@ describe("describeReach", () => {
     ["https://falcon.tail9c2e.ts.net", "over Tailscale at falcon.tail9c2e.ts.net"],
     ["http://192.168.1.20:2113", "on your network at 192.168.1.20:2113"],
     ["http://falcon.local:2113", "on your network at falcon.local:2113"],
-    ["http://localhost:2113", "on this computer at localhost:2113"],
+    ["http://localhost:2113", "on this machine at localhost:2113"],
     ["http://falcon.example.test:2113", "at falcon.example.test:2113"],
   ])("%s", (url, expected) => {
     expect(describeReach(url)).toBe(expected);

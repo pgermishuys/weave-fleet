@@ -51,7 +51,7 @@ export function describeReach(baseUrl: string): string {
 
   if (hostname.endsWith(".ts.net") || (isIpv4 && first === 100 && second >= 64 && second <= 127)) return `over Tailscale at ${host}`;
   if (hostname.endsWith(".local")) return `on your network at ${host}`;
-  if (isLoopbackHost(hostname)) return `on this computer at ${host}`;
+  if (isLoopbackHost(hostname)) return `on this machine at ${host}`;
   if (isIpv4 && (first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168))) return `on your network at ${host}`;
   return `at ${host}`;
 }

@@ -13,6 +13,6 @@ const { noHarnessReason } = useEnabledHarnesses();
     data-testid="phone-no-harness"
   >
     <strong class="block">No harness is ready yet</strong>
-    Fleet runs sessions through a harness such as OpenCode or Claude Code. Install one to start. Set it up in Fleet on your computer.
+    Fleet runs sessions through a harness such as OpenCode or Claude Code. Install one to start. Set it up in Fleet on that machine.
   </div>
 </template>

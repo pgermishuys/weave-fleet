@@ -34,7 +34,7 @@ public static class DeviceEndpoints
     private const int MaxDeviceNameLength = 60;
     private static readonly string[] Platforms = ["ios", "android", "other"];
 
-    private const string CodeNotFound = "This code has expired or was already used. Ask for a new one on the computer.";
+    private const string CodeNotFound = "This code has expired or was already used. Ask for a new one in Fleet on the machine.";
 
     public static IEndpointRouteBuilder MapDeviceEndpoints(this IEndpointRouteBuilder app, FleetOptions fleetOptions)
     {

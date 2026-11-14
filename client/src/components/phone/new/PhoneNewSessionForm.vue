@@ -386,7 +386,7 @@ onMounted(() => {
           v-if="noHarnessReason"
           class="ph-foot pns__caption"
         >
-          {{ noHarnessReason }} Turn a harness on in Settings › Harnesses on a computer.
+          {{ noHarnessReason }} Turn a harness on in Fleet on that machine, in Settings › Harnesses.
         </p>
         <p
           v-else

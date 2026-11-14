@@ -487,7 +487,7 @@ internal sealed partial class BunRuntimeInstaller(
 
         if (release.AssetFor(Rid) is not { } asset)
         {
-            const string message = "Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.";
+            const string message = "Fleet has no Bun build for this machine. Install Bun yourself and point Fleet at it.";
             LogNoBuild(Rid);
             Set(BunInstallPhases.Failed, message, BunInstallFailures.NoBuild);
             return new FleetError(ErrorCode, message);
@@ -656,7 +656,7 @@ internal sealed partial class BunRuntimeInstaller(
     }
 
     private static string Unreachable(string host, string why) =>
-        $"Fleet couldn't reach {host}: {why} Check that this computer is online, then try again.";
+        $"Fleet couldn't reach {host}: {why} Check that this machine is online, then try again.";
 
     private static InstallFailure Stopped(long received, long? total) =>
         new(BunInstallFailures.Stopped, total is { } length

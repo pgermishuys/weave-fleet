@@ -325,7 +325,7 @@ onBeforeUnmount(() => {
           data-testid="sign-in-remote-note"
         >
           You're using Fleet from another device. When you approve, {{ provider.name }} sends your browser to
-          <code>{{ attempt.callbackAddress }}</code>, which only opens on the computer Fleet runs on, so the page won't load
+          <code>{{ attempt.callbackAddress }}</code>, which only opens on the machine Fleet runs on, so the page won't load
           here. Copy that page's address from the address bar and paste it below.
         </div>
         <button
@@ -506,7 +506,7 @@ onBeforeUnmount(() => {
         <p>
           {{ harnessName }} signs in to {{ provider.name }} by running
           <code>{{ (method.command ?? []).join(" ") }}</code>. Fleet doesn't run commands for you: to use this way, sign in
-          from a terminal on the computer Fleet runs on.
+          from a terminal on the machine Fleet runs on.
         </p>
         <code
           v-if="signInCommand"

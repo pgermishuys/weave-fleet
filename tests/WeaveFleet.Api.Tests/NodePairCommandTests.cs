@@ -64,7 +64,7 @@ public sealed class NodePairCommandTests
         var (exit, output, _) = await RunAsync(handler, "127.0.0.1", "env-token-0123456789");
 
         exit.ShouldBe(0);
-        output.ShouldContain("only listens on this computer");
+        output.ShouldContain("only listens on this machine");
         output.ShouldContain("fleet node up");
         output.ShouldNotContain("add-machine#");
     }

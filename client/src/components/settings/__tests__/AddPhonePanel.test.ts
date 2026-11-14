@@ -14,7 +14,7 @@ describe("AddPhonePanel: reach it from outside", () => {
 
     expect(text).toContain("Reach it from outside your network");
     expect(text).toContain("https://hangar.example.test");
-    expect(text).toContain("Any https:// address that reaches this computer");
+    expect(text).toContain("Any https:// address that reaches this machine");
     expect(text).toContain("Fleet runs no relay");
     expect(mountPanel(null).get("[data-testid='add-phone-outside'] a").attributes("href")).toBe("https://fleet.tryweave.io/docs/phone");
   });
