@@ -141,7 +141,6 @@ const groups = computed(() =>
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  opacity: 0.8;
 }
 
 .analytics-nav__item {

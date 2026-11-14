@@ -283,7 +283,7 @@ function isSafeReturnUrl(value: string): boolean {
           </template>
         </div>
 
-        <p class="text-[10px] text-muted/70">
+        <p class="text-[10px] text-muted">
           {{ buildLabel }}
         </p>
       </div>

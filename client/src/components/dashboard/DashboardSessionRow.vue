@@ -301,7 +301,7 @@ async function handleDelete(): Promise<void> {
 .dash-row__status {
   flex-shrink: 0;
   min-width: 28px;
-  color: color-mix(in srgb, var(--muted) 85%, transparent);
+  color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;

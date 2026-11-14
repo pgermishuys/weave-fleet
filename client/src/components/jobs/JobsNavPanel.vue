@@ -92,7 +92,6 @@ const menu = useJobsMenu();
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  opacity: 0.8;
 }
 
 .jobs-nav__count {

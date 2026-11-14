@@ -182,7 +182,7 @@ async function resetToDefaults(): Promise<void> {
             @click="insertToken(field, token.name)"
           >
             {{ "{" + token.name + "}" }}
-            <span class="opacity-60">{{ token.hint }}</span>
+            <span>{{ token.hint }}</span>
           </button>
         </span>
       </label>

@@ -290,7 +290,8 @@
   --main-bg: #002B36;
   --border: rgba(253, 246, 227, 0.1);
   --text: #FDF6E3;
-  --muted: #839496;
+  /* Solarized's #839496 lifted to 4.5:1 on its surfaces. */
+  --muted: #8C9B9D;
   --row-dim-1: 69%;
   --row-dim-2: 54%;
   --row-meta: 60%;
@@ -327,7 +328,8 @@
   --border: #D6CDB7;
   --menu-shadow: 0 16px 40px -12px rgba(7, 54, 66, 0.25), 0 2px 6px rgba(7, 54, 66, 0.08);
   --text: #073642;
-  --muted: #657B83;
+  /* Solarized's #657B83 lifted to 4.5:1 on its surfaces. */
+  --muted: #586B72;
   --row-dim-1: 82%;
   --row-dim-2: 67%;
   --row-meta: 70%;
