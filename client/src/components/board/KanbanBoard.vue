@@ -390,8 +390,9 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
     class="kanban-container"
     aria-label="Kanban board"
   >
+    <!-- phone-menu-lane: on a phone the header starts clear of the floating menu button. -->
     <header
-      class="kanban-header"
+      class="kanban-header phone-menu-lane"
       :class="{ 'kanban-header--manage': isManageMode }"
     >
       <div class="kanban-header__copy">

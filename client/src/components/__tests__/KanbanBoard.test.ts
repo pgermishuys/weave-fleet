@@ -426,6 +426,17 @@ describe("KanbanBoard", () => {
     expect(wrapper.get('[data-testid="kanban-sync-button"]').text()).toBe("Sync now");
   });
 
+  it("starts its header clear of the phone's floating menu button", async () => {
+    mockState = { boards: [createBoardFixture()], lanes: [], cards: [] };
+    configureBoardApiMocks();
+
+    const wrapper = mountBoard();
+    await flushPromises();
+
+    // AppShell's .app--phone .phone-menu-lane rule pads a page heading past the menu button.
+    expect(wrapper.get("header.kanban-header").classes()).toContain("phone-menu-lane");
+  });
+
   it("renders work mode by default and exposes manage controls only in manage mode", async () => {
     mockState = {
       boards: [createBoardFixture()],
