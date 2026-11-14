@@ -255,7 +255,8 @@ internal sealed class PiHarnessSession : IHarnessSession
             .ConfigureAwait(false);
         EnsureSuccess(response);
 
-        var messages = ExtractMessages(response.Data);
+        // Named as the live events named them, so a page read mid-run updates what's shown instead of doubling it.
+        var messages = _mapper.History(ExtractMessages(response.Data));
         if (!string.IsNullOrWhiteSpace(query?.Before))
         {
             var beforeIndex = messages.FindIndex(message => string.Equals(message.Id, query.Before, StringComparison.Ordinal));
@@ -485,7 +486,7 @@ internal sealed class PiHarnessSession : IHarnessSession
             case PiTurnEndEvent turnEnd when PiMapper.CallsTools(turnEnd.Message):
                 // Pi runs the calls and goes on with the next turn.
                 break;
-            case PiIdleEvent or PiAgentEndEvent or PiTurnEndEvent or PiCompactionEndEvent:
+            case PiIdleEvent or PiAgentEndEvent or PiAgentSettledEvent or PiTurnEndEvent or PiCompactionEndEvent:
                 SetIdleIfActive();
                 break;
             case PiErrorEvent or PiProtocolErrorEvent:
@@ -580,41 +581,21 @@ internal sealed class PiHarnessSession : IHarnessSession
         _status = HarnessSessionStatus.Error;
     }
 
-    private static List<HarnessMessage> ExtractMessages(JsonElement? data)
+    private static IReadOnlyList<PiMessage> ExtractMessages(JsonElement? data)
     {
         if (data is null || data.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             return [];
 
-        IReadOnlyList<PiMessage>? piMessages = null;
         if (data.Value.ValueKind == JsonValueKind.Array)
-        {
-            piMessages = JsonSerializer.Deserialize(data.Value, PiJsonContext.Default.PiMessageArray);
-        }
-        else if (data.Value.ValueKind == JsonValueKind.Object)
-        {
-            if (data.Value.TryGetProperty("messages", out var messagesElement)
-                && messagesElement.ValueKind == JsonValueKind.Array)
-            {
-                piMessages = JsonSerializer.Deserialize(messagesElement, PiJsonContext.Default.PiMessageArray);
-            }
-            else
-            {
-                var response = JsonSerializer.Deserialize(data.Value, PiJsonContext.Default.PiGetMessagesResponse);
-                piMessages = response?.Messages;
-            }
-        }
+            return JsonSerializer.Deserialize(data.Value, PiJsonContext.Default.PiMessageArray) ?? [];
 
-        if (piMessages is null)
+        if (data.Value.ValueKind != JsonValueKind.Object)
             return [];
 
-        var messages = new List<HarnessMessage>(piMessages.Count);
-        foreach (var message in piMessages)
-        {
-            if (!string.IsNullOrWhiteSpace(message.Role))
-                messages.Add(ToHarnessMessage(message));
-        }
+        if (data.Value.TryGetProperty("messages", out var messagesElement) && messagesElement.ValueKind == JsonValueKind.Array)
+            return JsonSerializer.Deserialize(messagesElement, PiJsonContext.Default.PiMessageArray) ?? [];
 
-        return messages;
+        return JsonSerializer.Deserialize(data.Value, PiJsonContext.Default.PiGetMessagesResponse)?.Messages ?? [];
     }
 
     private static bool? TryGetHasMore(JsonElement? data)
@@ -628,86 +609,6 @@ internal sealed class PiHarnessSession : IHarnessSession
 
         return hasMoreElement.GetBoolean();
     }
-
-    private static HarnessMessage ToHarnessMessage(PiMessage message)
-    {
-        return new HarnessMessage
-        {
-            Id = ResolveMessageId(message),
-            Role = ToFleetRole(message.Role),
-            Parts = MapMessageParts(message),
-            Timestamp = message.Timestamp is { } timestamp
-                ? DateTimeOffset.FromUnixTimeMilliseconds(timestamp)
-                : DateTimeOffset.UtcNow,
-            Agent = message.Role.Equals("toolResult", StringComparison.OrdinalIgnoreCase)
-                ? string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : $"tool:{message.ToolName}"
-                : null,
-            ModelId = message.ResponseModel ?? message.Model,
-        };
-    }
-
-    private static List<MessagePart> MapMessageParts(PiMessage message)
-    {
-        var parts = new List<MessagePart>(message.Content.Count + 1);
-        foreach (var content in message.Content)
-        {
-            switch (content)
-            {
-                case PiTextContent text:
-                    parts.Add(new TextPart(text.Text ?? string.Empty));
-                    break;
-                case PiThinkingContent thinking:
-                    parts.Add(new ReasoningPart(thinking.Thinking ?? string.Empty));
-                    break;
-                case PiToolCallContent toolCall:
-                    parts.Add(new ToolUsePart(
-                        ToolCallId: toolCall.Id ?? string.Empty,
-                        ToolName: toolCall.Name ?? string.Empty,
-                        Arguments: toolCall.Arguments ?? TryParseJson(toolCall.PartialArgs) ?? default,
-                        State: ToolUseState.Pending));
-                    break;
-            }
-        }
-
-        if (message.Role.Equals("toolResult", StringComparison.OrdinalIgnoreCase))
-        {
-            var content = string.Concat(message.Content.OfType<PiTextContent>().Select(static text => text.Text));
-            if (!string.IsNullOrEmpty(content) || !string.IsNullOrWhiteSpace(message.ToolCallId))
-                parts.Add(new ToolResultPart(message.ToolCallId ?? string.Empty, content, message.IsError ?? false));
-        }
-
-        return parts;
-    }
-
-    private static JsonElement? TryParseJson(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-            return null;
-
-        try
-        {
-            using var document = JsonDocument.Parse(raw);
-            return document.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return JsonSerializer.SerializeToElement(raw, PiJsonContext.Default.String);
-        }
-    }
-
-    private static string ResolveMessageId(PiMessage message)
-    {
-        if (!string.IsNullOrWhiteSpace(message.ResponseId))
-            return message.ResponseId;
-
-        if (message.Timestamp is { } timestamp)
-            return $"pi-{ToFleetRole(message.Role)}-{timestamp}";
-
-        return $"pi-{ToFleetRole(message.Role)}-{Guid.NewGuid():N}";
-    }
-
-    private static string ToFleetRole(string role)
-        => role.Equals("user", StringComparison.OrdinalIgnoreCase) ? "user" : "assistant";
 
     private static void EnsureSuccess(PiResponseEvent response)
     {

@@ -28,4 +28,11 @@ public sealed class PiHarnessTests
         // A note would have to go into the user's message, which Pi keeps and Fleet shows.
         new PiHarness().Capabilities.TakesModelNotes.ShouldBeFalse();
     }
+
+    [Fact]
+    public void Pi_keeps_the_conversation_and_Fleet_reads_it_from_Pi()
+    {
+        // Fleet saves no Pi messages, so a session's messages (and the conversation a page loads) come from get_messages.
+        new PiHarness().Capabilities.HistoryLivesInHarness.ShouldBeTrue();
+    }
 }
