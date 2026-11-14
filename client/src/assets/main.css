@@ -4,6 +4,11 @@
 @import "./markdown.css";
 @import "./mermaid.css";
 
+/* Tailwind's dark: follows Fleet's theme, not the operating system's colour scheme: the theme store sets the resolved
+   theme on <html data-theme> (System resolves to dark or light first). Every theme is dark except the ones listed;
+   a new light theme goes in this list (src/assets/__tests__/dark-variant.test.ts checks it against stores/theme.ts). */
+@custom-variant dark (&:where(:root:not([data-theme="light"], [data-theme="solarized-light"]) *));
+
 :root {
   --visual-vh: 100dvh;
   --fold-gap: 0px;
