@@ -168,6 +168,31 @@ public sealed class OpenCode2ToolMappingTests
         file.ChangeType.ShouldBe("change");
     }
 
+    [Theory]
+    // V2's write sends the whole file; its edit the exact text it replaced, once unless replaceAll.
+    [InlineData("write", """{"path":"plan.md","content":"- [ ] 1. One\n"}""", "- [ ] 1. One\n", null, null, false)]
+    [InlineData("edit", """{"path":"plan.md","oldString":"- [ ] 1.","newString":"- [x] 1."}""", null, "- [ ] 1.", "- [x] 1.", false)]
+    [InlineData("edit", """{"path":"plan.md","oldString":"[ ]","newString":"[x]","replaceAll":true}""", null, "[ ]", "[x]", true)]
+    public void A_file_call_says_what_it_left_in_the_file(
+        string tool, string input, string? content, string? oldString, string? newString, bool replaceAll)
+    {
+        var mapper = new OpenCode2Mapper(FleetSession, "/work/proj");
+        mapper.Map(Event("session.tool.input.started", $$"""{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","name":"{{tool}}"}"""));
+        mapper.Map(Event("session.tool.called", $$"""{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","input":{{input}}}"""));
+
+        var events = mapper.Map(Event("session.tool.success", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","content":[]}"""));
+
+        var change = events.Select(Translate).OfType<FilesWritten>().ShouldHaveSingleItem().Payload.Changes.ShouldHaveSingleItem();
+        change.ShouldBe(new FileChange
+        {
+            Path = Path.GetFullPath("/work/proj/plan.md"),
+            Content = content,
+            OldString = oldString,
+            NewString = newString,
+            ReplaceAll = replaceAll,
+        });
+    }
+
     [Fact]
     public void A_relative_path_is_taken_from_the_session_folder_when_the_event_names_none()
     {
