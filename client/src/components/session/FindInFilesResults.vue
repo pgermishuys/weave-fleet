@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Loader2 } from 'lucide-vue-next'
 import { fileIcon, fileName } from '@/lib/canvas-registry'
 import type { FindTextFailure } from '@/composables/use-find-text'
 import { MATCHES_PER_FILE, segmentsOf, type TextSearchResult } from '@/lib/find-text'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Spinner } from '@/components/ui/spinner'
 
 const props = defineProps<{
   query: string
@@ -71,7 +71,7 @@ function shown<T>(path: string, matches: T[]): T[] {
     </div>
 
     <div v-else-if="!result" class="find-results__status">
-      <Loader2 v-if="isLoading" :size="16" class="find-results__spinner" />
+      <Spinner v-if="isLoading" />
       <span>Searching…</span>
     </div>
 
@@ -162,16 +162,6 @@ function shown<T>(path: string, matches: T[]): T[] {
   padding: 24px 16px;
   font-size: 12px;
   color: var(--muted);
-}
-
-.find-results__spinner {
-  animation: find-spin 1s linear infinite;
-}
-
-@keyframes find-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .find-results__summary {

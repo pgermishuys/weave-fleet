@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
+import { Check, Copy, Eye, EyeOff, Plus, RefreshCw } from "lucide-vue-next";
 import {
   agentWorkLevelName,
   useMachinesStore,
@@ -29,6 +29,7 @@ import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -565,11 +566,7 @@ onUnmounted(() => stopPolling?.());
             class="flex items-center gap-2 text-xs text-muted"
             data-testid="machines-add-looking"
           >
-            <LoaderCircle
-              :size="14"
-              class="animate-spin"
-              aria-hidden="true"
-            />
+            <Spinner size="sm" />
             Looking for the machine…
           </p>
           <ErrorNote
@@ -631,12 +628,7 @@ onUnmounted(() => stopPolling?.());
             :disabled="isAdding || !canAdd"
             data-testid="machines-add-submit"
           >
-            <LoaderCircle
-              v-if="isAdding"
-              :size="16"
-              class="animate-spin"
-              aria-hidden="true"
-            />
+            <Spinner v-if="isAdding" />
             {{ isAdding ? "Checking…" : addLabel }}
           </button>
           <button

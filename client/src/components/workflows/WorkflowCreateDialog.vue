@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { LoaderCircle, Sparkles } from "lucide-vue-next";
+import { Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import { modelShortName } from "@/lib/workflows";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * New workflow, or Duplicate a built-in: a name, and the file Fleet makes in the repository's `.weave/workflows/`,
@@ -292,10 +293,7 @@ async function create(): Promise<void> {
             :disabled="!canCreate"
             data-testid="workflow-create-submit"
           >
-            <LoaderCircle
-              v-if="isCreating"
-              class="h-4 w-4 animate-spin"
-            />
+            <Spinner v-if="isCreating" />
             {{ source ? "Duplicate and open" : "Create and open" }}
           </Button>
         </DialogFooter>

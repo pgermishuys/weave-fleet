@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { apiFetchOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import type { KeptMod } from "@/lib/mods/kept";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Fleet's own sample mods, under the user's kept ones: what each does and where to see it, and Add to keep it. Adding
@@ -149,10 +149,9 @@ async function add(sample: Sample): Promise<void> {
             data-testid="mods-sample-add"
             @click="add(sample)"
           >
-            <LoaderCircle
+            <Spinner
               v-if="adding === sample.name"
-              class="h-3.5 w-3.5 animate-spin"
-              aria-hidden="true"
+              size="sm"
             />
             Add
           </button>

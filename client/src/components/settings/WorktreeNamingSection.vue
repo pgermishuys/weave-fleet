@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Check, LoaderCircle } from "lucide-vue-next";
+import { Check } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorktreeNamingStore } from "@/stores/worktree-naming";
 import { resolveWorktreeName, type WorktreeNamingTemplates } from "@/lib/worktree-naming";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 font-mono text-[12.5px] text-text outline-none transition-colors placeholder:text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -254,12 +255,7 @@ async function resetToDefaults(): Promise<void> {
         :disabled="isSaving"
         @click="save"
       >
-        <LoaderCircle
-          v-if="isSaving"
-          :size="16"
-          class="animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner v-if="isSaving" />
         Save
       </button>
       <button

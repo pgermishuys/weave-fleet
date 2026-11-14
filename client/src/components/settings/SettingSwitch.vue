@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircle } from "lucide-vue-next";
+import { Spinner } from "@/components/ui/spinner";
 
 /** The on/off switch every settings row uses. `aria-label` and `data-testid` fall through to the button. */
 defineOptions({ inheritAttrs: false });
@@ -18,11 +18,9 @@ defineEmits<{ click: [] }>();
 
 <template>
   <div class="flex items-center gap-2">
-    <LoaderCircle
+    <Spinner
       v-if="saving"
-      :size="16"
-      class="animate-spin text-muted"
-      aria-hidden="true"
+      class="text-muted"
     />
     <button
       v-bind="$attrs"

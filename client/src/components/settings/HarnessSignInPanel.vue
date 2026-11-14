@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { KeyRound, LoaderCircle, RefreshCw, Search } from "lucide-vue-next";
+import { KeyRound, RefreshCw, Search } from "lucide-vue-next";
 import type { HarnessSignInConnection, HarnessSignInProvider } from "@/api/client";
 import HarnessSignInFlow from "@/components/settings/HarnessSignInFlow.vue";
 import { signInSummary } from "@/lib/harness-sign-in";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessSignInStore } from "@/stores/harness-sign-in";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * A harness's providers under its card in Settings → Harnesses: which are signed in (and which sign-in each uses),
@@ -132,9 +133,13 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
         aria-label="Check the providers again"
         @click="void load()"
       >
+        <Spinner
+          v-if="loading"
+          size="xs"
+        />
         <RefreshCw
+          v-else
           :size="12"
-          :class="loading ? 'animate-spin' : ''"
           aria-hidden="true"
         />
       </button>
@@ -159,11 +164,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
       v-else-if="loading && !signIns"
       class="sign-in-panel__muted"
     >
-      <LoaderCircle
-        :size="12"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner size="xs" />
       Asking {{ harnessName }} which providers it can sign in to…
     </p>
 
@@ -252,11 +253,9 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
                   :data-testid="`harness-sign-out-${connection.id}`"
                   @click="void signOut(provider, connection)"
                 >
-                  <LoaderCircle
+                  <Spinner
                     v-if="working === connection.id"
-                    :size="12"
-                    class="animate-spin"
-                    aria-hidden="true"
+                    size="xs"
                   />
                   {{ confirmingSignOut === connection.id ? "Sign out?" : "Sign out" }}
                 </button>

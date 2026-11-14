@@ -5,7 +5,7 @@ import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { shareLink } from "@/lib/phone/share";
 import { ago } from "@/lib/phone/time";
-import { Check, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
+import { Check, CornerDownRight, ImageIcon } from "lucide-vue-next";
 import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import PhoneMarkdown from "@/components/phone/session/PhoneMarkdown.vue";
@@ -68,6 +68,7 @@ import { headerStatus } from "@/lib/phone/session-status";
 import { useSessionsStore } from "@/stores/sessions";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
 import { INBOX, inboxSession } from "@/composables/phone/use-inbox";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * A session on the phone (`/phone/s/<machine>/<session>`, pushed over the inbox by PhoneStack), in one panel on the
@@ -514,10 +515,9 @@ onUnmounted(() => {
             class="ps__loading"
             role="status"
           >
-            <LoaderCircle
+            <Spinner
+              size="lg"
               class="ph-spinner"
-              :size="22"
-              aria-hidden="true"
             />
           </div>
 

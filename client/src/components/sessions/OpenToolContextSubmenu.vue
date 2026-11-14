@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { ExternalLink, FileText, Folder, Loader2 } from "lucide-vue-next";
+import { ExternalLink, FileText, Folder } from "lucide-vue-next";
 import {
   ContextMenuSub,
   ContextMenuSubTrigger,
@@ -13,6 +13,7 @@ import { useOpenDirectory } from "@/composables/use-open-directory";
 import { useOpenFile } from "@/composables/use-open-file";
 import { useKeyFiles } from "@/composables/use-key-files";
 import ToolIcon from "@/components/icons/ToolIcon.vue";
+import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
   directory: string;
@@ -81,7 +82,7 @@ function handleOpenFile(filePath: string, toolId: string): void {
         v-if="toolsLoading && tools.length === 0"
         disabled
       >
-        <Loader2 class="size-3.5 animate-spin" />
+        <Spinner size="sm" />
         Detecting tools…
       </ContextMenuItem>
       <ContextMenuItem
@@ -131,7 +132,7 @@ function handleOpenFile(filePath: string, toolId: string): void {
 
                 <!-- Spinner while key files are loading -->
                 <ContextMenuItem v-if="filesLoading" disabled>
-                  <Loader2 class="size-3.5 animate-spin" />
+                  <Spinner size="sm" />
                   Loading…
                 </ContextMenuItem>
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
-import { Info, LoaderCircle } from "lucide-vue-next";
+import { Info } from "lucide-vue-next";
 import { useAgentBrowserSettings, type BrowserPages as Pages } from "@/composables/use-agent-browser-settings";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Settings → Permissions → Browser: whether agents can use a browser of their own, which pages it may open, and whether
@@ -36,11 +37,9 @@ onMounted(() => void load());
           headless browser, not yours, so your view and your sign-ins don't change.
         </p>
       </div>
-      <LoaderCircle
+      <Spinner
         v-if="loading || saving"
-        :size="16"
-        class="mt-1 animate-spin text-muted"
-        aria-hidden="true"
+        class="mt-1 text-muted"
       />
     </div>
 

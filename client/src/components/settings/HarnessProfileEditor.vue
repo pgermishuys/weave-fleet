@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Check, LoaderCircle, Play, X } from "lucide-vue-next";
+import { Check, Play, X } from "lucide-vue-next";
 import type { HarnessProfile, HarnessProfileCheck } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import ProfileConfigEditor from "@/components/settings/ProfileConfigEditor.vue";
@@ -8,6 +8,7 @@ import { splitCode } from "@/lib/harness-display";
 import { NEW_PROFILE_CONTENT, parseJsonc } from "@/lib/harness-profile";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Edits one profile, or makes a new one when `profile` is null. Saving asks the harness to load it first. */
 const props = defineProps<{
@@ -202,10 +203,9 @@ async function remove(): Promise<void> {
           :disabled="busy !== null"
           @click="test"
         >
-          <LoaderCircle
+          <Spinner
             v-if="busy === 'test'"
-            class="animate-spin"
-            aria-hidden="true"
+            size="lg"
           />
           <Play
             v-else
@@ -219,10 +219,9 @@ async function remove(): Promise<void> {
           :disabled="busy !== null"
           @click="save"
         >
-          <LoaderCircle
+          <Spinner
             v-if="busy === 'save'"
-            class="animate-spin"
-            aria-hidden="true"
+            size="lg"
           />
           {{ busy === "save" ? `Checking with ${harnessName}…` : "Save" }}
         </Button>

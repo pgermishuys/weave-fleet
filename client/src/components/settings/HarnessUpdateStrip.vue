@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { ArrowUpCircle, Check, Copy, LoaderCircle } from "lucide-vue-next";
+import { ArrowUpCircle, Check, Copy } from "lucide-vue-next";
 import type { HarnessInfo } from "@/api/client";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import { useMachineTarget } from "@/lib/machine-target";
 import { apiFetchOn } from "@/lib/api-client";
 import { harnessState } from "@/lib/harness-display";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * A harness's update, under its card in Settings → Harnesses: that a newer version is out (or that Fleet needs
@@ -122,11 +123,10 @@ async function copyCommand(): Promise<void> {
       </p>
 
       <div class="harness-update__actions">
-        <LoaderCircle
+        <Spinner
           v-if="job?.phase === 'waiting' || job?.phase === 'running'"
-          :size="15"
-          class="animate-spin text-accent"
-          aria-hidden="true"
+          size="sm"
+          class="text-accent"
         />
         <button
           v-if="job?.phase === 'waiting'"

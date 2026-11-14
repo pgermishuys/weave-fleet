@@ -1,18 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import {
-  Check,
-  ChevronRight,
-  ExternalLink,
-  GitMerge,
-  LoaderCircle,
-  MessageSquare,
-  PinOff,
-  Send,
-  TriangleAlert,
-  Users,
-  X,
-} from "lucide-vue-next";
+import { Check, ChevronRight, ExternalLink, GitMerge, MessageSquare, PinOff, Send, TriangleAlert, Users, X } from "lucide-vue-next";
 import CheckIcon from "@/components/github/CheckIcon.vue";
 import ChecksSummary from "@/components/github/ChecksSummary.vue";
 import DiffStat from "@/components/github/DiffStat.vue";
@@ -45,6 +33,7 @@ import {
 } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { useMachineTarget } from "@/lib/machine-target";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   link: SmartLink;
@@ -287,11 +276,9 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
                 :title="`Send the ${run.name} failure to the agent`"
                 @click="sendCheck(run)"
               >
-                <LoaderCircle
+                <Spinner
                   v-if="sending.has(`check:${run.name}`)"
-                  :size="11"
-                  class="send-btn__spinner"
-                  aria-hidden="true"
+                  size="xs"
                 />
                 <Send
                   v-else
@@ -410,11 +397,9 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
                 title="Send this review comment to the agent"
                 @click="sendThread(thread)"
               >
-                <LoaderCircle
+                <Spinner
                   v-if="sending.has(`thread:${thread.threadNodeId}`)"
-                  :size="11"
-                  class="send-btn__spinner"
-                  aria-hidden="true"
+                  size="xs"
                 />
                 <Send
                   v-else
@@ -776,10 +761,6 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
   color: var(--running);
 }
 
-.send-btn__spinner {
-  animation: link-card-spin 0.9s linear infinite;
-}
-
 .link-card__error {
   margin: 0;
   padding: 0 12px 10px;
@@ -791,17 +772,9 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
   border-color: color-mix(in srgb, var(--pr-blocked) 35%, var(--border));
 }
 
-@keyframes link-card-spin {
-  to { transform: rotate(360deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .signal__chevron {
     transition: none;
-  }
-
-  .send-btn__spinner {
-    animation: none;
   }
 }
 </style>

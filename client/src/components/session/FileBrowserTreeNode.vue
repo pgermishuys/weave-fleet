@@ -5,10 +5,11 @@ let pendingClick: ReturnType<typeof setTimeout> | undefined
 
 <script setup lang="ts">
 import { computed, inject } from 'vue'
-import { ChevronRight, ChevronDown, Loader2 } from 'lucide-vue-next'
+import { ChevronRight, ChevronDown } from 'lucide-vue-next'
 import type { BrowseDirectoryEntry } from '@/api/client'
 import type { UseDiffsResult } from '@/composables/use-diffs'
 import { useContentPanelContext } from '@/composables/use-content-panel'
+import { Spinner } from '@/components/ui/spinner'
 
 interface Props {
   entry: BrowseDirectoryEntry
@@ -144,11 +145,7 @@ function handleFileClick(event: MouseEvent) {
       <ChevronDown v-if="isExpanded" class="file-browser-tree-node__chevron" :size="16" />
       <ChevronRight v-else class="file-browser-tree-node__chevron" :size="16" />
       <span class="file-browser-tree-node__name">{{ entry.name }}</span>
-      <Loader2 
-        v-if="isLoading" 
-        class="file-browser-tree-node__spinner" 
-        :size="14" 
-      />
+      <Spinner v-if="isLoading" size="sm" class="text-muted" />
     </div>
 
     <!-- File node -->
@@ -253,21 +250,6 @@ function handleFileClick(event: MouseEvent) {
 @media (prefers-reduced-motion: reduce) {
   .file-browser-tree-node__chevron {
     transition: none;
-  }
-}
-
-.file-browser-tree-node__spinner {
-  flex-shrink: 0;
-  color: var(--muted);
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
   }
 }
 

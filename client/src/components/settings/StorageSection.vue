@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle } from "lucide-vue-next";
+import { AlertCircle } from "lucide-vue-next";
 import type { components } from "@/api/generated/schema";
 import { extractApiError } from "@/lib/api-error";
 import { formatBytes } from "@/lib/format-utils";
 import { useMachineTarget } from "@/lib/machine-target";
 import { recentStorageSizes, rememberStorageSize } from "@/lib/storage-size-cache";
+import { Spinner } from "@/components/ui/spinner";
 
 type Checkout = components["schemas"]["WorktreeCheckout"];
 type Report = components["schemas"]["WorktreeCleanupReport"];
@@ -207,11 +208,7 @@ onBeforeUnmount(() => observer?.disconnect());
       class="mt-5 flex items-center gap-2 text-sm text-muted"
       data-testid="storage-loading"
     >
-      <LoaderCircle
-        :size="14"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner size="sm" />
       Looking at your checkouts…
     </p>
 
@@ -325,10 +322,9 @@ onBeforeUnmount(() => observer?.disconnect());
               @click="clean"
             >
               <template v-if="isCleaning">
-                <LoaderCircle
-                  :size="13"
-                  class="mr-1 inline animate-spin"
-                  aria-hidden="true"
+                <Spinner
+                  size="sm"
+                  class="mr-1 inline"
                 />
                 Removing {{ noun(removable.length) }}…
               </template>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { readCredentialsSync } from "@/lib/device-credentials";
 import { restoreCredentials } from "@/lib/phone/restore-credentials";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Sign-in for the phone pages. The phone signs in with its device cookie; if that's gone but its device token is still
@@ -56,11 +56,10 @@ onMounted(async () => {
     class="phone-gate"
     :role="state === 'error' ? 'alert' : 'status'"
   >
-    <LoaderCircle
+    <Spinner
       v-if="state === 'checking'"
+      size="lg"
       class="ph-spinner"
-      :size="22"
-      aria-hidden="true"
     />
     <span v-else>{{ message }}</span>
   </div>

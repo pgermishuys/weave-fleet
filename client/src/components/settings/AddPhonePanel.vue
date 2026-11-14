@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
-import { AlertCircle, Check, Circle, Copy, LoaderCircle, Smartphone } from "lucide-vue-next";
+import { AlertCircle, Check, Circle, Copy, Smartphone } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import QrCode from "@/components/settings/QrCode.vue";
 import { createPairingCode, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
 import { choosePhoneBaseUrl, supportsInstall } from "@/lib/pairing";
 import { phoneReadiness } from "@/lib/phone-readiness";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Settings → Machines → This machine → Add a phone: a one-time QR code (and a code to type) a phone scans to get
@@ -319,10 +320,9 @@ onUnmounted(stopTimer);
           data-testid="add-phone-start"
           @click="start()"
         >
-          <LoaderCircle
+          <Spinner
             v-if="busy"
-            class="animate-spin"
-            aria-hidden="true"
+            size="lg"
           />
           <Smartphone
             v-else

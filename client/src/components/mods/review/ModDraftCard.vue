@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import ModActionButton from "@/components/mods/review/ModActionButton.vue";
 import ModReviewDialog from "@/components/mods/review/ModReviewDialog.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 import type { ModDraft } from "@/lib/mods/kept";
 import { useModsStore } from "@/stores/mods";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** A draft the agent wrote, in the conversation: where it runs, and the way to stop it. */
 const props = defineProps<{ draft: ModDraft; phone?: boolean }>();
@@ -144,10 +144,9 @@ async function toggle(): Promise<void> {
         data-testid="mod-draft-toggle"
         @click="toggle"
       >
-        <LoaderCircle
+        <Spinner
           v-if="toggling"
-          class="h-3.5 w-3.5 animate-spin"
-          aria-hidden="true"
+          size="sm"
         />
         {{ isOff ? "Turn on again" : "Turn off" }}
       </ModActionButton>

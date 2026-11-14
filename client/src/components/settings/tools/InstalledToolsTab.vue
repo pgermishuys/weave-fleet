@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertTriangle, LoaderCircle, Trash2, Wrench } from "lucide-vue-next";
+import { AlertTriangle, Trash2, Wrench } from "lucide-vue-next";
 import { useTools, type ToolRef } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { targetKey, targetLabel } from "@/lib/install-target";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const { tools, isLoading, error, removeTool } = useTools();
 
@@ -53,11 +54,7 @@ function formatCommand(command: string | null | undefined, args: readonly string
       v-if="isLoading"
       class="flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading tools…</span>
     </div>
 
@@ -162,12 +159,7 @@ function formatCommand(command: string | null | undefined, args: readonly string
               :disabled="removingKey === keyOf(tool)"
               @click="confirmRemoveKey === keyOf(tool) ? handleRemove(tool) : confirmRemove(tool)"
             >
-              <LoaderCircle
-                v-if="removingKey === keyOf(tool)"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner v-if="removingKey === keyOf(tool)" />
               <Trash2
                 v-else
                 :size="16"

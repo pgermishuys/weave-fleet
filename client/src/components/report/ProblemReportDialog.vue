@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
-import { Check, Download, FileText, Image as ImageIcon, LoaderCircle, ShieldCheck, TriangleAlert, X } from "lucide-vue-next";
+import { Check, Download, FileText, Image as ImageIcon, ShieldCheck, TriangleAlert, X } from "lucide-vue-next";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { describeSocketForReport } from "@/composables/use-signalr-socket";
 import { liveTarget } from "@/lib/machine-target";
@@ -27,6 +27,7 @@ import {
 import { useProblemReportStore } from "@/stores/problem-report";
 import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
+import { Spinner } from "@/components/ui/spinner";
 
 type Stage = "describe" | "review" | "sent";
 type ReviewFile = "report" | "log" | "screenshot";
@@ -623,11 +624,9 @@ function formatTime(date: Date): string {
               data-testid="problem-report-review"
               @click="review"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="busy === 'prepare'"
-                class="report__spin"
-                :size="14"
-                aria-hidden="true"
+                size="sm"
               />
               Review what's sent
             </button>
@@ -651,11 +650,9 @@ function formatTime(date: Date): string {
               data-testid="problem-report-save"
               @click="saveFile"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="busy === 'save'"
-                class="report__spin"
-                :size="14"
-                aria-hidden="true"
+                size="sm"
               />
               <Download
                 v-else
@@ -671,11 +668,9 @@ function formatTime(date: Date): string {
               data-testid="problem-report-send"
               @click="send"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="busy === 'send'"
-                class="report__spin"
-                :size="14"
-                aria-hidden="true"
+                size="sm"
               />
               Send report
             </button>
@@ -1281,21 +1276,6 @@ function formatTime(date: Date): string {
   background: color-mix(in srgb, #000 12%, var(--accent));
 }
 
-.report__spin {
-  animation: report-spin 0.9s linear infinite;
-}
-
-@keyframes report-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .report__spin {
-    animation: none;
-  }
-}
 
 @media (max-width: 720px) {
   .report__steps {

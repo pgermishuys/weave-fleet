@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { CircleDot, ExternalLink, GitPullRequest, LoaderCircle, RefreshCw, Search, TriangleAlert } from "lucide-vue-next";
+import { CircleDot, ExternalLink, GitPullRequest, RefreshCw, Search, TriangleAlert } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import GitHubItemRow from "@/plugins/builtin/github/components/GitHubItemRow.vue";
 import { useGitHubSearch } from "@/composables/use-github-search";
@@ -26,6 +26,7 @@ import {
 import { useGitHubAssignees, useGitHubLabels, useGitHubMilestones } from "@/plugins/builtin/github/composables/use-github-metadata";
 import { isPullRequest } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { Spinner } from "@/components/ui/spinner";
 
 type Tab = "pulls" | "issues";
 type PullFilter = "open" | "review" | "mine" | "fleet" | "closed";
@@ -183,9 +184,13 @@ function start(item: GitHubItemSummary): void {
         title="Refresh"
         @click="refresh"
       >
+        <Spinner
+          v-if="list.loading"
+          size="sm"
+        />
         <RefreshCw
+          v-else
           :size="14"
-          :class="{ 'gh-repo__spin': list.loading }"
           aria-hidden="true"
         />
       </button>
@@ -296,11 +301,7 @@ function start(item: GitHubItemSummary): void {
         v-if="list.loading && list.items.length === 0"
         class="gh-repo__state"
       >
-        <LoaderCircle
-          :size="16"
-          class="gh-repo__spin"
-          aria-hidden="true"
-        />
+        <Spinner />
       </div>
       <div
         v-else-if="list.error"
@@ -551,15 +552,4 @@ function start(item: GitHubItemSummary): void {
   color: var(--text);
 }
 
-.gh-repo__spin {
-  animation: gh-repo-spin 1s linear infinite;
-}
-
-@keyframes gh-repo-spin {
-  to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .gh-repo__spin { animation: none; }
-}
 </style>

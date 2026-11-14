@@ -9,6 +9,7 @@ import { useSessionDiffsContext } from "@/composables/use-session-diffs-context"
 import { parseDiffLines } from "@/lib/diff-parser";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 export type DiffsTrayFileItem = FilesChangedFileListItem;
 
@@ -366,10 +367,7 @@ onUnmounted(stopTrayResize);
               aria-live="polite"
               aria-busy="true"
             >
-              <span
-                class="diffs-tray__spinner"
-                aria-hidden="true"
-              />
+              <Spinner size="lg" />
               <p>Loading diffs…</p>
             </div>
 
@@ -603,16 +601,6 @@ onUnmounted(stopTrayResize);
   flex: 0 0 auto;
 }
 
-.diffs-tray__spinner {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  border: 2px solid color-mix(in srgb, var(--muted) 28%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 999px;
-  animation: diffs-tray-spin 0.8s linear infinite;
-}
-
 @media (width <= 760px) {
   :deep(.diffs-tray) {
     width: 100vw !important;
@@ -629,9 +617,4 @@ onUnmounted(stopTrayResize);
   }
 }
 
-@keyframes diffs-tray-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 </style>

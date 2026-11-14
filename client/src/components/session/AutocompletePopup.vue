@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from "vue";
-import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, ScrollText, Terminal } from "lucide-vue-next";
+import { AlertCircle, Bot, ChevronRight, FileText, Folder, ScrollText, Terminal } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { AUTOCOMPLETE_LISTBOX_ID, autocompleteOptionId, type AutocompleteItem } from "@/composables/use-autocomplete";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge } from "@/lib/session-row-status";
+import { Spinner } from "@/components/ui/spinner";
 
 defineOptions({
   name: "AutocompletePopup",
@@ -240,10 +241,7 @@ function handleSelect(value: string): void {
       v-else-if="isLoading"
       class="autocomplete-popup__state"
     >
-      <LoaderCircle
-        class="autocomplete-popup__spinner"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading suggestions…</span>
     </div>
 
@@ -525,25 +523,10 @@ function handleSelect(value: string): void {
 .autocomplete-popup__state--error {
   color: var(--error);
 }
-
-.autocomplete-popup__state-icon,
-.autocomplete-popup__spinner {
+.autocomplete-popup__state-icon {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
 }
 
-.autocomplete-popup__spinner {
-  animation: autocomplete-popup-spin 1s linear infinite;
-}
-
-@keyframes autocomplete-popup-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
 </style>

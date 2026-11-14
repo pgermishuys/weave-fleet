@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Archive, Check, ChevronDown, ExternalLink, GitMerge, LoaderCircle, MessageSquare, Send, Sparkles, TriangleAlert } from "lucide-vue-next";
+import { Archive, Check, ChevronDown, ExternalLink, GitMerge, MessageSquare, Send, Sparkles, TriangleAlert } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import CheckIcon from "@/components/github/CheckIcon.vue";
 import ChecksSummary from "@/components/github/ChecksSummary.vue";
@@ -28,6 +28,7 @@ import {
   type SmartLink,
 } from "@/lib/smart-links";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The session's pull request in the header: its number in its state's colour and what it's waiting on in words.
@@ -244,11 +245,9 @@ function runState(run: CheckRun) {
                   :size="11"
                   aria-hidden="true"
                 />
-                <LoaderCircle
+                <Spinner
                   v-else-if="sending.has(`check:${run.name}`)"
-                  :size="11"
-                  class="pr-popover__spin"
-                  aria-hidden="true"
+                  size="xs"
                 />
                 <Send
                   v-else
@@ -372,11 +371,9 @@ function runState(run: CheckRun) {
             :size="13"
             aria-hidden="true"
           />
-          <LoaderCircle
+          <Spinner
             v-else-if="sending.has('fix')"
-            :size="13"
-            class="pr-popover__spin"
-            aria-hidden="true"
+            size="sm"
           />
           <Sparkles
             v-else
@@ -710,16 +707,7 @@ function runState(run: CheckRun) {
   margin-left: auto;
 }
 
-.pr-popover__spin {
-  animation: pr-popover-spin 1s linear infinite;
-}
-
-@keyframes pr-popover-spin {
-  to { transform: rotate(360deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .pr-popover__spin { animation: none; }
   .pr-pill-trigger { transition: none; }
 }
 </style>

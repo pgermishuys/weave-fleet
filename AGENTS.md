@@ -84,6 +84,10 @@ No gutter between the rail and the context area.
   server's words) and, when you listen for `@retry`, a "Try again" button (`retrying` holds it). `compact` drops the
   tint for a line under a field. Its words are `--error-text`, which every theme keeps at 4.5:1 on the error tint;
   `--error` itself is for icons and borders. Never Tailwind's red palette.
+- **Loading:** `<Spinner>` (`ui/spinner`), sizes `xs` 12px (a chip or dense row), `sm` 14px (a small button), `md`
+  16px (the default) and `lg` 20px (a panel or page). It turns only for `motion-safe` and fades slowly under
+  prefers-reduced-motion. Pass `label` when nothing beside it says what's loading. Busy refresh buttons show a
+  Spinner in place of their icon; never `animate-spin` or a home-made rotating `@keyframes`.
 - **Colours:** theme tokens only (`--text`, `--muted`, `--accent`, `--border`, `--main-bg`, `--panel-bg`, `--card-bg`, …,
   and the Tailwind classes built on them such as `text-muted`, `bg-card-bg`).
   - Every theme in `client/src/assets/main.css` defines them.
@@ -94,7 +98,8 @@ No gutter between the rail and the context area.
 - **Ratchet:** `bun run lint` includes the design lint (`client/scripts/lint-design-system.ts`).
   - In a `.vue` file outside `components/ui/`, it fails a new raw `<button>`, a border-radius that isn't 0, 50% or a
     token, a duration that isn't `var(--transition…)`, and an element with its own empty-state class (`x__empty`,
-    `empty-message`), plus any red-palette class or `text-error` / `text-destructive` as a text colour.
+    `empty-message`), any red-palette class or `text-error` / `text-destructive` as a text colour, and `animate-spin`
+    or a rotating `@keyframes`.
   - The counts are compared with `scripts/design-lint-baseline.json`; `--list <RULE>` prints every one.
 
 ## Diagnostics and Testing

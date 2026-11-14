@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { Github, Loader2, Lock, Star } from "lucide-vue-next";
+import { Github, Lock, Star } from "lucide-vue-next";
 import {
   Command,
   CommandEmpty,
@@ -12,6 +12,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useGitHubBookmarks } from "@/plugins/builtin/github/composables/use-github-bookmarks";
 import { useGitHubRepos } from "@/plugins/builtin/github/composables/use-github-repos";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Picks one of the user's GitHub repositories to follow in Fleet. */
 const open = defineModel<boolean>("open", { required: true });
@@ -50,10 +51,7 @@ async function add(repo: { full_name: string; name: string; owner_login: string 
               v-if="isLoading"
               class="add-repo__loading"
             >
-              <Loader2
-                :size="14"
-                class="animate-spin"
-              />
+              <Spinner size="sm" />
               Loading repositories…
             </span>
             <span v-else>No repositories found.</span>

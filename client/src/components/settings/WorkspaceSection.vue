@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
 import { onMounted, ref, shallowRef } from "vue";
-import { Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
+import { Folder, FolderGit2, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
 import { useMachineTarget } from "@/lib/machine-target";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 // The machine Settings shows (Folders can be another machine's).
 const { api } = useMachineTarget();
@@ -152,9 +153,12 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
         :disabled="workspaceRootsLoading || isRefreshingWorkspaceRoots"
         @click="refreshWorkspaceRoots"
       >
+        <Spinner
+          v-if="isRefreshingWorkspaceRoots"
+        />
         <RefreshCw
+          v-else
           :size="16"
-          :class="isRefreshingWorkspaceRoots ? 'animate-spin' : ''"
           aria-hidden="true"
         />
         Refresh
@@ -165,11 +169,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
       v-if="workspaceRootsLoading"
       class="mt-4 flex items-center gap-2 text-sm text-muted"
     >
-      <LoaderCircle
-        :size="16"
-        class="animate-spin"
-        aria-hidden="true"
-      />
+      <Spinner />
       <span>Loading your locations…</span>
     </div>
 
@@ -221,12 +221,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
           :disabled="deletingRootId === root.id"
           @click="removeWorkspaceRoot(root)"
         >
-          <LoaderCircle
-            v-if="deletingRootId === root.id"
-            :size="16"
-            class="animate-spin"
-            aria-hidden="true"
-          />
+          <Spinner v-if="deletingRootId === root.id" />
           <Trash2
             v-else
             :size="16"
@@ -288,12 +283,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             :disabled="isAddingWorkspaceRoot"
             @click="addWorkspaceRoot"
           >
-            <LoaderCircle
-              v-if="isAddingWorkspaceRoot"
-              :size="16"
-              class="animate-spin"
-              aria-hidden="true"
-            />
+            <Spinner v-if="isAddingWorkspaceRoot" />
             <Plus
               v-else
               :size="16"

@@ -1,22 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, shallowRef, useId, useTemplateRef, watch } from "vue";
-import {
-  ArrowLeft,
-  Check,
-  ChevronDown,
-  CornerLeftUp,
-  Folder,
-  FolderGit2,
-  FolderOpen,
-  FolderPlus,
-  GitBranch,
-  Github,
-  Info,
-  LoaderCircle,
-  MapPin,
-  MessageSquare,
-  Search,
-} from "lucide-vue-next";
+import { ArrowLeft, Check, ChevronDown, CornerLeftUp, Folder, FolderGit2, FolderOpen, FolderPlus, GitBranch, Github, Info, MapPin, MessageSquare, Search } from "lucide-vue-next";
 import type { ScannedRepository } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -52,6 +36,7 @@ import {
 import { tildePath } from "@/lib/new-session-plan";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { getRepositorySources } from "@/plugins/slots";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = withDefaults(defineProps<{
   folder: NewSessionFolder | null;
@@ -948,10 +933,10 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
         :disabled="disabled"
         :title="folder && folder.kind !== 'none' ? folder.path : undefined"
       >
-        <LoaderCircle
+        <Spinner
           v-if="isChipCloning"
-          class="ns-chip__icon animate-spin"
-          aria-hidden="true"
+          size="lg"
+          class="ns-chip__icon"
         />
         <MessageSquare
           v-else-if="folder?.kind === 'none'"
@@ -1084,10 +1069,10 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
               @click="chooseOption(option)"
               @mousemove="highlightedIndex = index"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="option.group === 'New' && makeStatus !== 'idle'"
-                class="ns-option__icon animate-spin"
-                aria-hidden="true"
+                size="lg"
+                class="ns-option__icon"
               />
               <FolderGit2
                 v-else-if="option.icon === 'repository'"
@@ -1278,10 +1263,10 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
             @click="runPathRow(row)"
             @mousemove="pathHighlight = index"
           >
-            <LoaderCircle
+            <Spinner
               v-if="(row.action === 'create' && makeStatus === 'creating') || (row.action !== 'create' && openStatus !== 'idle' && index === pathHighlight)"
-              class="ns-option__icon animate-spin"
-              aria-hidden="true"
+              size="lg"
+              class="ns-option__icon"
             />
             <FolderPlus
               v-else-if="row.action === 'create'"

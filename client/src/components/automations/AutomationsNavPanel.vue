@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Loader2, Pencil, Plus } from "lucide-vue-next";
+import { Pencil, Plus } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import MachineSwitch from "@/components/layout/MachineSwitch.vue";
 import { useAutomations } from "@/composables/use-automations";
@@ -13,6 +13,7 @@ import type { Automation } from "@/stores/automations";
 import { useMachinesStore } from "@/stores/machines";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
   modelValue: string | null;
@@ -184,10 +185,9 @@ function handleCreate(): void {
       v-else-if="isLoading"
       class="automations-nav-empty"
     >
-      <Loader2
-        :size="20"
-        class="spinner"
-        aria-hidden="true"
+      <Spinner
+        size="lg"
+        class="text-muted"
       />
       <span class="sr-only">Loading automations…</span>
     </div>
@@ -386,20 +386,6 @@ function handleCreate(): void {
   align-items: center;
   justify-content: center;
   padding: 24px 12px;
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
-  color: var(--muted);
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .sr-only {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { LoaderCircle, Monitor } from "lucide-vue-next";
+import { Monitor } from "lucide-vue-next";
 import weaveLogo from "@/assets/weave_logo.png";
 import {
   PairingCodeGoneError,
@@ -14,6 +14,7 @@ import { saveCredentials } from "@/lib/device-credentials";
 import { fetchMachineList } from "@/lib/phone/grants";
 import { useMachineGrants } from "@/composables/phone/use-machine-grants";
 import { decodePairingFragment, guessDeviceName, guessPlatform, normalizeManualCode, pairingUrl, type PairingPayloadV1 } from "@/lib/pairing";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The phone's side of pairing (`/pair`): "Connect this phone to hangar?". The QR code opens this page with the
@@ -140,10 +141,9 @@ function enterCode(): void {
         class="ph-center-page pair__loading"
         role="status"
       >
-        <LoaderCircle
+        <Spinner
+          size="lg"
           class="ph-spinner"
-          :size="24"
-          aria-hidden="true"
         />
         <span class="sr-only">Checking the code…</span>
       </div>
@@ -196,10 +196,9 @@ function enterCode(): void {
               :disabled="step === 'connecting'"
               data-testid="pair-connect"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="step === 'connecting'"
                 class="ph-spinner"
-                aria-hidden="true"
               />
               <span>{{ step === "connecting" ? "Connecting…" : "Connect" }}</span>
             </button>

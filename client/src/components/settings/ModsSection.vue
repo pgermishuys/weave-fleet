@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import ModRow from "@/components/settings/mods/ModRow.vue";
 import ModsShowcase from "@/components/settings/mods/ModsShowcase.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -8,6 +7,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** Settings → Skills & tools → Mods: the mods the user kept, with on/off and Undo, and Fleet's sample mods to add. */
 const store = useModsStore(useMachineTarget());
@@ -108,10 +108,7 @@ onMounted(load);
         class="mt-5 flex items-center gap-2 text-sm text-muted"
         data-testid="mods-loading"
       >
-        <LoaderCircle
-          class="h-4 w-4 animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner />
         Loading your mods…
       </div>
 

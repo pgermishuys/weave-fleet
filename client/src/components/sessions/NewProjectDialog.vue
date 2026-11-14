@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, shallowRef, watch } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +19,7 @@ import { useMachinesStore } from "@/stores/machines";
 import { useNavigate } from "@tanstack/vue-router";
 import type { ProjectResponse } from "@/api/client";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * New Project. With more than one machine it asks which machine the project goes on ("Create on"), starting on
@@ -219,10 +219,7 @@ watch(open, async (isOpen) => {
             type="submit"
             :disabled="!canSubmit"
           >
-            <LoaderCircle
-              v-if="isCreating"
-              class="h-4 w-4 animate-spin"
-            />
+            <Spinner v-if="isCreating" />
             {{ isCreating ? "Creating…" : "Create project" }}
           </Button>
         </DialogFooter>

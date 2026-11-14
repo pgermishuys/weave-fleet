@@ -58,6 +58,7 @@ import SessionInterruptedCard from "@/components/session/SessionInterruptedCard.
 import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
 import { improveTurn, type ImproveTurn } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   sessionId: string;
@@ -645,7 +646,10 @@ function handleImproveSkill(skill: string, toolId: string): void {
         v-if="isLoadingOlder"
         class="load-older-indicator"
       >
-        <span class="load-older-spinner" />
+        <Spinner
+          size="sm"
+          class="text-accent"
+        />
         Loading older messages…
       </div>
       <button
@@ -1029,15 +1033,6 @@ function handleImproveSkill(skill: string, toolId: string): void {
   color: var(--text);
 }
 
-.load-older-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
 .partial-snapshot-banner {
   display: flex;
   align-items: center;
@@ -1200,12 +1195,6 @@ function handleImproveSkill(skill: string, toolId: string): void {
 
 .optimistic-retry--assistant {
   align-self: flex-start;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* One centred reading column; space between turns instead of divider lines. */

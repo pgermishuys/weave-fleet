@@ -107,6 +107,33 @@ const danger = "border border-red-500/40 text-red-300";
   });
 });
 
+describe("home-made spinners", () => {
+  const sfc = `<template>
+  <LoaderCircle class="h-4 w-4 animate-spin" />
+  <RefreshCw :class="busy ? 'motion-safe:animate-spin' : ''" />
+  <Spinner size="sm" />
+</template>
+
+<style scoped>
+.ring { animation: ring-spin 1s linear infinite; }
+@keyframes ring-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+</style>
+`;
+  const lines = lintFile("src/components/Example.vue", sfc)
+    .filter((v) => v.rule === "AD_HOC_SPINNER")
+    .map((v) => v.line);
+
+  it("counts animate-spin in the template and a rotating @keyframes, not other animations", () => {
+    expect(lines).toEqual([2, 3, 9]);
+  });
+});
+
 describe("design lint ratchet", () => {
   const baseline: Baseline = countsOf([
     { rule: "RAW_BUTTON", file: "a.vue", line: 1, detail: "" },

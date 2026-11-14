@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Bell, Check, Download, LoaderCircle, Share } from "lucide-vue-next";
+import { Bell, Check, Download, Share } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { usePushSubscription } from "@/composables/phone/use-push-subscription";
@@ -8,6 +8,7 @@ import { haptic } from "@/lib/phone/haptics";
 import { installed, installPrompt, promptInstall } from "@/lib/phone/install-prompt";
 import { readPushEnvironment } from "@/lib/push/capabilities";
 import { CHOICE_GROUPS, groupsFor, kindsFor } from "@/lib/push/subscribe";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Turning on notifications (`/phone/setup`, a sheet over the inbox; step 3 of pairing), as a Settings page at touch
@@ -211,10 +212,9 @@ watch(() => push.subscribed.value, () => {
             data-testid="setup-turn-on"
             @click="turnOn"
           >
-            <LoaderCircle
+            <Spinner
               v-if="push.busy.value"
               class="ph-spinner"
-              aria-hidden="true"
             />
             <span>{{ push.busy.value ? "Asking…" : "Turn on notifications" }}</span>
           </button>
@@ -287,10 +287,9 @@ watch(() => push.subscribed.value, () => {
             data-testid="setup-test"
             @click="test"
           >
-            <LoaderCircle
+            <Spinner
               v-if="testing"
               class="ph-spinner"
-              aria-hidden="true"
             />
             <Bell
               v-else

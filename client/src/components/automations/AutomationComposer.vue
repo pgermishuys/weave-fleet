@@ -2,7 +2,7 @@
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
-import { ArrowUp, GitBranch, LoaderCircle } from "lucide-vue-next";
+import { ArrowUp, GitBranch } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import AgentSelector from "@/components/session/AgentSelector.vue";
@@ -37,6 +37,7 @@ import { useAppShellStore } from "@/stores/app-shell";
 import type { Automation, CreateAutomationRequest } from "@/stores/automations";
 import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * One composer for making and changing an automation, like the new-session page: say what it should do and when,
@@ -517,10 +518,7 @@ defineExpose({ focusMessage });
           :disabled="!canSubmit"
           @click="submit"
         >
-          <LoaderCircle
-            v-if="busy"
-            class="size-4 animate-spin"
-          />
+          <Spinner v-if="busy" />
           <template v-else-if="isEditing">
             Save
           </template>

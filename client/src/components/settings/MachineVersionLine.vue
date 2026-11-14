@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import { describeVersionLine, effectiveRule, isUpdateRule, UPDATE_RULES, type FleetUpdateRow, type Rollout, type UpdateRule } from "@/lib/fleet-updates";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The line along the bottom of a machine card in Settings → Updates & about › Machines: the version it
@@ -51,11 +51,10 @@ function onChange(event: Event): void {
       :class="toneClass[line.tone]"
       data-testid="machine-version-state"
     >
-      <LoaderCircle
+      <Spinner
         v-if="spinning"
-        :size="11"
-        class="mr-1 inline animate-spin"
-        aria-hidden="true"
+        size="xs"
+        class="mr-1 inline"
       />{{ line.text }}
     </span>
     <label

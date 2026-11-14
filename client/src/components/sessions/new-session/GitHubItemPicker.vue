@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Github, LoaderCircle } from "lucide-vue-next";
+import { Github } from "lucide-vue-next";
 import GitHubItemIcon from "@/components/github/GitHubItemIcon.vue";
 import { itemPrFacts, itemResourceId, type GitHubItemSummary } from "@/lib/github-items";
 import type { PickerGroup } from "@/composables/use-github-picker";
 import { prState } from "@/lib/pr-state";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The `#` popup in the new-session message: the folder's open pull requests and issues. Picking one starts the
@@ -55,11 +56,9 @@ function state(item: GitHubItemSummary) {
         aria-hidden="true"
       />
       <span>{{ repository ?? "GitHub" }}</span>
-      <LoaderCircle
+      <Spinner
         v-if="isLoading"
-        :size="12"
-        class="gh-picker__spin"
-        aria-hidden="true"
+        size="xs"
       />
       <span class="gh-picker__query">#{{ query }}</span>
     </div>
@@ -160,14 +159,6 @@ function state(item: GitHubItemSummary) {
   font-family: var(--font-mono-stack);
 }
 
-.gh-picker__spin {
-  animation: gh-picker-spin 1s linear infinite;
-}
-
-@keyframes gh-picker-spin {
-  to { transform: rotate(360deg); }
-}
-
 .gh-picker__note {
   margin: 0;
   padding: 12px;
@@ -246,7 +237,4 @@ function state(item: GitHubItemSummary) {
   font-size: 10.5px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gh-picker__spin { animation: none; }
-}
 </style>

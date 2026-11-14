@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { UserCheck, Check, Loader2 } from "lucide-vue-next";
+import { UserCheck, Check } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import type { GitHubAssignee } from "../../composables/github-types";
+import { Spinner } from "@/components/ui/spinner";
 
 const props = defineProps<{
   assignees: GitHubAssignee[];
@@ -47,10 +48,7 @@ function handleSelect(login: string) {
             v-if="isLoading && assignees.length === 0"
             class="filter-loading"
           >
-            <Loader2
-              :size="14"
-              class="animate-spin"
-            />
+            <Spinner size="sm" />
           </div>
           <CommandEmpty v-else-if="!isLoading && assignees.length === 0">
             No assignees found.

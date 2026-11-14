@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { LoaderCircle } from "lucide-vue-next";
 import ModActionButton from "@/components/mods/review/ModActionButton.vue";
 import ModDialogShell from "@/components/mods/review/ModDialogShell.vue";
 import { checkProblems, summarizeCheck } from "@/lib/mods/check-summary";
@@ -10,6 +9,7 @@ import { useMachinesStore } from "@/stores/machines";
 import { useModsStore } from "@/stores/mods";
 import { useSessionsStore } from "@/stores/sessions";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * "Keep {name}?": what the check read from the draft, in plain words, before it's kept for all the user's sessions.
@@ -134,10 +134,7 @@ const labelOf = (key: string) => LABELS[key.replace(/-\d+$/, "")] ?? key;
         class="flex items-center gap-2 text-sm text-muted"
         data-testid="mod-review-loading"
       >
-        <LoaderCircle
-          class="h-4 w-4 animate-spin"
-          aria-hidden="true"
-        />
+        <Spinner />
         Checking the mod…
       </div>
 
@@ -216,11 +213,7 @@ const labelOf = (key: string) => LABELS[key.replace(/-\d+$/, "")] ?? key;
           data-testid="mod-review-keep"
           @click="keep"
         >
-          <LoaderCircle
-            v-if="busy === 'keep'"
-            class="h-4 w-4 animate-spin"
-            aria-hidden="true"
-          />
+          <Spinner v-if="busy === 'keep'" />
           Keep for all my sessions
         </ModActionButton>
         <ModActionButton

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, toRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Check, CheckCircle2, Copy, Download, ExternalLink, KeyRound, LoaderCircle, X } from "lucide-vue-next";
+import { Check, CheckCircle2, Copy, Download, ExternalLink, KeyRound, X } from "lucide-vue-next";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
 import TerminalView from "@/components/terminal/TerminalView.vue";
@@ -20,6 +20,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { closeSetupTerminal, createSetupTerminal, SETUP_TERMINALS_PATH } from "@/lib/terminal-api";
 import { useAppShellStore } from "@/stores/app-shell";
 import { usePreferencesStore } from "@/stores/preferences";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The harnesses Fleet can help set up, each with Install or Sign in. Either opens the setup terminal under
@@ -421,11 +422,7 @@ defineExpose({ closeTerminal });
               v-else
               class="harness-setup-rows__starting"
             >
-              <LoaderCircle
-                :size="14"
-                class="animate-spin"
-                aria-hidden="true"
-              />
+              <Spinner size="sm" />
               Starting a terminal…
             </p>
           </div>

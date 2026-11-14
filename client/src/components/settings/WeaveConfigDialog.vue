@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Check, LoaderCircle, Play, Plus, X } from "lucide-vue-next";
+import { Check, Play, Plus, X } from "lucide-vue-next";
 import type { WeaveFlavor, WeaveHarnessCheck, WeaveHarnessDetection } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import {
   outdatedFlavorsOf,
   usableFlavorsOf,
 } from "@/lib/weave-flavors";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The Fleet-kept Weave config, in a dialog: whose config Weave reads in Fleet sessions (the user's own file or one kept
@@ -519,10 +520,9 @@ function folderName(directory: string): string {
               :disabled="busy !== null"
               @click="test"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="busy === 'test'"
-                class="animate-spin"
-                aria-hidden="true"
+                size="lg"
               />
               <Play
                 v-else
@@ -536,10 +536,9 @@ function folderName(directory: string): string {
               :disabled="busy !== null || (!dirty && source === view.source)"
               @click="saveConfig"
             >
-              <LoaderCircle
+              <Spinner
                 v-if="busy === 'save'"
-                class="animate-spin"
-                aria-hidden="true"
+                size="lg"
               />
               {{ busy === "save" && source === "fleet" ? "Checking with OpenCode…" : "Save" }}
             </Button>

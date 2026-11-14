@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { AlertCircle, CheckCircle2, Download, RefreshCw } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
 import DesktopAppUpdates from "@/components/settings/DesktopAppUpdates.vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
@@ -9,6 +9,7 @@ import { getDesktopBridge } from "@/lib/desktop";
 import { useWhatsNew } from "@/composables/use-whats-new";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
 const { openWhatsNew } = useWhatsNew();
@@ -143,11 +144,10 @@ const downloadProgressLabel = computed(() => {
     >
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <LoaderCircle
+          <Spinner
             v-if="isCheckingOrDownloading"
-            :size="15"
-            class="animate-spin text-muted"
-            aria-hidden="true"
+            size="sm"
+            class="text-muted"
           />
           <CheckCircle2
             v-else-if="statusVariant === 'ok'"
@@ -212,9 +212,13 @@ const downloadProgressLabel = computed(() => {
             class="flex items-center gap-1.5 rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
             @click="checkForUpdate"
           >
+            <Spinner
+              v-if="isCheckingOrDownloading"
+              size="xs"
+            />
             <RefreshCw
+              v-else
               :size="12"
-              :class="{ 'animate-spin': isCheckingOrDownloading }"
               aria-hidden="true"
             />
             Check for updates
