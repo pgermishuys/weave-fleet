@@ -468,7 +468,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                 type: "string",
                 description: [
                   "The machine the session is on, from fleet_machine_list, for a session you started or messaged there.",
-                  "An empty string for a session on this machine.",
+                  "Leave it out, or an empty string, for a session on this machine.",
                 ].join(" "),
               },
             }
@@ -516,7 +516,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                 ? {
                     machine: {
                       type: "string",
-                      description: "The machine the session is on, from fleet_machine_list. An empty string for a session on this machine.",
+                      description: "The machine the session is on, from fleet_machine_list. Leave it out, or an empty string, for a session on this machine.",
                     },
                   }
                 : {}),

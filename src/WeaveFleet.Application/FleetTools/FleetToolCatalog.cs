@@ -7,9 +7,16 @@ namespace WeaveFleet.Application.FleetTools;
 /// <param name="Requires">The switch the tool needs (<see cref="FleetToolSwitches"/>), or null for a tool every session gets.</param>
 /// <param name="SwitchedProperties">
 /// Inputs the tool has only with a switch on, by switch: <c>{"agentHandoff": {"machine": {…}}}</c>. With the switch off
-/// the tool is exactly <paramref name="InputSchema"/>; with it on they're added after the others, and required.
+/// the tool is exactly <paramref name="InputSchema"/>; with it on they're added after the others, and required unless
+/// <paramref name="Optional"/> names them.
 /// </param>
-public sealed record FleetToolDefinition(string Name, string Description, JsonElement InputSchema, string? Requires, JsonElement SwitchedProperties = default);
+/// <param name="Optional">
+/// Switched inputs a call may leave out: <c>machine</c> on <c>fleet_message</c> and <c>fleet_session_read</c>, where
+/// leaving it out means this machine, as an empty string does. A harness checks calls against the schema it was given
+/// (Claude Code, GitHub Copilot), so a required one fails before Fleet sees the call.
+/// </param>
+public sealed record FleetToolDefinition(
+    string Name, string Description, JsonElement InputSchema, string? Requires, JsonElement SwitchedProperties = default, IReadOnlyList<string>? Optional = null);
 
 /// <summary>
 /// Fleet's own tools (<c>fleet_canvas_*</c>, <c>fleet_page_show</c>, <c>fleet_browser_*</c>, <c>fleet_session_read</c>, …)
@@ -52,7 +59,8 @@ public static class FleetToolCatalog
         foreach (var property in added)
         {
             properties[property.Name] = JsonNode.Parse(property.Value.GetRawText());
-            required.Add((JsonNode)JsonValue.Create(property.Name));
+            if (tool.Optional?.Contains(property.Name, StringComparer.Ordinal) != true)
+                required.Add((JsonNode)JsonValue.Create(property.Name));
         }
 
         return tool with { InputSchema = JsonSerializer.SerializeToElement(schema, FleetToolsJsonContext.Default.JsonObject) };
@@ -70,7 +78,8 @@ public static class FleetToolCatalog
                 tool.GetProperty("description").GetString()!,
                 tool.GetProperty("inputSchema").Clone(),
                 tool.TryGetProperty("requires", out var requires) ? requires.GetString() : null,
-                tool.TryGetProperty("switchedProperties", out var switched) ? switched.Clone() : default)),
+                tool.TryGetProperty("switchedProperties", out var switched) ? switched.Clone() : default,
+                tool.TryGetProperty("optional", out var optional) ? [.. optional.EnumerateArray().Select(name => name.GetString()!)] : null)),
         ];
     }
 }

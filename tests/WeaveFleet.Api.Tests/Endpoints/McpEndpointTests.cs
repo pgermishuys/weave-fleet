@@ -14,6 +14,7 @@ using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -218,6 +219,38 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, I
         names.ShouldNotContain("fleet_browser_act");
         // Not a workflow step's session.
         names.ShouldNotContain("fleet_step_done");
+    }
+
+    [Fact]
+    public async Task With_a_machine_to_hand_work_to_a_call_may_leave_machine_out_for_this_machine()
+    {
+        var machines = _factory.Services.GetRequiredService<IRemoteMachineRepository>();
+        await machines.UpsertAsync(new RemoteMachine { Id = "lantern-id", Name = "lantern", BaseUrl = "http://lantern.test:6262", EncryptedToken = "x", AgentWork = MachineAgentWork.Ask });
+        try
+        {
+            var tools = await ToolsAsync();
+            foreach (var name in new[] { "fleet_message", "fleet_session_read" })
+            {
+                var schema = tools.Single(tool => tool.GetProperty("name").GetString() == name).GetProperty("inputSchema");
+                // Claude Code and GitHub Copilot check a call against this list before Fleet sees it.
+                schema.GetProperty("required").EnumerateArray().Select(n => n.GetString()).ShouldNotContain("machine", name);
+                var machine = schema.GetProperty("properties").GetProperty("machine");
+                machine.GetProperty("description").GetString()!.ShouldContain("Leave it out, or an empty string, for a session on this machine.");
+            }
+
+            // Left out, it's this machine, exactly as an empty string is.
+            var read = tools.Single(tool => tool.GetProperty("name").GetString() == "fleet_session_read").GetProperty("inputSchema");
+            var leftOut = new Dictionary<string, object> { ["sessionId"] = SessionId, ["before"] = "", ["limit"] = 5 };
+            read.GetProperty("required").EnumerateArray().Select(n => n.GetString()!).ShouldBeSubsetOf(leftOut.Keys);
+            var withoutMachine = await CallAsync("fleet_session_read", leftOut);
+            var emptyMachine = await CallAsync("fleet_session_read", new Dictionary<string, object>(leftOut) { ["machine"] = "" });
+            withoutMachine.GetRawText().ShouldBe(emptyMachine.GetRawText());
+            withoutMachine.GetRawText().ShouldNotContain("lantern");
+        }
+        finally
+        {
+            await machines.DeleteAsync("lantern-id");
+        }
     }
 
     // ── tools/call ─────────────────────────────────────────────────────────────

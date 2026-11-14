@@ -36,10 +36,10 @@ public sealed class AgentHandoffToolsTests
         {
             var schema = on.Single(tool => tool.Name == name).InputSchema;
             schema.GetProperty("properties").EnumerateObject().Last().Name.ShouldBe("machine");
-            schema.GetProperty("required").EnumerateArray().Last().GetString().ShouldBe("machine");
+            // Leaving it out is this machine: a harness that checks calls against the schema (Claude Code, Copilot) lets it.
+            schema.GetProperty("required").EnumerateArray().Select(n => n.GetString()).ShouldNotContain("machine", name);
             var without = JsonNode.Parse(schema.GetRawText())!.AsObject();
             without["properties"]!.AsObject().Remove("machine");
-            without["required"]!.AsArray().RemoveAt(without["required"]!.AsArray().Count - 1);
             JsonNode.DeepEquals(without, JsonNode.Parse(FleetToolCatalog.Find(name)!.InputSchema.GetRawText())).ShouldBeTrue(name);
         }
     }
