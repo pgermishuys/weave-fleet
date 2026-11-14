@@ -64,7 +64,7 @@ public sealed class WorkflowStepSessionsTests : IAsyncDisposable
     {
         var run = NewRun(projectId: "proj-1");
 
-        var started = await _sut.StartAsync(run, Step(), "Plan it.", WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
+        var started = await _sut.CreateAsync(run, Step(), WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
 
         started.Error.ShouldBeNull();
         var saved = _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem();
@@ -72,11 +72,30 @@ public sealed class WorkflowStepSessionsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task a_steps_session_is_made_without_its_prompt_which_goes_after_with_the_steps_model()
+    {
+        var run = NewRun(projectId: "proj-1");
+        var model = new WorkflowModelChoice("fake/strong", "high");
+
+        // Made first, so the runner knows the session as the step's before a quick model can answer the prompt.
+        var created = await _sut.CreateAsync(run, Step(), model, userFinishes: false, CancellationToken.None);
+        _defaultSession.SendPromptCalls.ShouldBeEmpty();
+
+        var sent = await _sut.PromptStepAsync(created.SessionId.ShouldNotBeNull(), Step(), "Plan it.", model, CancellationToken.None);
+
+        sent.Error.ShouldBeNull();
+        var (text, options) = _defaultSession.SendPromptCalls.ShouldHaveSingleItem();
+        text.ShouldBe("Plan it.");
+        (options?.ProviderId, options?.ModelId, options?.Effort).ShouldBe(("fake", "strong", "high"));
+        sent.MessageId.ShouldBe(options?.MessageId);
+    }
+
+    [Fact]
     public async Task with_no_project_chosen_the_first_step_session_goes_to_scratch()
     {
         var run = NewRun(projectId: null);
 
-        await _sut.StartAsync(run, Step(), "Plan it.", WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
+        await _sut.CreateAsync(run, Step(), WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
 
         var saved = _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem();
         saved.ProjectId.ShouldBe("scratch-1");
@@ -94,7 +113,7 @@ public sealed class WorkflowStepSessionsTests : IAsyncDisposable
         });
         var run = NewRun(projectId: "proj-1", worktreePath: "/repo-worktrees/bump-deps");
 
-        await _sut.StartAsync(run, Step("implement"), "Implement it.", WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
+        await _sut.CreateAsync(run, Step("implement"), WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
 
         var saved = _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem();
         saved.ProjectId.ShouldBe("proj-2");
@@ -113,7 +132,7 @@ public sealed class WorkflowStepSessionsTests : IAsyncDisposable
         });
         var run = NewRun(projectId: "proj-1", worktreePath: null);
 
-        await _sut.StartAsync(run, Step("implement"), "Implement it.", WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
+        await _sut.CreateAsync(run, Step("implement"), WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
 
         var saved = _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem();
         saved.ProjectId.ShouldBe("proj-2");
@@ -126,7 +145,7 @@ public sealed class WorkflowStepSessionsTests : IAsyncDisposable
         await _builder.ProjectRepository.DeleteAsync("proj-1");
         var run = NewRun(projectId: "proj-1");
 
-        await _sut.StartAsync(run, Step(), "Plan it.", WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
+        await _sut.CreateAsync(run, Step(), WorkflowModelChoice.Default, userFinishes: false, CancellationToken.None);
 
         var saved = _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem();
         saved.ProjectId.ShouldBe("scratch-1");

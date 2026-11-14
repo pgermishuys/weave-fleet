@@ -206,6 +206,38 @@ public sealed partial class WorkflowRunnerTests
     }
 
     [Fact]
+    public async Task a_quick_model_finishes_its_step_before_the_prompt_send_returns()
+    {
+        // The model calls the tool while Fleet is still sending the step's prompt: Fleet knows the session by then.
+        Task<WorkflowStepDoneResult>? quick = null;
+        _sessions.WhileStepPrompted = step => quick ??= _runner.StepDoneAsync(UserId, step.SessionId, "ready", "Plan.");
+
+        var run = await StartAsync();
+        var done = await quick.ShouldNotBeNull();
+        await _runner.Pending;
+
+        done.Accepted.ShouldBeTrue(done.Message);
+        _runs.Run(run).CurrentStepId.ShouldBe("ok-plan");
+        Visit("plan").Outcome.ShouldBe("ready");
+    }
+
+    [Fact]
+    public async Task a_quick_turn_that_ends_without_the_tool_before_the_send_returns_waits_on_the_user()
+    {
+        _sessions.WhileStepPrompted = step =>
+        {
+            _runner.Observe(step.SessionId, Assistant(step.SessionId, step.PromptMessageId));
+            _runner.Observe(step.SessionId, Idled(step.SessionId));
+        };
+
+        var run = await StartAsync();
+        await _runner.Pending;
+
+        _runs.Run(run).Status.ShouldBe(WorkflowRunStatus.Waiting);
+        _runs.Run(run).WaitingReason.ShouldBe("Plan stopped without finishing the step. Reply to the agent to carry on, or pick an outcome.");
+    }
+
+    [Fact]
     public async Task idle_before_the_steps_turn_started_is_not_a_stop()
     {
         var run = await StartAsync();
@@ -437,6 +469,7 @@ public sealed partial class WorkflowRunnerTests
     {
         private int _next;
         private int _prompts;
+        private readonly Dictionary<string, (string StepId, bool UserFinishes)> _made = new(StringComparer.Ordinal);
 
         public List<StartedStep> Started { get; } = [];
         public List<SentPrompt> Prompts { get; } = [];
@@ -447,7 +480,10 @@ public sealed partial class WorkflowRunnerTests
         /// <summary>Runs while the prompt is being sent, before the send returns: a quick model's answer.</summary>
         public Action<SentPrompt>? WhileSending { get; set; }
 
-        public Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
+        /// <summary>Runs while a step's own prompt is being sent, before the send returns: a quick model's answer.</summary>
+        public Action<StartedStep>? WhileStepPrompted { get; set; }
+
+        public Task<WorkflowStepSession> CreateAsync(WorkflowRun run, WorkflowAgentStep agentStep, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
         {
             if (FailNext is { } error)
             {
@@ -456,10 +492,19 @@ public sealed partial class WorkflowRunnerTests
             }
 
             var id = $"s{Interlocked.Increment(ref _next)}";
-            Started.Add(new StartedStep(agentStep.Id, id, prompt, model, userFinishes, $"msg_{id}"));
+            _made[id] = (agentStep.Id, userFinishes);
             return Task.FromResult(run.WorktreePath is null
-                ? new WorkflowStepSession(id, $"/repo-worktrees/{run.Slug}", $"fleet/{run.Slug}", null, $"msg_{id}")
-                : new WorkflowStepSession(id, run.WorktreePath, run.Branch, null, $"msg_{id}"));
+                ? new WorkflowStepSession(id, $"/repo-worktrees/{run.Slug}", $"fleet/{run.Slug}", null)
+                : new WorkflowStepSession(id, run.WorktreePath, run.Branch, null));
+        }
+
+        public Task<WorkflowPromptSent> PromptStepAsync(string sessionId, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, CancellationToken ct)
+        {
+            var (stepId, userFinishes) = _made[sessionId];
+            stepId.ShouldBe(agentStep.Id);
+            Started.Add(new StartedStep(stepId, sessionId, prompt, model, userFinishes, $"msg_{sessionId}"));
+            WhileStepPrompted?.Invoke(Started[^1]);
+            return Task.FromResult(new WorkflowPromptSent($"msg_{sessionId}", null));
         }
 
         public Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct)
