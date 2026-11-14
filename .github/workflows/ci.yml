@@ -1,4 +1,5 @@
 name: CI
+# scratch: workflow change
 
 on:
   # No paths-ignore on pull requests: "CI passed" is the check the repository requires, and a PR whose run never
