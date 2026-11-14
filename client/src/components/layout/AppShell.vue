@@ -53,6 +53,7 @@ import { useFoldableScreen } from "@/composables/use-foldable-screen";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useCloseDrawerOnPick } from "@/composables/use-close-drawer-on-pick";
 
 useCommands();
 useWeaveSocket(liveTarget());
@@ -204,6 +205,8 @@ const showRightPanelSheet = computed(() => showRightPanel.value && !rightPanelFi
 
 watch(rightPanelFits, (fits) => sidebarStore.setRightPanelAsSheet(!fits), { immediate: true });
 watch(pathname, () => sidebarStore.setRightPanelSheetOpen(false));
+// The phone menu drawer closes once something in it is picked, so what was picked isn't left covered.
+useCloseDrawerOnPick(pathname);
 
 // Opening Changes to review it (from a changed-files card or its tab) gives the panel about 60% of the room beside
 // the session list. Dragging the gutter once is the user's own width and wins from then on.
