@@ -9,7 +9,7 @@ export const tokens = {
     "border": "rgba(255, 255, 255, 0.075)",
     "text": "#e8e8ec",
     "muted": "#8e8e9a",
-    "accent": "#6366f1",
+    "accent": "#6365f1",
     "accentDim": "rgba(99, 102, 241, 0.15)",
     "onAccent": "#ffffff",
     "running": "#22c55e",
