@@ -99,3 +99,4 @@ version; that needs a new `eas build`, and old builds keep running their last co
 `tsconfig.json` and the build scaffolding come from the Expo template (MIT, Copyright (c) 2015-present 650
 Industries, Inc. (Expo)); see `LICENSE`. Inter and JetBrains Mono come from `@expo-google-fonts/*` under the SIL Open
 Font License.
+<!-- scratch: trigger proof -->
