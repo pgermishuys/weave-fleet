@@ -11,6 +11,7 @@ import { runSessionCommand } from "@/lib/session-commands";
 import { formatCost, formatDuration, formatTokens } from "@/lib/format-utils";
 import { deriveTurns, fileEditsOf, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * The Turns tab: the rounds of this session, newest first — your prompt and everything the agent did
@@ -21,7 +22,7 @@ const props = defineProps<{
   sessionId: string;
 }>();
 
-const { messages, delegations, hasMore, isLoadingOlder, loadOlderFailed, loadOlder } = useSessionStream(() => props.sessionId);
+const { messages, delegations, hasMore, isLoading, isLoadingOlder, loadOlderFailed, loadOlder } = useSessionStream(() => props.sessionId);
 const { models } = useModels();
 const { hideRightPanel } = useSidebarMobile();
 
@@ -121,8 +122,20 @@ function showInChat(turn: SessionTurn): void {
     </div>
 
     <div class="turns-canvas__list">
+      <!-- Until the session's history arrives there are no turns to count, not none. -->
+      <div
+        v-if="turns.length === 0 && isLoading"
+        class="flex justify-center p-6"
+        data-testid="turns-loading"
+      >
+        <Spinner
+          size="lg"
+          class="text-muted"
+          label="Loading this session's turns…"
+        />
+      </div>
       <EmptyState
-        v-if="turns.length === 0"
+        v-else-if="turns.length === 0"
         :icon="History"
         title="No turns yet"
         description="The first prompt of this session starts one."

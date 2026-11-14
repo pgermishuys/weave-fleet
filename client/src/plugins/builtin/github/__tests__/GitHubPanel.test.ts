@@ -83,6 +83,33 @@ describe("GitHubPanel", () => {
       { fullName: "acme/rocket", owner: "acme", name: "rocket" },
     ];
     bookmarkState.error.value = null;
+    bookmarkState.isLoading.value = false;
+  });
+
+  it("says the repositories you follow are loading, not to follow one, until they've loaded", async () => {
+    bookmarkState.bookmarks.value = [];
+    bookmarkState.isLoading.value = true;
+    const wrapper = mount(GitHubPanel);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("Follow a repository to see");
+    expect(wrapper.find("[data-testid='github-bookmarks-loading']").exists()).toBe(true);
+
+    bookmarkState.isLoading.value = false;
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='github-bookmarks-loading']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Follow a repository to see");
+  });
+
+  it("says a failed load failed, not to follow a repository", async () => {
+    bookmarkState.bookmarks.value = [];
+    bookmarkState.error.value = "Failed to fetch bookmarks from server.";
+    const wrapper = mount(GitHubPanel);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("Follow a repository to see");
+    expect(wrapper.get("[data-testid='github-bookmarks-error']").text()).toContain("Couldn't load the repositories you follow.");
   });
 
   it("marks only the repository on screen, not one whose name it starts with", async () => {

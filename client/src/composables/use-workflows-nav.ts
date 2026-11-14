@@ -17,6 +17,8 @@ const hasChosenFolder = ref(false);
 const library = shallowRef<WorkflowLibrary | null>(null);
 const libraryError = shallowRef<string | null>(null);
 const isLoadingLibrary = shallowRef(false);
+/** The repository the library on screen was loaded for: until the one picked loads, its workflows are still coming. */
+const libraryRepositoryPath = shallowRef<string | null>(null);
 /** A repository's workflow shows the run view (steps, recent runs, the Run box) instead of the designer: Try it. */
 const showingRuns = shallowRef(false);
 /** New workflow, or Duplicate when a built-in is given. */
@@ -58,12 +60,14 @@ export function useWorkflowsNav() {
 
   async function reload(): Promise<void> {
     const mine = ++generation;
+    const directory = repositoryPath.value;
     isLoadingLibrary.value = true;
     libraryError.value = null;
     try {
-      const next = await store.loadLibrary(repositoryPath.value);
+      const next = await store.loadLibrary(directory);
       if (mine !== generation) return;
       library.value = next;
+      libraryRepositoryPath.value = directory;
       if (activeWorkflowId.value !== DRAFT_ID && !next.workflows.some((workflow) => workflow.id === activeWorkflowId.value))
         activeWorkflowId.value = next.workflows[0]?.id ?? BUILD_A_FEATURE;
     } catch (error) {
@@ -84,6 +88,7 @@ export function useWorkflowsNav() {
         generation++;
         forgetDraft();
         library.value = null;
+        libraryRepositoryPath.value = null;
         libraryError.value = null;
         isLoadingLibrary.value = false;
         folder.value = null;
@@ -99,6 +104,8 @@ export function useWorkflowsNav() {
 
   const builtIns = computed<Workflow[]>(() => library.value?.workflows.filter((w) => w.builtIn) ?? []);
   const repoWorkflows = computed<Workflow[]>(() => library.value?.workflows.filter((w) => !w.builtIn) ?? []);
+  /** The repository just picked is still loading: the list's repo part waits for it instead of saying it has none. */
+  const isLoadingRepository = computed(() => isLoadingLibrary.value && libraryRepositoryPath.value !== repositoryPath.value);
   const activeWorkflow = computed<Workflow | null>(
     () => library.value?.workflows.find((w) => w.id === activeWorkflowId.value) ?? null);
 
@@ -197,6 +204,7 @@ export function useWorkflowsNav() {
     library,
     libraryError,
     isLoadingLibrary,
+    isLoadingRepository,
     folder,
     hasChosenFolder,
     repositoryPath,

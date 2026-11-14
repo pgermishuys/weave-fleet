@@ -49,6 +49,8 @@ describe("Mission control page", () => {
   let permissionAnswered: boolean;
   let questionAnswered: boolean;
   let atlasNow: string;
+  let holdSessions: Promise<void> | null;
+  let failSessions: boolean;
 
   beforeEach(() => {
     localStorage.clear();
@@ -61,6 +63,8 @@ describe("Mission control page", () => {
     questionAnswered = false;
     atlasNow = "bash · pnpm test webhooks";
     requests = [];
+    holdSessions = null;
+    failSessions = false;
     saveMachines([{ id: "m2", name: "mini", baseUrl: "http://mini.test:5732", token: "mini-token", addedAt: "2026-10-27T08:00:00Z" }]);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
@@ -68,6 +72,8 @@ describe("Mission control page", () => {
       const path = url.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
       const onMini = url.startsWith("http://mini.test");
       if (path === "/api/preferences") return json(enabled ? { "features.mission-control.enabled": "true" } : {});
+      if (path === "/api/sessions" && holdSessions) await holdSessions;
+      if (path === "/api/sessions" && failSessions) return json({ error: "down" }, 503);
       if (path === "/api/sessions") {
         return json(onMini
           ? [item("mini-q", "Rate limiter", questionAnswered ? {} : { sessionStatus: "waiting_input", activityStatus: "idle" })]
@@ -123,6 +129,49 @@ describe("Mission control page", () => {
     expect(wrapper.findAll("[data-testid='mission-tile']")).toHaveLength(0);
     expect(wrapper.text()).toContain("Retry three times or five?");
     expect(wrapper.text()).toContain("pnpm install");
+  });
+
+  it("says it's asking, not that nothing is waiting on you, until the machines answer", async () => {
+    let release!: () => void;
+    holdSessions = new Promise((resolve) => { release = resolve; });
+    const wrapper = mount(MissionControlPage);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("Nothing is waiting on you");
+    expect(wrapper.find("[data-testid='mission-needs-you-loading']").exists()).toBe(true);
+
+    release();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='mission-needs-you-loading']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Retry three times or five?");
+  });
+
+  it("says it's asking a machine, not that nothing is working or waiting on it, until it answers", async () => {
+    let release!: () => void;
+    holdSessions = new Promise((resolve) => { release = resolve; });
+    path.value = "/fleet/machines/home";
+    const wrapper = mount(MissionControlPage);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("No sessions are working or waiting on this machine");
+    expect(wrapper.find("[data-testid='fleet-machine-loading']").exists()).toBe(true);
+
+    release();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='fleet-machine-loading']").exists()).toBe(false);
+    expect(wrapper.findAll("[data-testid='mission-tile']")).toHaveLength(2);
+  });
+
+  it("says a machine that can't be reached can't, not that it has no sessions", async () => {
+    failSessions = true;
+    path.value = "/fleet/machines/home";
+    const wrapper = mount(MissionControlPage);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("No sessions are working or waiting on this machine");
+    expect(wrapper.get("[data-testid='fleet-machine-unreachable']").text()).toContain("Couldn't reach");
   });
 
   it("says so for a machine that isn't in the list", async () => {

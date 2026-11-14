@@ -11,7 +11,7 @@ export const useHarnessProfilesStore = defineMachineStore("harness-profiles", (s
   const byHarness = shallowRef<Readonly<Record<string, readonly HarnessProfile[]>>>({});
   /** Other machines' profiles, by machine key and harness: the new-session box can start a session on another machine. */
   const onOtherMachines = shallowRef<Readonly<Record<string, readonly HarnessProfile[]>>>({});
-  const loading = new Map<string, Promise<void>>();
+  const loading = new Map<string, Promise<boolean>>();
 
   const otherKey = (target: MachineTarget, harnessType: string) => `${target.key}\n${harnessType}`;
   const isOther = (target?: MachineTarget): target is MachineTarget => target !== undefined && !target.isLive;
@@ -29,7 +29,8 @@ export const useHarnessProfilesStore = defineMachineStore("harness-profiles", (s
     byHarness.value = { ...byHarness.value, [harnessType]: profiles };
   }
 
-  async function load(harnessType: string, target?: MachineTarget): Promise<void> {
+  /** Asks for a harness's profiles; resolves false when the machine couldn't say (the list is left as it was). */
+  async function load(harnessType: string, target?: MachineTarget): Promise<boolean> {
     const loadingKey = isOther(target) ? otherKey(target, harnessType) : harnessType;
     const pending = loading.get(loadingKey);
     if (pending) return pending;
@@ -45,8 +46,10 @@ export const useHarnessProfilesStore = defineMachineStore("harness-profiles", (s
         } else {
           put(harnessType, profiles);
         }
+        return true;
       }
-    })().finally(() => loading.delete(loadingKey));
+      return false;
+    })().catch(() => false).finally(() => loading.delete(loadingKey));
     loading.set(loadingKey, request);
     return request;
   }

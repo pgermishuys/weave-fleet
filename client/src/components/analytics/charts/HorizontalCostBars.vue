@@ -2,6 +2,7 @@
 import { computed } from "vue"
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 interface HorizontalCostBarItem {
   name: string
@@ -21,9 +22,12 @@ const props = withDefaults(defineProps<{
   items: readonly HorizontalCostBarItem[]
   emptyMessage?: string
   error?: string | null
+  /** The first answer hasn't come: say so, not that there's no cost data. */
+  isLoading?: boolean
 }>(), {
   emptyMessage: "No cost data available.",
   error: null,
+  isLoading: false,
 })
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -104,6 +108,14 @@ function formatCurrency(amount: number): string {
       </li>
     </ol>
 
+    <div
+      v-else-if="props.isLoading"
+      class="flex items-center justify-center gap-2 p-6 text-sm text-muted"
+      data-testid="analytics-loading"
+    >
+      <Spinner />
+      Loading…
+    </div>
     <ErrorNote
       v-else-if="props.error"
       message="Unable to load analytics."

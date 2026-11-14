@@ -56,8 +56,10 @@ onUnmounted(() => document.removeEventListener("visibilitychange", checkPush));
 const TITLES: Record<PhoneTab, string> = { "needs-you": "Needs you", sessions: "Sessions", machines: "Machines" };
 const unreachable = computed(() => machines.value.filter((m) => m.status === "unreachable" && !m.problem));
 const status = computed(() => machinesStatus(machines.value));
-// Rows (and placeholders) until the first word from the machines, so nothing jumps in.
-const firstLoad = computed(() => loading.value || (machines.value.length > 0 && machines.value.every((m) => m.status === "connecting")));
+// Rows (and placeholders) until the first word from the machines, so nothing jumps in. A machine's status can't say
+// that: the hub can be live, or the feed polling, before its first read is back; lastHeardAt can.
+const askable = computed(() => machines.value.filter((m) => !m.problem && m.status !== "unreachable"));
+const firstLoad = computed(() => loading.value || (askable.value.length > 0 && askable.value.every((m) => m.lastHeardAt === null)));
 
 // Swiped away: hidden at once, archived on its machine; Undo brings it back.
 const archived = shallowRef<ReadonlySet<string>>(new Set());

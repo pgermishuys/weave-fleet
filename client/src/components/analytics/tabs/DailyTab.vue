@@ -4,16 +4,20 @@ import type { DailyAnalytics } from "@/api/client";
 import { formatAnalyticsCost } from "@/lib/format-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 interface Props {
   daily: readonly DailyAnalytics[];
   emptyMessage?: string;
   error?: string | null;
+  /** The first answer hasn't come: say so, not that nothing matched. */
+  isLoading?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   emptyMessage: "No daily analytics available for the selected range.",
   error: null,
+  isLoading: false,
 });
 
 const integerFormatter = new Intl.NumberFormat("en-US");
@@ -98,6 +102,14 @@ const rows = computed(() =>
       </table>
     </div>
 
+    <div
+      v-else-if="props.isLoading"
+      class="flex items-center justify-center gap-2 p-6 text-sm text-muted"
+      data-testid="analytics-loading"
+    >
+      <Spinner />
+      Loading daily analytics…
+    </div>
     <ErrorNote
       v-else-if="props.error"
       message="Unable to load analytics."

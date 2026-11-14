@@ -20,6 +20,7 @@ import DashboardSessionRow from "./DashboardSessionRow.vue";
 import RetentionFilter from "./RetentionFilter.vue";
 import SummaryBar from "./SummaryBar.vue";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
 
 /** How many quiet sessions show before "Show more". */
@@ -42,7 +43,8 @@ const target = useMachineTarget();
 const isOther = computed(() => !target.isLive);
 const showHarnessBanner = computed(() => !isOther.value && noHarnessReason.value !== null && !config.value.cloudMode);
 const otherSessions = shallowRef<SessionListItem[]>([]);
-const otherLoading = shallowRef(false);
+// Another machine's list is asked for once this mounts: until then it is loading, not empty.
+const otherLoading = shallowRef(!target.isLive);
 const otherError = shallowRef<string | undefined>(undefined);
 let otherTimer: ReturnType<typeof setInterval> | undefined;
 let otherRequest = 0;
@@ -115,7 +117,8 @@ const recent = computed(() =>
 const showAllRecent = shallowRef(false);
 const visibleRecent = computed(() => (showAllRecent.value ? recent.value : recent.value.slice(0, RECENT_LIMIT)));
 
-const isEmpty = computed(() => !isLoading.value && sessions.value.length === 0);
+// A failed load says so (the error above), rather than "No sessions yet".
+const isEmpty = computed(() => !isLoading.value && !error.value && sessions.value.length === 0);
 
 const greeting = computed(() => {
   const hour = new Date(now.value).getHours();
@@ -219,13 +222,12 @@ function handleNewSession(): void {
 
     <SummaryBar />
 
-    <p
+    <ErrorNote
       v-if="error"
-      class="dashboard__error"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      message="Couldn't load sessions."
+      :reason="error"
+      data-testid="dashboard-load-error"
+    />
 
     <div
       v-if="isLoading && sessions.length === 0"
@@ -428,15 +430,6 @@ function handleNewSession(): void {
   font-weight: 600;
 }
 
-.dashboard__error {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
-  border-radius: var(--radius-card);
-  background: color-mix(in srgb, var(--error) 8%, transparent);
-  color: var(--error);
-  font-size: 13px;
-}
 
 .dashboard__placeholder {
   display: flex;

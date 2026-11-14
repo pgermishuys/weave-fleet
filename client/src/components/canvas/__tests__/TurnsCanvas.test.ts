@@ -6,12 +6,14 @@ import { sessionCommands } from "@/lib/session-commands";
 import TurnsCanvas from "@/components/canvas/TurnsCanvas.vue";
 
 const messages = shallowRef<readonly AccumulatedMessage[]>([]);
+const historyLoading = shallowRef(false);
 
 vi.mock("@/composables/use-session-stream", () => ({
   useSessionStream: () => ({
     messages: computed(() => messages.value),
     delegations: computed(() => []),
     hasMore: computed(() => false),
+    isLoading: computed(() => historyLoading.value),
     isLoadingOlder: computed(() => false),
     loadOlder: () => undefined,
   }),
@@ -37,6 +39,21 @@ function assistantMessage(id: string, text: string, createdAt: number): Accumula
 }
 
 describe("TurnsCanvas", () => {
+  it("says the turns are loading, not “No turns yet”, until the session's history arrives", async () => {
+    messages.value = [];
+    historyLoading.value = true;
+    const wrapper = mount(TurnsCanvas, { props: { sessionId: "s1" } });
+
+    expect(wrapper.text()).not.toContain("No turns yet");
+    expect(wrapper.find("[data-testid='turns-loading']").exists()).toBe(true);
+
+    historyLoading.value = false;
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find("[data-testid='turns-loading']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("No turns yet");
+  });
+
   it("asks the conversation to scroll to the round's first message", async () => {
     messages.value = [
       userMessage("u1", "Rename the helper", 1),

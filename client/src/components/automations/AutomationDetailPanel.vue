@@ -35,6 +35,7 @@ import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 // The machine the view shows (MachineScope in AutomationsPage): the list, runs and every change are its.
 const target = useMachineTarget();
@@ -50,8 +51,11 @@ const {
   runAutomation,
   fetchRuns,
   refresh,
+  isLoading,
   error: loadError,
 } = useAutomations(target);
+// Until the first load finishes there is nothing to say about the list yet: it isn't empty, it's loading.
+const firstLoad = computed(() => isLoading.value && automations.value.length === 0);
 // With nothing loaded, a failed load says so and offers another try, rather than "No automations yet".
 const retryingLoad = shallowRef(false);
 const loadFailed = computed(() => automations.value.length === 0 && (Boolean(loadError.value) || retryingLoad.value));
@@ -559,8 +563,15 @@ const firstRunHint = computed(() => {
       v-else
       class="automation-page__body"
     >
+      <Spinner
+        v-if="firstLoad"
+        size="lg"
+        label="Loading automations…"
+        class="m-auto text-muted"
+        data-testid="automation-loading"
+      />
       <ErrorNote
-        v-if="loadFailed"
+        v-else-if="loadFailed"
         message="Couldn't load automations."
         :reason="loadError ?? 'Trying again…'"
         :retrying="retryingLoad"

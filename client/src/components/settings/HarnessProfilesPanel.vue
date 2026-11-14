@@ -9,6 +9,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 /** A harness's profiles in Settings: list, default, and an editor that opens in place. */
 const props = defineProps<{
@@ -31,8 +32,16 @@ const editing = shallowRef<Editing | null>(null);
 const notice = shallowRef<string | null>(null);
 const listError = shallowRef<string | null>(null);
 
+// "No profiles yet" only once the machine has said so; until then the list is loading, or it couldn't be read.
+const loadState = shallowRef<"loading" | "loaded" | "failed">(props.harnessType in store.byHarness ? "loaded" : "loading");
+async function loadProfiles(): Promise<void> {
+  if (loadState.value === "failed") loadState.value = "loading";
+  const ok = await store.load(props.harnessType);
+  loadState.value = ok || props.harnessType in store.byHarness ? "loaded" : "failed";
+}
+
 onMounted(() => {
-  void store.load(props.harnessType);
+  void loadProfiles();
 });
 
 function edit(next: Editing): void {
@@ -107,8 +116,25 @@ function usage(profile: HarnessProfile): string {
       compact
     />
 
+    <div
+      v-if="profiles.length === 0 && !editing && loadState === 'loading'"
+      class="flex justify-center p-6"
+      data-testid="harness-profiles-loading"
+    >
+      <Spinner
+        size="lg"
+        class="text-muted"
+        :label="`Loading ${harnessName}'s profiles…`"
+      />
+    </div>
+    <ErrorNote
+      v-else-if="profiles.length === 0 && !editing && loadState === 'failed'"
+      :message="`Couldn't load ${harnessName}'s profiles.`"
+      data-testid="harness-profiles-load-error"
+      @retry="loadProfiles"
+    />
     <EmptyState
-      v-if="profiles.length === 0 && !editing"
+      v-else-if="profiles.length === 0 && !editing"
       :icon="Layers"
       title="No profiles yet"
       bordered

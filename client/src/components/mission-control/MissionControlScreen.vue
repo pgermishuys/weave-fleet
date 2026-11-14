@@ -7,10 +7,12 @@ import SessionTile from "@/components/mission-control/SessionTile.vue";
 import { useFleetView } from "@/composables/use-fleet-view";
 import { useSharedMissionControl } from "@/composables/use-shared-mission-control";
 import FleetViewStrip from "@/components/mission-control/FleetViewStrip.vue";
-import { groupTiles, type Grouping, type Tile } from "@/lib/mission-control";
+import { groupTiles, type Grouping, type MissionMachine, type Tile } from "@/lib/mission-control";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { useMachinesStore } from "@/stores/machines";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 import { Radar } from "lucide-vue-next";
 
 const router = useRouter();
@@ -25,6 +27,16 @@ const machine = computed(() => {
 // A machine's view lists only that machine's sessions; Needs you lists the asks from all of them.
 const machineTiles = computed(() => mission.tiles.value.filter((tile) => tile.machineId === machine.value?.key));
 const machineGroups = computed(() => groupTiles(machineTiles.value, mission.grouping.value));
+// Until a machine has answered once (or failed to), its sessions are still coming, not missing. Its status alone
+// can't say: the hub can be live, or the feed polling, before the first read is back.
+const asked = (state: MissionMachine) => state.status !== "unreachable" && !state.lastHeardAt;
+const machineState = computed(() => mission.states.value.find((state) => state.id === machine.value?.key) ?? null);
+const machineStatus = computed(() => {
+  const state = machineState.value;
+  if (!state || asked(state)) return "asking";
+  return state.status === "unreachable" ? "unreachable" : "answered";
+});
+const allAsked = computed(() => mission.states.value.length > 0 && mission.states.value.every(asked));
 const selected = computed(() => machineTiles.value.find((tile) => tile.key === selectedKey.value) ?? null);
 
 const GROUPINGS: { value: Grouping; label: string }[] = [
@@ -74,6 +86,7 @@ function nudge(tile: Tile, text: string, done: (outcome: AnswerOutcome & { queue
       <NeedsYouColumn
         wide
         :items="mission.waiting.value"
+        :loading="allAsked"
         @answer-question="answerQuestion"
         @answer-permission="answerPermission"
         @open="open"
@@ -116,8 +129,24 @@ function nudge(tile: Tile, text: string, done: (outcome: AnswerOutcome & { queue
             </button>
           </div>
         </div>
+        <div
+          v-if="!machineTiles.length && machineStatus === 'asking'"
+          class="flex justify-center p-6"
+          data-testid="fleet-machine-loading"
+        >
+          <Spinner
+            size="lg"
+            class="text-muted"
+            :label="`Asking ${machine.name} for its sessions…`"
+          />
+        </div>
+        <ErrorNote
+          v-else-if="!machineTiles.length && machineStatus === 'unreachable'"
+          :message="`Couldn't reach ${machine.name}.`"
+          data-testid="fleet-machine-unreachable"
+        />
         <EmptyState
-          v-if="!machineTiles.length"
+          v-else-if="!machineTiles.length"
           :icon="Radar"
           title="No sessions are working or waiting on this machine"
           description="Start one from Sessions."

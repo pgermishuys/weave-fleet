@@ -68,6 +68,8 @@ async function errorFrom(response: Response, fallback: string): Promise<string> 
 export const useWorkflowsStore = defineMachineStore("workflows", (target) => {
   const runs = shallowRef<Record<string, WorkflowRun>>({});
   const isLoaded = shallowRef(false);
+  /** The recent runs are being asked for; "No runs yet" waits for the answer. */
+  const isLoading = shallowRef(false);
   let loading: Promise<void> | null = null;
   let stopListening: (() => void) | null = null;
 
@@ -111,6 +113,7 @@ export const useWorkflowsStore = defineMachineStore("workflows", (target) => {
   function ensureLoaded(): Promise<void> {
     listen();
     loading ??= (async () => {
+      isLoading.value = true;
       try {
         const response = await apiFetchOn(target.connection, "/api/workflows/runs?limit=100");
         if (!response.ok) return;
@@ -125,6 +128,7 @@ export const useWorkflowsStore = defineMachineStore("workflows", (target) => {
         // The next event brings what's needed; the list fills in as runs change.
       } finally {
         loading = null;
+        isLoading.value = false;
       }
     })();
     return loading;
@@ -234,6 +238,7 @@ export const useWorkflowsStore = defineMachineStore("workflows", (target) => {
     runs,
     orderedRuns,
     isLoaded,
+    isLoading,
     waitingSessionIds,
     runForSession,
     upsert,

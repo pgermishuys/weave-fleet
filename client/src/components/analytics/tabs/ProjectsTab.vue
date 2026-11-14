@@ -5,6 +5,7 @@ import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters
 import { formatAnalyticsCost } from "@/lib/format-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 interface ProjectCard extends AnalyticsProjectOption {
   relativeCostWidth: number;
@@ -16,11 +17,14 @@ interface Props {
   topProjects: readonly AnalyticsProjectOption[];
   emptyMessage?: string;
   error?: string | null;
+  /** The first answer hasn't come: say so, not that nothing matched. */
+  isLoading?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   emptyMessage: "No project analytics available for the selected filters.",
   error: null,
+  isLoading: false,
 });
 
 const integerFormatter = new Intl.NumberFormat("en-US");
@@ -117,6 +121,14 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
       </Card>
     </div>
 
+    <div
+      v-else-if="props.isLoading"
+      class="flex items-center justify-center gap-2 p-6 text-sm text-muted"
+      data-testid="analytics-loading"
+    >
+      <Spinner />
+      Loading project analytics…
+    </div>
     <ErrorNote
       v-else-if="props.error"
       message="Unable to load analytics."
