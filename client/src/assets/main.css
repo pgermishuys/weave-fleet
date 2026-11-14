@@ -21,6 +21,10 @@
   --border: rgba(255, 255, 255, 0.075);
   --text: #e8e8ec;
   --muted: #8e8e9a;
+  /* How much of --text a quiet session's row keeps: a day without activity, then three. The deeper one is the
+     least that still reads at 4.5:1 on --main-bg and --panel-bg, so each theme sets its own. */
+  --row-dim-1: 66%;
+  --row-dim-2: 51%;
   --coral: #D95A3A;
   --indigo: #6366f1;
   /* #6366f1 nudged one step so white text on it reaches 4.5:1. */
@@ -84,6 +88,8 @@
   --menu-shadow: 0 16px 40px -12px rgba(26, 25, 24, 0.22), 0 2px 6px rgba(26, 25, 24, 0.06);
   --text: #1A1918;
   --muted: #6E6A65;
+  --row-dim-1: 77%;
+  --row-dim-2: 62%;
   --accent: #5B6EC7;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
@@ -106,6 +112,8 @@
   --border: rgba(255, 255, 255, 0.1);
   --text: #F8FAFC;
   --muted: #94A3B8;
+  --row-dim-1: 65%;
+  --row-dim-2: 50%;
   --accent: #A855F7;
   --primary: var(--accent);
   /* White on this purple is 3.96:1; the rail colour on it reaches 4.5:1, and the accent keeps its colour as link text. */
@@ -129,6 +137,8 @@
   --border: rgba(255, 255, 255, 0.08);
   --text: #FAFAFA;
   --muted: #A1A1AA;
+  --row-dim-1: 62%;
+  --row-dim-2: 47%;
   --accent: #A855F7;
   --primary: var(--accent);
   /* White on this purple is 3.96:1; black on it reaches 4.5:1, and the accent keeps its colour as link text. */
@@ -152,6 +162,8 @@
   --border: rgba(216, 222, 233, 0.12);
   --text: #ECEFF4;
   --muted: #D8DEE9;
+  --row-dim-1: 79%;
+  --row-dim-2: 64%;
   --accent: #88C0D0;
   --primary: var(--accent);
   --primary-foreground: #2E3440;
@@ -174,6 +186,8 @@
   --border: rgba(248, 248, 242, 0.1);
   --text: #F8F8F2;
   --muted: #BFBFBF;
+  --row-dim-1: 71%;
+  --row-dim-2: 56%;
   --accent: #BD93F9;
   --primary: var(--accent);
   --primary-foreground: #282A36;
@@ -196,6 +210,8 @@
   --border: rgba(253, 246, 227, 0.1);
   --text: #FDF6E3;
   --muted: #839496;
+  --row-dim-1: 69%;
+  --row-dim-2: 54%;
   --accent: #268BD2;
   --primary: var(--accent);
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
@@ -220,6 +236,8 @@
   --menu-shadow: 0 16px 40px -12px rgba(7, 54, 66, 0.25), 0 2px 6px rgba(7, 54, 66, 0.08);
   --text: #073642;
   --muted: #657B83;
+  --row-dim-1: 82%;
+  --row-dim-2: 67%;
   --accent: #268BD2;
   --primary: var(--accent);
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
@@ -243,6 +261,8 @@
   --border: rgba(248, 248, 242, 0.1);
   --text: #F8F8F2;
   --muted: #B3B3A6;
+  --row-dim-1: 73%;
+  --row-dim-2: 58%;
   --accent: #A6E22E;
   --primary: var(--accent);
   --primary-foreground: #272822;
@@ -265,6 +285,8 @@
   --border: rgba(240, 246, 252, 0.1);
   --text: #E6EDF3;
   --muted: #8B949E;
+  --row-dim-1: 66%;
+  --row-dim-2: 51%;
   --accent: #58A6FF;
   --primary: var(--accent);
   --primary-foreground: #0D1117;
