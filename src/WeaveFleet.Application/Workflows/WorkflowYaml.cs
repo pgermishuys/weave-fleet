@@ -561,3 +561,4 @@ public static partial class WorkflowYaml
     [GeneratedRegex(@"^\(Line: \d+, Col: \d+, Idx: \d+\) - \(Line: \d+, Col: \d+, Idx: \d+\):\s*")]
     private static partial Regex PositionSuffix();
 }
+// scratch: server-only change
