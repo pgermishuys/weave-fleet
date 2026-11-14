@@ -97,7 +97,7 @@ onMounted(() => {
   >
     <!-- Anchor text preview -->
     <blockquote
-      class="border-l-2 border-primary/40 bg-muted/30 px-3 py-2 text-sm italic text-muted-foreground"
+      class="border-l-2 border-primary/40 bg-secondary px-3 py-2 text-sm italic text-muted-foreground"
     >
       "{{ truncatedAnchorText }}"
     </blockquote>
