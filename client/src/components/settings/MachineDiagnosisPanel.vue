@@ -75,7 +75,7 @@ async function copyDetails(): Promise<void> {
         data-testid="machine-diagnosis-retry"
         @click="$emit('retry')"
       >
-        Retry now
+        Try again now
       </button>
       <button
         type="button"

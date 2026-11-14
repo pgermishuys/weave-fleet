@@ -310,7 +310,7 @@ describe("Settings → Machines", () => {
       expect(card.get("[data-testid='machine-diagnosis-try']").text()).toBe("Try On mini, run fleet node up. It starts Fleet in the background.");
     });
 
-    it("Retry now reads the machine again and clears the headline once it answers", async () => {
+    it("Try again now reads the machine again and clears the headline once it answers", async () => {
       stopMini();
       const wrapper = mount(MachinesSection);
       await flushPromises();

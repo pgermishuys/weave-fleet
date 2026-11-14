@@ -308,7 +308,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
           :title="item.error"
           @click="flush"
         >
-          Retry
+          Try again
         </button>
         <button
           type="button"

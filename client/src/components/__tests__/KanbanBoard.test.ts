@@ -374,7 +374,7 @@ describe("KanbanBoard", () => {
     await getButtonByText(wrapper, "Edit Board").trigger("click");
     await flushPromises();
 
-    await getButtonByText(wrapper, "Add Lane").trigger("click");
+    await getButtonByText(wrapper, "Add lane").trigger("click");
     await wrapper.get(".kanban-lane-creator__input").setValue("Ready");
     await wrapper.get(".kanban-lane-creator__form").trigger("submit");
     await flushPromises();
@@ -451,7 +451,7 @@ describe("KanbanBoard", () => {
 
     expect(boardStore.boardMode).toBe("work");
     expect(getButtonByText(wrapper, "Edit Board").attributes("aria-pressed")).toBe("false");
-    expect(wrapper.text()).not.toContain("Add Lane");
+    expect(wrapper.text()).not.toContain("Add lane");
     expect(wrapper.text()).not.toContain("Rename board");
     expect(wrapper.find("[data-testid='board-source-form']").exists()).toBe(false);
     expect(wrapper.text()).toContain("+ Add a card");
@@ -460,7 +460,7 @@ describe("KanbanBoard", () => {
     await flushPromises();
 
     expect(getButtonByText(wrapper, "Save").attributes("aria-pressed")).toBe("true");
-    expect(wrapper.text()).toContain("Add Lane");
+    expect(wrapper.text()).toContain("Add lane");
     expect(wrapper.text()).toContain("Rename board");
     expect(wrapper.find("[data-testid='board-source-form']").exists()).toBe(true);
     expect(wrapper.text()).toContain("+ Add another lane");
@@ -474,7 +474,7 @@ describe("KanbanBoard", () => {
     boardStore.setBoardMode("manage");
     await flushPromises();
 
-    await getButtonByText(wrapper, "Add Lane").trigger("click");
+    await getButtonByText(wrapper, "Add lane").trigger("click");
     await wrapper.get(".kanban-lane-creator__input").setValue("Ready");
     await getButtonByText(wrapper, "Rename board").trigger("click");
     await wrapper.get(".kanban-header__rename-input").setValue("Renamed board draft");
@@ -489,7 +489,7 @@ describe("KanbanBoard", () => {
     boardStore.setBoardMode("manage");
     await flushPromises();
 
-    await getButtonByText(wrapper, "Add Lane").trigger("click");
+    await getButtonByText(wrapper, "Add lane").trigger("click");
     expect((wrapper.get(".kanban-lane-creator__input").element as HTMLInputElement).value).toBe("");
 
     await getButtonByText(wrapper, "Rename board").trigger("click");
@@ -542,7 +542,7 @@ describe("KanbanBoard", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Rename board");
-    expect(wrapper.text()).toContain("Add Lane");
+    expect(wrapper.text()).toContain("Add lane");
     expect(wrapper.text()).toContain("+ Add another lane");
     expect(wrapper.findAll(".kanban-col__lane-actions")).toHaveLength(2);
 

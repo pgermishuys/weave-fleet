@@ -368,7 +368,7 @@ public static class WorkflowRunView
                     null,
                     LastSessionBefore(visits, visits.Count - 1),
                     [
-                        new WorkflowRunChoiceDto(WorkflowRunner.RetryChoice, "Retry", false, agent.Id),
+                        new WorkflowRunChoiceDto(WorkflowRunner.RetryChoice, "Try again", false, agent.Id),
                         new WorkflowRunChoiceDto(WorkflowRunner.WithoutSkillChoice, "Start without it", false, agent.Id),
                     ],
                     [],

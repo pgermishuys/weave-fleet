@@ -243,7 +243,7 @@ async function submitInstall(): Promise<void> {
         />
 
         <label class="grid gap-1 text-sm text-text">
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Tool URL or Path</span>
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Tool URL or path</span>
           <input
             v-model="nativeUrl"
             type="text"
@@ -282,7 +282,7 @@ async function submitInstall(): Promise<void> {
             :size="16"
             aria-hidden="true"
           />
-          <span>{{ isInstalling ? "Installing…" : "Install Tool" }}</span>
+          <span>{{ isInstalling ? "Installing…" : "Install tool" }}</span>
         </Button>
       </form>
     </div>
@@ -298,7 +298,7 @@ async function submitInstall(): Promise<void> {
       >
         <div>
           <h3 class="text-sm font-semibold text-text">
-            Configure MCP Server
+            Configure MCP server
           </h3>
           <p class="mt-1 text-xs text-muted">
             Install an MCP server with custom command, arguments, and environment variables.

@@ -491,7 +491,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
           :disabled="showLoadingState"
           @click="handleCreateFirstLane"
         >
-          Add Lane
+          Add lane
         </Button>
       </div>
     </header>
@@ -595,7 +595,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
           size="sm"
           @click="handleRetryLoad"
         >
-          Retry
+          Try again
         </Button>
         <Button
           type="button"

@@ -41,7 +41,7 @@ const hint = computed(() => {
         :class="PRIMARY_BUTTON"
         @click="$emit('retry')"
       >
-        Retry
+        Try again
       </button>
     </div>
   </section>

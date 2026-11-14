@@ -36,7 +36,7 @@ public sealed partial class WorkflowRunnerTests
         var card = _events.Last.Waiting.ShouldNotBeNull();
         card.Kind.ShouldBe(WorkflowWaitingKinds.SkillOff);
         card.Message.ShouldBe("Review uses fleet-code-review, which is now off.");
-        card.Choices.Select(c => (c.Id, c.Label)).ShouldBe([("retry", "Retry"), ("without-skill", "Start without it")]);
+        card.Choices.Select(c => (c.Id, c.Label)).ShouldBe([("retry", "Try again"), ("without-skill", "Start without it")]);
         card.SessionId.ShouldBe(_sessions.Started[^1].SessionId);
         _events.NeedsYou.ShouldContain(r => r.Id == run);
     }

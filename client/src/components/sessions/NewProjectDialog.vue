@@ -132,7 +132,7 @@ watch(open, async (isOpen) => {
   >
     <DialogContent class="sm:max-w-lg">
       <DialogHeader>
-        <DialogTitle>New Project</DialogTitle>
+        <DialogTitle>New project</DialogTitle>
         <DialogDescription>
           Create a project to organize related sessions.
         </DialogDescription>
@@ -226,7 +226,7 @@ watch(open, async (isOpen) => {
               v-if="isCreating"
               class="h-4 w-4 animate-spin"
             />
-            {{ isCreating ? "Creating…" : "Create Project" }}
+            {{ isCreating ? "Creating…" : "Create project" }}
           </Button>
         </DialogFooter>
       </form>

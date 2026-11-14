@@ -175,7 +175,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
         class="spinner"
         aria-hidden="true"
       />
-      <span class="sr-only">Loading workflows...</span>
+      <span class="sr-only">Loading workflows…</span>
     </div>
 
     <p

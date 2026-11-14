@@ -311,11 +311,11 @@ onUnmounted(stopTrayResize);
             <button
               type="button"
               class="diffs-tray__toolbar-button"
-              title="Retry loading diffs"
+              title="Try loading the diffs again"
               @click="retryLoadingFiles"
             >
               <RotateCcw aria-hidden="true" />
-              <span class="sr-only">Retry loading diffs</span>
+              <span class="sr-only">Try loading the diffs again</span>
             </button>
           </div>
         </div>

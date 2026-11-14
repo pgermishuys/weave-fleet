@@ -109,7 +109,7 @@ describe("ModsSection", () => {
     expect(wrapper.get("[data-testid=mod-row-context-gauge]").find("a").exists()).toBe(false);
   });
 
-  it("shows loading, then the error with the server's words and a Retry", async () => {
+  it("shows loading, then the error with the server's words and a Try again", async () => {
     store.state.kept = null;
     let reject!: (error: Error) => void;
     store.state.loadKept.mockReturnValueOnce(new Promise((_, r) => (reject = r)));

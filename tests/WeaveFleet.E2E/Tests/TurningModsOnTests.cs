@@ -16,7 +16,7 @@ namespace WeaveFleet.E2E.Tests;
 
 /// <summary>
 /// Turning Mods on in Settings → Plugins, against a local stand-in for Bun's downloads: the row says what Fleet will
-/// install, a blocked download says why and turns the switch back off, and Retry shows the install's progress until
+/// install, a blocked download says why and turns the switch back off, and Try again shows the install's progress until
 /// Bun is ready. Fleet's Bun goes into a temporary home, never the real one.
 /// </summary>
 [Trait("Category", "E2E")]
@@ -53,9 +53,9 @@ public sealed class TurningModsOnTests : E2ETestBase,
             await Assertions.Expect(panel).ToContainTextAsync("answered 403 Forbidden");
             await Assertions.Expect(toggle).ToHaveAttributeAsync("aria-checked", "false");
 
-            // Retry: the download stops half way until the test lets it finish, so the progress is there to see.
+            // Try again: the download stops half way until the test lets it finish, so the progress is there to see.
             _factory.Bun.Forbid = false;
-            await panel.GetByRole(AriaRole.Button, new() { Name = "Retry" }).ClickAsync();
+            await panel.GetByRole(AriaRole.Button, new() { Name = "Try again" }).ClickAsync();
             await Assertions.Expect(panel).ToContainTextAsync("Downloading Bun 1.4.2", new() { Timeout = 15_000 });
             await Assertions.Expect(panel.GetByRole(AriaRole.Progressbar)).ToBeVisibleAsync();
             await Assertions.Expect(toggle).ToHaveAttributeAsync("aria-checked", "true");

@@ -179,7 +179,7 @@ function handleFileClick(event: MouseEvent) {
     <!-- Recursive children -->
     <template v-if="entry.isDirectory && isExpanded">
       <div v-if="isLoading" class="file-browser-tree-node__loading" :style="{ paddingLeft: `${(depth + 1) * 16 + 8}px` }">
-        <span class="file-browser-tree-node__loading-text">Loading...</span>
+        <span class="file-browser-tree-node__loading-text">Loading…</span>
       </div>
       <template v-else-if="children.length > 0">
         <FileBrowserTreeNode

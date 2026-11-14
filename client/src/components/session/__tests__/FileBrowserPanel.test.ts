@@ -208,7 +208,7 @@ describe("FileBrowserPanel", () => {
     it("starts_in_file_names_and_changes_nothing_until_contents_is_picked", async () => {
       const wrapper = mountPanel();
 
-      expect(wrapper.get(".file-browser-panel__search-input").attributes("placeholder")).toBe("Search files...");
+      expect(wrapper.get(".file-browser-panel__search-input").attributes("placeholder")).toBe("Search files…");
       expect(wrapper.find(".file-browser-panel__toggle").exists()).toBe(false);
       expect(wrapper.findAll(".file-browser-panel__modes button")[0].attributes("aria-pressed")).toBe("true");
     });

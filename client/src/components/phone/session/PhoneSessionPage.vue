@@ -507,7 +507,7 @@ onUnmounted(() => {
             :disabled="stream.isLoadingOlder.value"
             @click="stream.loadOlder"
           >
-            {{ stream.isLoadingOlder.value ? "Loading…" : stream.loadOlderFailed.value ? "Couldn't load · Retry" : "Earlier messages" }}
+            {{ stream.isLoadingOlder.value ? "Loading…" : stream.loadOlderFailed.value ? "Couldn't load · Try again" : "Earlier messages" }}
           </button>
           <div
             v-if="stream.isLoading.value && blocks.length === 0"
