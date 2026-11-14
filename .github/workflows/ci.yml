@@ -6,10 +6,14 @@ on:
   # (the Changed paths job).
   pull_request:
     branches: [main]
-  # Main runs everything on every push: no paths-ignore (opencode/skills/**/SKILL.md and docs/workflows.md are .md
-  # files the build embeds or a test reads).
+  # scripts/release-ci-gate.sh mirrors this paths-ignore (and its test checks they match): change them together. It
+  # isn't quite safe: opencode/skills/**/SKILL.md and docs/workflows.md are .md files the build embeds or a test reads,
+  # so a push changing only those runs no CI. The pull request that brought the change ran it.
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '.weave/**'
   workflow_dispatch:
 
 permissions:
