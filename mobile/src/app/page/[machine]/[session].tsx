@@ -145,7 +145,7 @@ export default function PageScreen() {
     },
   }), []);
 
-  const where = machineView?.machineName || "your computer";
+  const where = machineView?.machineName || "your machine";
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: color.panel, paddingTop: insets.top, paddingBottom: insets.bottom }} testID="page-screen">
       <View {...swipe.panHandlers} style={{ flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 4, paddingVertical: 4, borderBottomWidth: 1, borderColor: color.border }}>

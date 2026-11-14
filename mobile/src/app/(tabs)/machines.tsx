@@ -16,11 +16,11 @@ const WORDS: Record<ConnectionState, string> = {
   connected: "Connected",
   reconnecting: "Reconnecting…",
   offline: "Not reachable",
-  "signed-out": "Signed out. The computer removed this phone.",
+  "signed-out": "Signed out. The machine removed this phone.",
 };
 
 function confirmRemove(name: string, remove: () => void) {
-  const message = `This phone forgets ${name}. Pair again from the computer to bring it back.`;
+  const message = `This phone forgets ${name}. Pair again in Fleet on that machine to bring it back.`;
   if (Platform.OS === "web") {
     if (globalThis.confirm?.(message)) remove();
     return;

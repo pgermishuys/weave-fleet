@@ -70,8 +70,8 @@ describe("blockerOf", () => {
   test("with one machine paired there's no other to pick", () => {
     expect(blockerOf({ ...ok, state: "offline", otherMachines: false })?.rest).toBe("Wait for it to come back.");
   });
-  test("no ready harness says to set one up on the computer", () => {
-    expect(blockerOf({ ...ok, harnessReady: false })?.rest).toBe("Set one up in Fleet on that computer.");
+  test("no ready harness says to set one up on the machine", () => {
+    expect(blockerOf({ ...ok, harnessReady: false })?.rest).toBe("Set one up in Fleet on that machine.");
     expect(blockerOf({ ...ok, harnessReady: false, harnessesLoaded: false })).toBeNull();
   });
   test("no ready harness gives the machine's own reason when it has one", () => {

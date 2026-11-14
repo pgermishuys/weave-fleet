@@ -38,7 +38,7 @@ const config: ExpoConfig = {
     "expo-font",
     "expo-dev-client",
     "expo-updates",
-    ["expo-camera", { cameraPermission: "Fleet scans the pairing code your computer shows.", recordAudioAndroid: false }],
+    ["expo-camera", { cameraPermission: "Fleet scans the pairing code that Fleet shows on your machine.", recordAudioAndroid: false }],
     "./plugins/with-home-network.ts",
   ],
   // An update only reaches builds whose native side matches it.

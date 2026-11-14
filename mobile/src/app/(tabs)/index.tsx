@@ -77,7 +77,7 @@ export default function Sessions() {
             onPress={() => router.push(`/s/${entry.machineId}/${entry.item.session.id}`)}
           />
         )}
-        ListEmptyComponent={loading ? undefined : <EmptyState title="No sessions yet" body="Start one on the computer and it shows up here." />}
+        ListEmptyComponent={loading ? undefined : <EmptyState title="No sessions yet" body="Start one in Fleet on a machine and it shows up here." />}
       />
       <Sheet open={cutOff && interrupted.length > 0} onClose={() => setCutOff(false)} title="Cut off by the restart" testID="interrupted-sheet">
         <View style={{ marginHorizontal: -16 }}>

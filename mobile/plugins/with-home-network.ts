@@ -37,7 +37,7 @@ const withHomeNetwork: ConfigPlugin = (config) => {
       NSAllowsLocalNetworking: true,
       NSExceptionDomains: { ...ats.NSExceptionDomains, "ts.net": { NSIncludesSubdomains: true, NSExceptionAllowsInsecureHTTPLoads: true } },
     };
-    c.modResults.NSLocalNetworkUsageDescription = "Fleet reaches your computer on your home network when Tailscale isn't on.";
+    c.modResults.NSLocalNetworkUsageDescription = "Fleet reaches your machines on your home network when Tailscale isn't on.";
     return c;
   });
 };

@@ -107,7 +107,7 @@ export function blockerOf(input: {
     };
   }
   if (input.harnessesLoaded && !input.harnessReady) {
-    return { tone: "error", lead: `No harness is ready on ${input.machineName}.`, rest: input.harnessReason || "Set one up in Fleet on that computer.", part: "harness" };
+    return { tone: "error", lead: `No harness is ready on ${input.machineName}.`, rest: input.harnessReason || "Set one up in Fleet on that machine.", part: "harness" };
   }
   if (input.folderSession && input.repositories === "failed") {
     return { tone: "warning", lead: `Couldn't read the folders on ${input.machineName}.`, rest: "Open Folder to try again, or pick No folder for a quick chat.", part: "folder" };
