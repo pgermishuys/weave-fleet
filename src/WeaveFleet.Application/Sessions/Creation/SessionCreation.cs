@@ -228,6 +228,7 @@ public sealed partial class SessionCreation(
                 WorkingDirectory = canonicalWorkspaceDirectory,
                 OwnerUserId = userContext.UserId,
                 InitialPrompt = sendInitialPromptAfterSpawn ? null : initialPrompt,
+                InitialPromptOptions = sendInitialPromptAfterSpawn || initialPrompt is null ? null : InitialPromptChoices(request),
                 Branch = workspace.Branch,
                 ProjectId = projectId,
                 ProjectName = projectName,
@@ -811,6 +812,25 @@ public sealed partial class SessionCreation(
 
     private static bool HasModel(string? providerId, string? modelId)
         => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId);
+
+    /// <summary>
+    /// The agent and model a first message given at spawn goes to: the ones the session is created with, which it keeps
+    /// as its choices. A model is only taken as a pair, as for the session's choices; none chosen leaves the harness's
+    /// default.
+    /// </summary>
+    private static PromptOptions? InitialPromptChoices(CreateSessionRequest request)
+    {
+        var agent = string.IsNullOrWhiteSpace(request.Agent) ? null : request.Agent.Trim();
+        var hasModel = HasModel(request.ProviderId, request.ModelId);
+        return agent is null && !hasModel
+            ? null
+            : new PromptOptions
+            {
+                Agent = agent,
+                ProviderId = hasModel ? request.ProviderId!.Trim() : null,
+                ModelId = hasModel ? request.ModelId!.Trim() : null,
+            };
+    }
 
     private async Task<string?> ResolveProjectNameAsync(string? projectId)
     {

@@ -713,6 +713,62 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.MessageRepository.All.ShouldBeEmpty();
     }
 
+    // Pi takes the first message at spawn. It used to go without the session's choices, so Pi ran it on its own
+    // default model (one the user may have no key for) while the session said it was on the chosen one.
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_WhenHarnessNeedsItAtSpawn_SendsItToTheChosenAgentAndModel()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "Needs prompt", new HarnessCapabilities { RequiresInitialPrompt = true });
+        runtime.DefaultSession = _defaultSession;
+        _builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect",
+            Agent = " tapestry ",
+            ProviderId = "fakellm",
+            ModelId = "fake-model",
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var spawn = runtime.SpawnCalls.ShouldHaveSingleItem();
+        spawn.InitialPrompt.ShouldBe("Fix the login redirect");
+        var options = spawn.InitialPromptOptions.ShouldNotBeNull();
+        options.Agent.ShouldBe("tapestry");
+        options.ProviderId.ShouldBe("fakellm");
+        options.ModelId.ShouldBe("fake-model");
+        result.Value.Session.SelectedModelId.ShouldBe("fake-model");
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_WhenHarnessNeedsItAtSpawn_AndNothingChosen_KeepsTheHarnessDefault()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "Needs prompt", new HarnessCapabilities { RequiresInitialPrompt = true });
+        runtime.DefaultSession = _defaultSession;
+        _builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect",
+            ModelId = "a-model-with-no-provider",
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        runtime.SpawnCalls.ShouldHaveSingleItem().InitialPromptOptions.ShouldBeNull();
+    }
+
     // The first turn can end before create returns. The session that asked to hear about it must be registered by
     // then, or only the poll (every 30 s) tells it.
     [Fact]
