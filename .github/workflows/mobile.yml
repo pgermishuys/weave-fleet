@@ -4,7 +4,9 @@
 # When what runs:
 # - Check (tokens, typecheck, tests) runs for every change to the app or to anything in client/src: the typecheck
 #   follows the app's imports through the web client's lib, api, composables, stores and components (84 files on
-#   14 November 2026), and one new import can pull in any other file there.
+#   14 November 2026), and one new import can pull in any other file there. On a pull request those three steps run
+#   in ci.yml's "Phone app check" instead (same paths, see .github/scripts/ci-changes.sh), so they count toward the
+#   required "CI passed"; here Check then only works out whether to walk the phone.
 # - The walk-throughs run on a pull request only when it can change what the phone draws: mobile/, this workflow, or
 #   a shared file the app's bundle loads. Check works that out (mobile/scripts/phone-files.ts follows the app's run-time
 #   imports, the way Metro does) and says why in its summary. The same answer gates the EAS update on a push.
@@ -74,13 +76,18 @@ jobs:
       - name: App dependencies
         run: bun install --frozen-lockfile
         working-directory: mobile
+      # On a pull request ci.yml's "Phone app check" runs these three, and counts toward the required "CI passed";
+      # here they'd only run twice. Pushes (before the EAS update), the night's run and runs by hand still run them.
       - name: Tokens match the web client
+        if: github.event_name != 'pull_request'
         run: bun run tokens:check
         working-directory: mobile
       - name: Typecheck
+        if: github.event_name != 'pull_request'
         run: bunx tsc --noEmit
         working-directory: mobile
       - name: Tests
+        if: github.event_name != 'pull_request'
         run: bun test src scripts
         working-directory: mobile
       - name: Can this change alter what the phone draws?
