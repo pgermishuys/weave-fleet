@@ -318,7 +318,7 @@ internal static class LlmRequest
     /// The latest user message, the turn's prompt, has <paramref name="prompt"/>; earlier turns' prompts are history. V2
     /// gives a subagent its prompt after instructions of its own, so it's a part of the message, not all of it.
     /// </summary>
-    private static bool Asked(string request, string prompt)
+    public static bool Asked(string request, string prompt)
         => Texts(request, "user").LastOrDefault(text => !text.TrimStart().StartsWith("<system-update>", StringComparison.Ordinal)) is { } text
             && text.Contains(prompt, StringComparison.Ordinal);
 
