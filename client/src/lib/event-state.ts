@@ -74,46 +74,41 @@ function compareMessages(a: AccumulatedMessage, b: AccumulatedMessage): number {
   return compareMessageIds(a.messageId, b.messageId);
 }
 
+/** Fleet's and OpenCode's ids (`msg_<time>…`): two of them sort by when the messages were made. */
+const ASCENDING_ID = /^msg_/;
+
+function isTime(value: number | undefined): value is number {
+  return typeof value === "number" && value > 0;
+}
+
 /**
- * Insert a message into the array in stable sorted position by message ID (ascending, see {@link compareMessageIds}).
- * Message IDs with `msg_` prefix contain hex-encoded timestamps that sort lexicographically
- * in chronological order. Uses binary search for O(log n) insertion.
- * Messages without proper `msg_` prefix are appended to the end (defensive fallback).
+ * Whether `existing` provably comes after `incoming`. Two `msg_` ids are compared with each other; any other pair (a
+ * harness's own ids, such as Pi's `pi-…`, next to each other or next to the `msg_` id Fleet gives a prompt) only by when
+ * the messages were made, and with no time on either, not at all. Which kind of id a message has never decides its place.
+ */
+function comesAfter(existing: AccumulatedMessage, incoming: AccumulatedMessage): boolean {
+  if (ASCENDING_ID.test(existing.messageId) && ASCENDING_ID.test(incoming.messageId)) {
+    return compareMessages(existing, incoming) > 0;
+  }
+  return isTime(existing.createdAt) && isTime(incoming.createdAt) && existing.createdAt > incoming.createdAt;
+}
+
+/**
+ * Adds a message where it belongs: after the messages already there (the order they arrived in, from a snapshot or live),
+ * moved back only past the ones it provably comes before (see {@link comesAfter}). With every id a `msg_` one this is
+ * their sorted order. Usually the message is the newest and nothing moves.
  */
 function insertMessageSorted(
   messages: AccumulatedMessage[],
   newMsg: AccumulatedMessage
 ): AccumulatedMessage[] {
-  const newId = newMsg.messageId;
-
-  // Defensive: messages without proper msg_ prefix go to the end
-  if (!newId.startsWith("msg_")) {
-    return [...messages, newMsg];
-  }
-
-  // Binary search to find insertion index
-  let left = 0;
-  let right = messages.length;
-
-  while (left < right) {
-    const mid = Math.floor((left + right) / 2);
-    const midId = messages[mid]!.messageId;
-
-    // Messages without msg_ prefix are at the end, so insert before them
-    if (!midId.startsWith("msg_")) {
-      right = mid;
-      continue;
-    }
-
-    if (compareMessages(messages[mid]!, newMsg) < 0) {
-      left = mid + 1;
-    } else {
-      right = mid;
-    }
+  let index = messages.length;
+  while (index > 0 && comesAfter(messages[index - 1]!, newMsg)) {
+    index--;
   }
 
   const result = messages.slice();
-  result.splice(left, 0, newMsg);
+  result.splice(index, 0, newMsg);
   return result;
 }
 

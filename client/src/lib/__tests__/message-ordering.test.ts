@@ -133,8 +133,7 @@ describe("message ordering", () => {
     expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"])
   })
 
-  it("places_assistant_message_created_by_delta_at_end_until_timestamp_arrives", () => {
-    // When an assistant delta arrives without msg_ prefix, it goes to the end.
+  it("keeps_an_assistant_message_created_by_a_delta_where_it_arrived", () => {
     const userPrompt1 = createMessageLifecyclePayload({
       id: "msg_0000010000000001_user1",
       role: "user",
@@ -171,13 +170,13 @@ describe("message ordering", () => {
     ])
 
     expect(state.messages).toHaveLength(3)
-    // Messages without msg_ prefix go to the end
+    // A message whose id isn't a msg_ one, with no time to go by, stays where it arrived.
     expect(state.messages.map((m) => m.messageId)).toEqual([
       "msg_0000010000000001_user1",
-      "msg_0000010000000002_user2",
       "assistant-1",
+      "msg_0000010000000002_user2",
     ])
-    expect(state.messages.map((m) => m.role)).toEqual(["user", "user", "assistant"])
+    expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"])
   })
 
   it("sorts_snapshot_messages_by_message_id", () => {
@@ -277,5 +276,41 @@ describe("message ordering", () => {
     ])
     expect(state.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"])
     expect(state.messages[1]?.createdAt).toBe(1500)
+  })
+
+  describe("a Pi session: Pi's own ids for its messages, Fleet's msg_ id for a prompt sent later", () => {
+    // The shape a Pi session's snapshot has (14 November 2026): the prompt the session was created with and every reply
+    // carry Pi's ids, pi-<session>-<role>-<time>; the second prompt carries the msg_ id Fleet gave it.
+    const piId = (role: string, at: number) => `pi-5f3c-${role}-${at}`
+    const conversation = [
+      createMessageLifecyclePayload({ id: piId("user", 1794681358517), role: "user", createdAt: 1794681358517, text: "Write the export plan." }),
+      createMessageLifecyclePayload({ id: piId("assistant", 1794681358669), role: "assistant", createdAt: 1794681358669 }),
+      createMessageLifecyclePayload({ id: piId("assistant", 1794681358754), role: "assistant", createdAt: 1794681358754, text: "Wrote the plan." }),
+      createMessageLifecyclePayload({ id: "msg_1db5887aa00040s2PcEAhH8c7P", role: "user", createdAt: 1794681374642, text: "Do it once more." }),
+      createMessageLifecyclePayload({ id: piId("assistant", 1794681374643), role: "assistant", createdAt: 1794681374643 }),
+      createMessageLifecyclePayload({ id: piId("assistant", 1794681374683), role: "assistant", createdAt: 1794681374683, text: "Wrote it again." }),
+    ]
+    const inOrder = conversation.map((message) => message.info.id)
+
+    it("keeps_the_snapshots_order_after_a_reload", () => {
+      const state = createSessionStreamState(createSnapshot({ messages: conversation }))
+
+      expect(state.messages.map((m) => m.messageId)).toEqual(inOrder)
+    })
+
+    it("keeps_the_order_the_messages_arrive_in_live", () => {
+      const state = applyEvents(createState(), conversation.map((payload) => ({ type: "message.created" as const, payload })))
+
+      expect(state.messages.map((m) => m.messageId)).toEqual(inOrder)
+    })
+
+    it("keeps_the_order_when_the_replies_have_no_time", () => {
+      const untimed = conversation.map((message) =>
+        message.info.role === "assistant" ? { ...message, info: { ...message.info, time: { created: 0, completed: null } } } : message)
+
+      const state = createSessionStreamState(createSnapshot({ messages: untimed }))
+
+      expect(state.messages.map((m) => m.messageId)).toEqual(inOrder)
+    })
   })
 })
