@@ -219,15 +219,6 @@ internal static class ClaudeCodeTools
             }
             : null;
 
-    /// <summary>A <c>file.watcher.updated</c> payload saying <paramref name="path"/> changed, as OpenCode's watcher says it.</summary>
-    internal static JsonElement FileChanged(string path) => Write(json =>
-    {
-        json.WriteStartObject();
-        json.WriteString("file", path);
-        json.WriteString("event", "change");
-        json.WriteEndObject();
-    });
-
     /// <summary>
     /// The facts Fleet keeps with a call for showing it: a file tool's diff (<c>diff</c>), and the answers to a question
     /// (<c>answers</c>, one list of labels per question). Null when there are none.

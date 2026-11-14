@@ -116,7 +116,7 @@ internal sealed class PiHarnessSession : IHarnessSession
         _client = client;
         _shutdownTimeout = shutdownTimeout;
         _logger = logger;
-        _mapper = new PiMapper(fleetSessionId);
+        _mapper = new PiMapper(fleetSessionId, null, workingDirectory);
 
         _processManager.ProcessExited += OnProcessExited;
         _pumpTask = Task.Run(PumpEventsAsync, CancellationToken.None);
