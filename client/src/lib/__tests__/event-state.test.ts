@@ -529,7 +529,7 @@ describe("message ordering", () => {
       ]);
     });
 
-    it("places_messages_without_msg_prefix_at_the_end", () => {
+    it("places_a_message_with_another_kind_of_id_by_its_time", () => {
       const messages = ensureMessage([], {
         id: "msg_0000010000000001_aaa",
         sessionID: "session-1",
@@ -541,12 +541,12 @@ describe("message ordering", () => {
         id: "legacy-message-id",
         sessionID: "session-1",
         role: "assistant",
-        time: { created: 500 }, // Earlier timestamp but no msg_ prefix
+        time: { created: 500 }, // Made earlier: which kind of id it has doesn't move it to the end
       });
 
       expect(updated.map((m) => m.messageId)).toEqual([
-        "msg_0000010000000001_aaa",
         "legacy-message-id",
+        "msg_0000010000000001_aaa",
       ]);
     });
 
