@@ -123,7 +123,7 @@ internal sealed class PiMapper
         var events = new List<HarnessEvent>(evt.Messages.Count + 1);
         foreach (var message in evt.Messages)
         {
-            if (ShouldSuppressMessage(message))
+            if (ShouldSuppressMessage(message) || IsAttachedToolResult(message))
                 continue;
 
             events.Add(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, message, completed: true));
@@ -138,7 +138,7 @@ internal sealed class PiMapper
     private List<HarnessEvent> MapTurnEnd(PiTurnEndEvent evt)
     {
         var events = new List<HarnessEvent>(2);
-        if (evt.Message is not null && !ShouldSuppressMessage(evt.Message))
+        if (evt.Message is not null && !ShouldSuppressMessage(evt.Message) && !IsAttachedToolResult(evt.Message))
         {
             events.Add(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, evt.Message, completed: true));
             if (IsAssistant(evt.Message))
@@ -158,7 +158,7 @@ internal sealed class PiMapper
 
     private IReadOnlyList<HarnessEvent> MapMessageStart(PiMessageStartEvent evt)
     {
-        if (ShouldSuppressMessage(evt.Message))
+        if (ShouldSuppressMessage(evt.Message) || IsAttachedToolResult(evt.Message))
             return [];
 
         var messageId = ResolveMessageId(evt.Message);
@@ -180,7 +180,7 @@ internal sealed class PiMapper
     {
         if (evt.AssistantMessageEvent is null)
         {
-            return evt.Message is null || ShouldSuppressMessage(evt.Message)
+            return evt.Message is null || ShouldSuppressMessage(evt.Message) || IsAttachedToolResult(evt.Message)
                 ? []
                 : [CreateMessageLifecycleEvent(EventTypes.MessageUpdated, evt.Message, completed: false)];
         }
@@ -207,10 +207,12 @@ internal sealed class PiMapper
         };
     }
 
-    private List<HarnessEvent> MapMessageEnd(PiMessageEndEvent evt)
+    private IReadOnlyList<HarnessEvent> MapMessageEnd(PiMessageEndEvent evt)
     {
         if (ShouldSuppressMessage(evt.Message))
             return [];
+        if (IsAttachedToolResult(evt.Message))
+            return FinishFromResultMessage(evt.Message);
 
         var events = new List<HarnessEvent>(3)
         {
@@ -311,6 +313,32 @@ internal sealed class PiMapper
 
         return [toolStateEvent, toolResultEvent];
     }
+
+    /// <summary>
+    /// A tool's result message, which Pi sends after <c>tool_execution_end</c>: the result is already the tool row's
+    /// output, as every harness shows it, so it isn't a message of its own. It finishes the call only when Pi never
+    /// said the call ended.
+    /// </summary>
+    private IReadOnlyList<HarnessEvent> FinishFromResultMessage(PiMessage result)
+    {
+        if (_toolsByCallId[result.ToolCallId!].IsError is not null)
+            return [];
+
+        return MapToolExecutionEnd(new PiToolExecutionEndEvent
+        {
+            ToolCallId = result.ToolCallId!,
+            ToolName = result.ToolName ?? string.Empty,
+            Result = new PiToolResult { Content = result.Content, Details = result.Details },
+            IsError = result.IsError == true,
+        });
+    }
+
+    /// <summary>
+    /// A tool result whose call the conversation shows, so its output goes in that call's row. One Fleet never saw the
+    /// call of stays a message, so what the tool said isn't lost.
+    /// </summary>
+    private bool IsAttachedToolResult(PiMessage message)
+        => IsToolResult(message) && message.ToolCallId is { } callId && _toolsByCallId.ContainsKey(callId);
 
     private IReadOnlyList<HarnessEvent> MapResponse(PiResponseEvent evt)
     {
@@ -757,17 +785,24 @@ internal sealed class PiMapper
     internal List<HarnessMessage> History(IReadOnlyList<PiMessage> messages)
     {
         var results = new Dictionary<string, PiMessage>(StringComparer.Ordinal);
+        var calls = new HashSet<string>(StringComparer.Ordinal);
         foreach (var message in messages)
         {
             if (IsToolResult(message) && !string.IsNullOrWhiteSpace(message.ToolCallId))
                 results[message.ToolCallId] = message;
+            foreach (var call in message.Content.OfType<PiToolCallContent>())
+            {
+                if (call.Id is { } callId)
+                    calls.Add(callId);
+            }
         }
 
         var history = new List<HarnessMessage>(messages.Count);
         for (var index = 0; index < messages.Count; index++)
         {
             var message = messages[index];
-            if (ShouldSuppressMessage(message))
+            // A result goes in its call's row, as it did live; one whose call isn't in the history stays a message.
+            if (ShouldSuppressMessage(message) || (IsToolResult(message) && message.ToolCallId is { } resultOf && calls.Contains(resultOf)))
                 continue;
 
             var id = IsUser(message) && message.Timestamp is { } promptedAt && _promptIdsByTimestamp.TryGetValue(promptedAt, out var promptId)

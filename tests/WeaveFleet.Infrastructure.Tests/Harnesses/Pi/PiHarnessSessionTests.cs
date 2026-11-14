@@ -255,18 +255,26 @@ public sealed class PiHarnessSessionTests
                     content = new object[] { new { type = "text", text = "No such line." } },
                     details = new { diff = "-a\n+b" },
                 },
+                // A result whose call isn't in the history (cut off before it) has nowhere else to show.
+                new
+                {
+                    role = "toolResult", toolCallId = "call_gone", toolName = "bash", isError = false, timestamp = 5000,
+                    content = new object[] { new { type = "text", text = "Ran." } },
+                },
             },
         }, cts.Token);
         var history = (await historyTask).Messages;
 
-        // The prompt keeps Fleet's id, and the reply the id its live events had: a page read mid-run updates them.
+        // The prompt keeps Fleet's id, and the reply the id its live events had: a page read mid-run updates them. A
+        // tool's result is in its call's row, not a message under it.
         history.Select(static m => m.Id).ShouldBe(new[]
         {
             "msg_0000000000000000001",
             liveAnswerId,
-            "pi-fleet-session-toolResult-3000-call_write",
-            "pi-fleet-session-toolResult-4000-call_tick",
+            "pi-fleet-session-toolResult-5000-call_gone",
         });
+        string[] texts = ["Which columns?", "Writing the plan.", "Ran."];
+        history.SelectMany(static m => m.Parts).OfType<TextPart>().Select(static t => t.Text).ShouldBe(texts);
         liveAnswerId.ShouldBe("pi-fleet-session-assistant-2000");
         var parts = history[1].Parts;
         parts.OfType<TextPart>().Single().PartId.ShouldBe("pi-fleet-session-assistant-2000-content-0");
@@ -280,7 +288,7 @@ public sealed class PiHarnessSessionTests
         // No result yet: still running, or cut off if the run is over.
         calls[2].State.ShouldBe(ToolUseState.Pending);
         history[1].ModelId.ShouldBe("fake-model");
-        history[2].Agent.ShouldBe("tool:write");
+        history[2].Agent.ShouldBe("tool:bash");
     }
 
     [Fact]

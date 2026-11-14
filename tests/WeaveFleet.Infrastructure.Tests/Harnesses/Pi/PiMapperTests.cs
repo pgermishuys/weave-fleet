@@ -400,6 +400,64 @@ public sealed class PiMapperTests
         turnEnd.Where(e => e.Type == EventTypes.SessionStatus).Select(StatusType).ShouldNotContain("idle");
     }
 
+    [Fact]
+    public void a_tools_result_shows_in_its_tool_row_not_as_a_message_under_it()
+    {
+        var mapper = new PiMapper(SessionId);
+        var calling = AssistantMessage("toolUse", "", 1000,
+            new PiToolCallContent { Id = "call_write", Name = "write", Arguments = Json("{\"path\":\"notes.md\",\"content\":\"# Notes\"}") });
+        var result = new PiMessage
+        {
+            Role = "toolResult",
+            ToolCallId = "call_write",
+            ToolName = "write",
+            IsError = false,
+            Timestamp = 1100,
+            Content = [new PiTextContent { Text = "Successfully wrote 7 bytes to notes.md" }],
+        };
+        var answer = AssistantMessage(1200, new PiTextContent { Text = "Done." });
+
+        // Pi 0.84.2's order for a turn that writes a file and then answers.
+        var events = new List<HarnessEvent>();
+        events.AddRange(mapper.Map(new PiAgentStartEvent()));
+        events.AddRange(mapper.Map(new PiMessageStartEvent { Message = calling }));
+        events.AddRange(mapper.Map(new PiMessageUpdateEvent { Message = calling, AssistantMessageEvent = new PiToolCallEndEvent { ContentIndex = 0, ToolCall = (PiToolCallContent)calling.Content[0], Partial = calling } }));
+        events.AddRange(mapper.Map(new PiMessageEndEvent { Message = calling }));
+        events.AddRange(mapper.Map(new PiToolExecutionStartEvent { ToolCallId = "call_write", ToolName = "write", Args = Json("{\"path\":\"notes.md\"}") }));
+        events.AddRange(mapper.Map(new PiToolExecutionEndEvent { ToolCallId = "call_write", ToolName = "write", Result = new PiToolResult { Content = result.Content } }));
+        events.AddRange(mapper.Map(new PiMessageStartEvent { Message = result }));
+        events.AddRange(mapper.Map(new PiMessageEndEvent { Message = result }));
+        events.AddRange(mapper.Map(new PiTurnEndEvent { Message = calling }));
+        events.AddRange(mapper.Map(new PiMessageStartEvent { Message = answer }));
+        events.AddRange(mapper.Map(new PiMessageEndEvent { Message = answer }));
+        events.AddRange(mapper.Map(new PiAgentEndEvent { Messages = [calling, result, answer] }));
+
+        // The tool row has the output...
+        events.ShouldContain(e => e.Type == EventTypes.MessagePartUpdated && Part(e).GetProperty("type").GetString() == "tool"
+            && ToolStateStatus(e) == "completed" && ToolState(e).GetProperty("output").GetString() == "Successfully wrote 7 bytes to notes.md");
+        // ...and no message carries it as text under the row.
+        Lifecycles(events).Select(info => info.GetProperty("id").GetString()).Distinct()
+            .ShouldBe(["pi-session-1-assistant-1000", "pi-session-1-assistant-1200"]);
+        events.Where(e => e.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            .SelectMany(LifecycleParts)
+            .ShouldNotContain(part => part.GetProperty("type").GetString() == "text" && part.GetProperty("text").GetString()!.Contains("Successfully wrote", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void a_result_message_for_a_call_pi_never_ended_finishes_the_call_and_one_for_an_unknown_call_stays_a_message()
+    {
+        var mapper = new PiMapper(SessionId);
+        var calling = AssistantMessage("toolUse", "", 1000, new PiToolCallContent { Id = "call_cut", Name = "bash", Arguments = Json("{}") });
+        mapper.Map(new PiMessageUpdateEvent { Message = calling, AssistantMessageEvent = new PiToolCallEndEvent { ContentIndex = 0, ToolCall = (PiToolCallContent)calling.Content[0], Partial = calling } });
+
+        var finished = mapper.Map(new PiMessageEndEvent { Message = new PiMessage { Role = "toolResult", ToolCallId = "call_cut", ToolName = "bash", IsError = true, Timestamp = 1100, Content = [new PiTextContent { Text = "Tool execution was aborted" }] } });
+        var unknown = mapper.Map(new PiMessageEndEvent { Message = new PiMessage { Role = "toolResult", ToolCallId = "call_elsewhere", ToolName = "bash", Timestamp = 1200, Content = [new PiTextContent { Text = "kept" }] } });
+
+        finished.ShouldNotContain(e => e.Type == EventTypes.MessageUpdated);
+        finished.ShouldContain(e => e.Type == EventTypes.MessagePartUpdated && Part(e).GetProperty("type").GetString() == "tool" && ToolStateStatus(e) == "error");
+        unknown.ShouldContain(e => e.Type == EventTypes.MessageUpdated);
+    }
+
     private static IEnumerable<JsonElement> Lifecycles(IEnumerable<HarnessEvent> events)
         => events.Where(e => e.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
             .Select(e => Payload(e).GetProperty("info"));
