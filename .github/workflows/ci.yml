@@ -39,6 +39,7 @@ jobs:
       client: ${{ steps.paths.outputs.client }}
       desktop: ${{ steps.paths.outputs.desktop }}
       launchers: ${{ steps.paths.outputs.launchers }}
+      phone: ${{ steps.paths.outputs.phone }}
 
     steps:
       # A pull request checks out its merge commit: parent 1 is main as the PR would land on it, so diffing the two
@@ -663,6 +664,54 @@ jobs:
         run: bunx vitest run
         working-directory: desktop
 
+  # ── Phone app check ──────────────────────────────────────────────────────
+  # The phone app (mobile/) type-checks and runs the web client's files, so a client/src change can break it. Here it
+  # counts toward "CI passed"; mobile.yml still decides and runs the walk-throughs. Same setup as mobile.yml's Check.
+  phone:
+    needs: changes
+    if: needs.changes.outputs.phone == 'true'
+    name: Phone app check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Enable Corepack npm
+        run: corepack enable
+
+      # The app type-checks and runs the web client's lib files, so it needs the client's modules.
+      - name: Client dependencies
+        run: corepack npm ci
+        working-directory: client
+
+      - name: App dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mobile
+
+      - name: Tokens match the web client
+        run: bun run tokens:check
+        working-directory: mobile
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+        working-directory: mobile
+
+      - name: Tests
+        run: bun test src scripts
+        working-directory: mobile
+
   # ── Playwright E2E ───────────────────────────────────────────────────────
   # Builds and tests in one job so the E2E project's packages come from its own
   # restore, not from a NuGet cache another job saved.
@@ -912,7 +961,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, unit, live, client-checks, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, e2e, aot]
+    needs: [changes, unit, live, client-checks, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, phone, e2e, aot]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 

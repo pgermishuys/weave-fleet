@@ -3,10 +3,14 @@
 # quietly skipping jobs. Each case: changed paths (space-separated) | the groups that must run (space-separated).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-all="dotnet aot e2e client desktop launchers"
+all="dotnet aot e2e client desktop launchers phone"
 cases=(
-  "client/src/main.ts|client e2e"
-  "client/src/assets/weave_logo.png|dotnet aot e2e client"
+  "client/src/main.ts|client e2e phone"
+  "client/src/lib/api/sessions.ts|client e2e phone"
+  "client/package.json|client e2e phone"
+  "client/vite.config.ts|client e2e"
+  "client/scripts/lint-design-system.ts|client e2e"
+  "client/src/assets/weave_logo.png|dotnet aot e2e client phone"
   "src/WeaveFleet.Application/Foo.cs|dotnet aot e2e"
   "src/WeaveFleet.Api/Program.cs|dotnet aot e2e launchers"
   "src/WeaveFleet.Api/Browser/preview-bridge.js|dotnet aot e2e client"
@@ -23,8 +27,11 @@ cases=(
   "docs/workflows.md|dotnet aot e2e"
   "docs/machines.md|"
   "mockups/x/a.png .weave/plans/p.md README.md AGENTS.md RELEASE.md|"
-  "mobile/src/app/new.tsx|"
-  "client/src/main.ts desktop/src/main.ts|client e2e desktop"
+  "mobile/README.md|phone"
+  "mobile/src/app/new.tsx|phone"
+  "mobile/bun.lock|$all"
+  ".github/workflows/mobile.yml|$all"
+  "client/src/main.ts desktop/src/main.ts|client e2e desktop phone"
   ".github/workflows/ci.yml|$all"
   ".github/scripts/ci-changes.sh|$all"
   "Directory.Packages.props|$all"
@@ -48,6 +55,6 @@ for c in "${cases[@]}"; do
     echo "::error::ci-changes.sh: '$paths' runs [$got_sorted], expected [$want_sorted]"; fail=1
   fi
 done
-[ "$("$here/ci-changes.sh" --all | grep -c '=true$')" -eq 6 ] || { echo "::error::ci-changes.sh --all doesn't run every group"; fail=1; }
+[ "$("$here/ci-changes.sh" --all | grep -c '=true$')" -eq 7 ] || { echo "::error::ci-changes.sh --all doesn't run every group"; fail=1; }
 [ "$fail" -eq 0 ] && echo "ci-changes.sh: ${#cases[@]} cases pass"
 exit "$fail"
