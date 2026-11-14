@@ -180,7 +180,7 @@ function handleSearchUpdate(value: string | number): void {
       <div class="border-b border-border px-2 py-1.5">
         <Input
           :model-value="browser.search.value"
-          placeholder="Search directories..."
+          placeholder="Search directories…"
           @update:model-value="handleSearchUpdate"
         />
       </div>

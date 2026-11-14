@@ -171,7 +171,7 @@ watch(() => props.docked, trackKeyboard);
           type="button"
           class="find-bar__stop"
           @click="emit('retry-older')"
-        >Retry</button>
+        >Try again</button>
       </span>
     </div>
   </div>

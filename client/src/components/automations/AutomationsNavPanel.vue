@@ -188,7 +188,7 @@ function handleCreate(): void {
         class="spinner"
         aria-hidden="true"
       />
-      <span class="sr-only">Loading automations...</span>
+      <span class="sr-only">Loading automations…</span>
     </div>
 
     <div

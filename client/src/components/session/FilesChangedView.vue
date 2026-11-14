@@ -436,7 +436,7 @@ function getActiveElement(): HTMLElement | null {
                 class="files-changed-view__retry-button"
                 @click="retryLoadingFiles"
               >
-                Retry
+                Try again
               </button>
             </div>
           </div>

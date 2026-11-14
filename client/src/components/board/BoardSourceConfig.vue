@@ -298,7 +298,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
         size="sm"
         @click="refreshBookmarks"
       >
-        Retry bookmarks
+        Try loading bookmarks again
       </Button>
     </div>
 

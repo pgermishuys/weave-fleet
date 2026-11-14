@@ -283,7 +283,7 @@ describe("Mods row: turning Mods on", () => {
   it.each([
     ["5a", "offline", "Fleet couldn't reach github.com: the connection timed out.", "If GitHub is blocked here, install Bun yourself and point Fleet at it."],
     ["5b", "blocked", "A proxy answered 403.", "Ask whoever runs your network to allow github.com/oven-sh/bun"],
-  ])("%s failed %s: red heading, the message, the hint and Retry; the switch is off", async (_id, reason, message, hint) => {
+  ])("%s failed %s: red heading, the message, the hint and Try again; the switch is off", async (_id, reason, message, hint) => {
     const wrapper = await mountRow(makeView({ job: job({ phase: "failed", reason, message }) }), "false");
 
     expect(stateOf(wrapper)).toBe("failed");
@@ -291,23 +291,23 @@ describe("Mods row: turning Mods on", () => {
     expect(panel(wrapper).get("h4").classes()).toContain("text-error");
     expect(panel(wrapper).text()).toContain(message);
     expect(panel(wrapper).text()).toContain(hint);
-    expect(buttons(wrapper)).toContain("Retry");
+    expect(buttons(wrapper)).toContain("Try again");
     expect(toggle(wrapper).attributes("aria-checked")).toBe("false");
   });
 
-  it("5 failed with no build: shows the message and hides Retry", async () => {
+  it("5 failed with no build: shows the message and hides Try again", async () => {
     const failed = job({ phase: "failed", reason: "no-build", message: "Fleet has no Bun build for this machine." });
     const wrapper = await mountRow(makeView({ job: failed }), "false");
 
     expect(stateOf(wrapper)).toBe("failed");
-    expect(buttons(wrapper)).not.toContain("Retry");
+    expect(buttons(wrapper)).not.toContain("Try again");
   });
 
-  it("5 failed: Retry posts the install again", async () => {
+  it("5 failed: Try again posts the install again", async () => {
     const wrapper = await mountRow(makeView({ job: job({ phase: "failed", reason: "other", message: "The download stopped." }) }), "false");
     server.overrides[`POST ${RUNTIME}/install`] = () => json(makeView({ job: job() }));
 
-    await button(wrapper, "Retry").trigger("click");
+    await button(wrapper, "Try again").trigger("click");
     await flushPromises();
 
     expect(called("install")).toHaveLength(1);

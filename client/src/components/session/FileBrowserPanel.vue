@@ -144,7 +144,7 @@ function handleResultClick(path: string, keep = false) {
           ref="searchInput"
           type="text"
           class="file-browser-panel__search-input"
-          :placeholder="inContents ? 'Search inside files…' : 'Search files...'"
+          :placeholder="inContents ? 'Search inside files…' : 'Search files…'"
           :aria-label="inContents ? 'Search inside files' : 'Search files'"
           @keydown="handleSearchKeydown"
         />
@@ -217,7 +217,7 @@ function handleResultClick(path: string, keep = false) {
     <div v-else-if="!inContents && isSearching" class="file-browser-panel__content">
       <div v-if="findFiles.isLoading.value" class="file-browser-panel__loading">
         <Loader2 class="file-browser-panel__spinner" :size="20" />
-        <span class="file-browser-panel__loading-text">Searching...</span>
+        <span class="file-browser-panel__loading-text">Searching…</span>
       </div>
 
       <div v-else-if="findFiles.error.value" class="file-browser-panel__error">
@@ -247,7 +247,7 @@ function handleResultClick(path: string, keep = false) {
     <div v-else class="file-browser-panel__content">
       <div v-if="rootLoading && rootEntries.length === 0" class="file-browser-panel__loading">
         <Loader2 class="file-browser-panel__spinner" :size="20" />
-        <span class="file-browser-panel__loading-text">Loading files...</span>
+        <span class="file-browser-panel__loading-text">Loading files…</span>
       </div>
 
       <div v-else-if="error" class="file-browser-panel__error">

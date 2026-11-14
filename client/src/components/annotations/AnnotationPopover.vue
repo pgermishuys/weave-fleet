@@ -106,7 +106,7 @@ onMounted(() => {
     <Textarea
       ref="textareaRef"
       v-model="annotationText"
-      placeholder="Add your annotation..."
+      placeholder="Add your annotation…"
       class="min-h-24 resize-none"
       @keydown.enter.ctrl="handleSend"
       @keydown.enter.meta="handleSend"

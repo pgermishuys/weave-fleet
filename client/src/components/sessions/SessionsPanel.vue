@@ -641,8 +641,8 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           variant="ghost"
           size="sm"
           class="panel-action-button panel-action-button--icon"
-          aria-label="New Project"
-          title="New Project"
+          aria-label="New project"
+          title="New project"
           @click="handleNewProject"
         >
           <FolderPlus
@@ -703,7 +703,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
                 class="sessions-feedback-banner__button"
                 @click="handleRetry"
               >
-                Retry
+                Try again
               </button>
             </div>
 
@@ -740,7 +740,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
                 class="sessions-feedback-state__button"
                 @click="handleRetry"
               >
-                Retry
+                Try again
               </button>
             </div>
 

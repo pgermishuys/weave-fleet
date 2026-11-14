@@ -128,7 +128,7 @@ onMounted(load);
           data-testid="mods-retry"
           @click="load"
         >
-          Retry
+          Try again
         </button>
       </div>
 

@@ -110,13 +110,13 @@ function handleInputKeyDown(event: KeyboardEvent): void {
   <CommandDialog
     :key="paletteKey"
     :open="paletteOpen"
-    title="Command Palette"
+    title="Command palette"
     description="Search for a command to run."
     :show-close-button="false"
     @update:open="handleOpenChange"
   >
     <CommandInput
-      :placeholder="currentLevel ? `${currentLevel.parent.label}...` : 'Type a command or search...'"
+      :placeholder="currentLevel ? `${currentLevel.parent.label}…` : 'Type a command or search…'"
       @keydown="handleInputKeyDown"
     />
 

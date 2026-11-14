@@ -328,7 +328,7 @@ function showInChat(turn: SessionTurn): void {
           :disabled="isLoadingOlder"
           @click="loadOlder()"
         >
-          {{ isLoadingOlder ? "Loading…" : loadOlderFailed ? "Couldn't load · Retry" : "Load older" }}
+          {{ isLoadingOlder ? "Loading…" : loadOlderFailed ? "Couldn't load · Try again" : "Load older" }}
         </button>
       </div>
     </div>

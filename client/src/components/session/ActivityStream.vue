@@ -655,7 +655,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
         @click="handleLoadOlder"
       >
         <template v-if="loadOlderFailed">
-          Couldn't load older messages · Retry
+          Couldn't load older messages · Try again
         </template>
         <template v-else>
           Load older messages
@@ -859,7 +859,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
                   class="turn-failure__retry-icon"
                   aria-hidden="true"
                 />
-                Retry
+                Try again
               </button>
             </span>
           </div>

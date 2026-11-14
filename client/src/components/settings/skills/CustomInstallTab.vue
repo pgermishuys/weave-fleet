@@ -58,7 +58,7 @@ async function submitInstall(): Promise<void> {
         />
 
         <label class="grid gap-1 text-sm text-text">
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Skill URL or Path</span>
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Skill URL or path</span>
           <input
             v-model="installUrl"
             type="text"

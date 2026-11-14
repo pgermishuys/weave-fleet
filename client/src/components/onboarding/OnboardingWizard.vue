@@ -83,7 +83,7 @@ async function saveCredential(): Promise<void> {
 
   try {
     const requestBody: StoreCredentialRequest = {
-      label: `My ${selectedProvider.value.label} API Key`,
+      label: `My ${selectedProvider.value.label} API key`,
       namespace: selectedProvider.value.namespace,
       kind: selectedProvider.value.kind,
       value: credentialValue.value.trim(),
@@ -170,7 +170,7 @@ async function finishOnboarding(): Promise<void> {
             :class="`${buttonPrimaryClass} w-full max-w-xs`"
             @click="handleNextFromWelcome"
           >
-            Get Started
+            Get started
           </button>
         </section>
 
@@ -211,7 +211,7 @@ async function finishOnboarding(): Promise<void> {
 
             <label class="grid gap-2 text-sm text-text">
               <span class="text-xs font-medium uppercase tracking-wide text-muted">
-                {{ selectedProvider.label }} API Key
+                {{ selectedProvider.label }} API key
               </span>
               <input
                 id="onboard-api-key"
@@ -254,7 +254,7 @@ async function finishOnboarding(): Promise<void> {
                   :size="16"
                   aria-hidden="true"
                 />
-                Save API Key
+                Save API key
               </button>
 
               <button

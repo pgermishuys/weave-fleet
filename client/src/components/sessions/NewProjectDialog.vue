@@ -132,7 +132,7 @@ watch(open, async (isOpen) => {
   >
     <DialogContent class="sm:max-w-lg">
       <DialogHeader>
-        <DialogTitle>New Project</DialogTitle>
+        <DialogTitle>New project</DialogTitle>
         <DialogDescription>
           Create a project to organize related sessions.
         </DialogDescription>

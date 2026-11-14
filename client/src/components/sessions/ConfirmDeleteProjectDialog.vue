@@ -121,7 +121,7 @@ function handleConfirm(): void {
           :disabled="isDeleting"
           @click="handleConfirm"
         >
-          {{ isDeleting ? "Deleting…" : "Delete Project" }}
+          {{ isDeleting ? "Deleting…" : "Delete project" }}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

@@ -242,7 +242,7 @@ describe("SessionsPanel across machines", () => {
     expect(sidebar.isGroupCollapsed(machineGroupKey(hangar.id))).toBe(false);
 
     // The panel's own New Project button starts on the machine you're on again.
-    await view.get("[aria-label='New Project']").trigger("click");
+    await view.get("[aria-label='New project']").trigger("click");
     expect(view.findComponent(NewProjectDialog).props("machineKey")).toBeNull();
     view.unmount();
   });

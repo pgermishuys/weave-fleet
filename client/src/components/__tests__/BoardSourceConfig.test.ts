@@ -208,7 +208,7 @@ describe("BoardSourceConfig", () => {
     await flushPromises();
 
     expect(wrapper.get('[role="alert"]').text()).toContain("Failed to fetch bookmarks from server.");
-    const retry = wrapper.findAll("button").find((button) => button.text() === "Retry bookmarks");
+    const retry = wrapper.findAll("button").find((button) => button.text() === "Try loading bookmarks again");
     expect(retry).toBeDefined();
     await retry!.trigger("click");
     expect(bookmarkState.refresh).toHaveBeenCalledTimes(1);

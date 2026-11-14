@@ -258,7 +258,7 @@ describe("WorkflowRunCard", () => {
     expect(wrapper.find('[data-testid="workflow-card"]').exists()).toBe(false);
   });
 
-  it("waits on a step whose skill was turned off, with Retry, Start without it and a way to Settings → Skills & tools", async () => {
+  it("waits on a step whose skill was turned off, with Try again, Start without it and a way to Settings → Skills & tools", async () => {
     const run = buildRun({
       id: "run-skill",
       status: "waiting",
@@ -277,7 +277,7 @@ describe("WorkflowRunCard", () => {
         question: null,
         sessionId: "s3",
         choices: [
-          { id: "retry", label: "Retry", note: false, to: "review" },
+          { id: "retry", label: "Try again", note: false, to: "review" },
           { id: "without-skill", label: "Start without it", note: false, to: "review" },
         ],
       },
@@ -288,7 +288,7 @@ describe("WorkflowRunCard", () => {
 
     expect(wrapper.text()).toContain("Review needs you");
     expect(wrapper.text()).toContain("Review uses fleet-code-review, which is now off.");
-    expect(wrapper.get('[data-testid="workflow-card-choice-0"]').text()).toBe("Retry");
+    expect(wrapper.get('[data-testid="workflow-card-choice-0"]').text()).toBe("Try again");
     expect(wrapper.get('[data-testid="workflow-card-choice-1"]').text()).toBe("Start without it");
     expect(wrapper.get('[data-testid="workflow-card-skill-off"]').text()).toContain("Settings → Skills & tools");
     await wrapper.get('[data-testid="workflow-card-skill-off"] button').trigger("click");
@@ -301,7 +301,7 @@ describe("WorkflowRunCard", () => {
     expect(JSON.parse(init.body as string)).toEqual({ choice: "without-skill", note: null });
   });
 
-  it("says a skill that's still off, from the server, when Retry is pressed too soon", async () => {
+  it("says a skill that's still off, from the server, when Try again is pressed too soon", async () => {
     const run = buildRun({
       id: "run-skill-2",
       status: "waiting",
@@ -311,7 +311,7 @@ describe("WorkflowRunCard", () => {
       sessions: [runSession({ sessionId: "s4", stepId: "review" })],
       waiting: {
         kind: "skill-off", stepId: "review", stepTitle: "Review", message: "Review uses fleet-code-review, which is now off.", question: null, sessionId: "s4",
-        choices: [{ id: "retry", label: "Retry", note: false, to: "review" }, { id: "without-skill", label: "Start without it", note: false, to: "review" }],
+        choices: [{ id: "retry", label: "Try again", note: false, to: "review" }, { id: "without-skill", label: "Start without it", note: false, to: "review" }],
       },
     });
     useWorkflowsStore().upsert(run);
