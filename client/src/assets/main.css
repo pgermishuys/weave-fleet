@@ -22,6 +22,8 @@
   --primary: var(--accent);
   --primary-foreground: #ffffff;
   --accent-dim: rgba(99, 102, 241, 0.15);
+  /* Keyboard focus ring (see *:focus-visible). */
+  --focus-ring: var(--accent);
   --running: #22c55e;
   --idle: #f59e0b;
   --complete: #3b82f6;
@@ -315,27 +317,31 @@
     border-color: var(--border);
   }
 
-  /* Consistent subtle focus ring across all interactive elements */
+  /* Keyboard focus: a 2px ring in --focus-ring (the accent, 3:1 or better against every surface in the shipped
+     themes). :focus-visible keeps it off mouse clicks. It's an outline, so it never moves layout or hides an element's
+     own border or shadow. It sits 2px outside by default; a row inside a scroller can draw it inside instead
+     (outline-offset: -2px), which a component's own rule may set. */
   *:focus-visible {
-    --tw-ring-color: color-mix(in srgb, var(--accent) 25%, transparent) !important;
-    --tw-ring-shadow: 0 0 0 1px var(--tw-ring-color) !important;
-    box-shadow: var(--tw-ring-shadow) !important;
-    border-color: var(--accent) !important;
-    outline: none !important;
+    outline: 2px solid var(--focus-ring) !important;
+    outline-offset: 2px;
+    /* The ui/ components also ask for Tailwind focus rings (focus-visible:ring-[3px]); the outline replaces them. */
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
   }
 
-  /* Fields that fill their own box show focus with the caret: the file editor, Go to file, the phone composer. */
-  .cm-editor .cm-content:focus-visible,
-  .go-to-file__input input:focus-visible,
-  .phone-composer-input:focus-visible {
-    box-shadow: none !important;
+  /* Text fields match :focus-visible on a click too, so they keep a quieter cue that works for both: the accent
+     border and the caret. */
+  :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"]), textarea, [contenteditable]:not([contenteditable="false"])):focus-visible {
+    outline: none !important;
+    border-color: var(--accent) !important;
   }
 
   /* A menu's rows show focus with the highlight tint, the same for the keyboard as for the pointer. */
   [role="menuitem"]:focus-visible,
   [role="menuitemcheckbox"]:focus-visible,
-  [role="menuitemradio"]:focus-visible {
-    box-shadow: none !important;
+  [role="menuitemradio"]:focus-visible,
+  [role="option"]:focus-visible {
+    outline: none !important;
   }
 
   html {
