@@ -461,7 +461,7 @@ onUnmounted(() => stopPolling?.());
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-weight: 600;
 }
 

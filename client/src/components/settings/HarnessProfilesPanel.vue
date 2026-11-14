@@ -104,7 +104,7 @@ function usage(profile: HarnessProfile): string {
 
     <p
       v-if="notice"
-      class="text-xs text-running"
+      class="text-xs text-running-text"
       role="status"
       data-testid="harness-profile-notice"
     >

@@ -165,7 +165,7 @@ watch(() => nightly.value?.enabled && harnessType.value, (type) => emit("harness
         </button>
         <span
           v-if="nightly.paused"
-          class="text-xs text-amber-300"
+          class="text-xs text-idle-text"
           data-testid="dream-paused"
         >
           Paused in Automations

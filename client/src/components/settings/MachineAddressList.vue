@@ -298,6 +298,6 @@ function setHandle(url: string, element: unknown): void {
 
 .route--in-use .route__status {
   font-weight: 600;
-  color: var(--running);
+  color: var(--running-text);
 }
 </style>

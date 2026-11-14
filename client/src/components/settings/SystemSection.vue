@@ -152,13 +152,13 @@ const downloadProgressLabel = computed(() => {
           <CheckCircle2
             v-else-if="statusVariant === 'ok'"
             :size="15"
-            class="text-running"
+            class="text-running-text"
             aria-hidden="true"
           />
           <Download
             v-else-if="statusVariant === 'warn'"
             :size="15"
-            class="text-idle"
+            class="text-idle-text"
             aria-hidden="true"
           />
           <AlertCircle
@@ -179,7 +179,7 @@ const downloadProgressLabel = computed(() => {
             :class="{
               'text-text': statusVariant === 'ok' || statusVariant === 'muted',
               'text-accent': statusVariant === 'info',
-              'text-idle': statusVariant === 'warn',
+              'text-idle-text': statusVariant === 'warn',
               'text-error-text': statusVariant === 'error',
             }"
           >

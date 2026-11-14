@@ -422,7 +422,7 @@ function answerText(questionIdx: number): string {
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -702,7 +702,7 @@ function answerText(questionIdx: number): string {
   height: 13px;
   margin-left: auto;
   flex-shrink: 0;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .qrow__skipped {

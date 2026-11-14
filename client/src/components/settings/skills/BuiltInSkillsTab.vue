@@ -256,7 +256,7 @@ async function toggleFleetChange(name: string): Promise<void> {
 
 .skill-pill--changed {
   background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .skill-changed {

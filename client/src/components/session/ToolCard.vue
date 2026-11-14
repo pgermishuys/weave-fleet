@@ -576,7 +576,7 @@ function handleExpandVisual(): void {
 }
 
 .tool-header__adds {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .tool-header__removes {

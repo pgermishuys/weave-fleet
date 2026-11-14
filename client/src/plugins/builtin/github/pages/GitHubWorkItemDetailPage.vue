@@ -1057,8 +1057,8 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
   font-size: 11.5px;
 }
 
-.gh-rail__verdict[data-state="APPROVED"] { color: var(--check-pass); }
-.gh-rail__verdict[data-state="CHANGES_REQUESTED"] { color: var(--pr-blocked); }
+.gh-rail__verdict[data-state="APPROVED"] { color: var(--check-pass-text); }
+.gh-rail__verdict[data-state="CHANGES_REQUESTED"] { color: var(--pr-blocked-text); }
 
 .gh-rail__labels {
   display: flex;

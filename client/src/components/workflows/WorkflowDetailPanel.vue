@@ -738,7 +738,7 @@ function openRun(run: WorkflowRun): void {
 .wf-runs__ok {
   width: 14px;
   height: 14px;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .wf-runs__fail {
@@ -768,11 +768,11 @@ function openRun(run: WorkflowRun): void {
 }
 
 .wf-runs__status--wait {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .wf-runs__status--run {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .wf-runs__status--with {

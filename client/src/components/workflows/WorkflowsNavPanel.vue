@@ -342,11 +342,11 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 }
 
 .workflow-row__meta--working {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .workflow-row__meta--wait {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .workflow-row__meta--with {

@@ -1107,7 +1107,7 @@ function formatTime(date: Date): string {
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   list-style: none;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-size: 12px;
 }
 
@@ -1205,7 +1205,7 @@ function formatTime(date: Date): string {
   height: 34px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--running) 15%, transparent);
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .report__dim {

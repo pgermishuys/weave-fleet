@@ -222,7 +222,7 @@ onUnmounted(stopTimer);
             <Check
               v-if="item.ok"
               :size="16"
-              class="add-phone__mark text-running"
+              class="add-phone__mark text-running-text"
               aria-label="Done"
             />
             <Circle
@@ -334,7 +334,7 @@ onUnmounted(stopTimer);
       </div>
       <p
         v-if="connected"
-        class="mt-2 flex items-center gap-1.5 text-sm text-running"
+        class="mt-2 flex items-center gap-1.5 text-sm text-running-text"
         role="status"
       >
         <Check
@@ -444,7 +444,7 @@ onUnmounted(stopTimer);
         </form>
         <p
           v-if="insecure"
-          class="mt-1 flex max-w-prose items-start gap-1.5 text-xs text-idle"
+          class="mt-1 flex max-w-prose items-start gap-1.5 text-xs text-idle-text"
           data-testid="add-phone-insecure"
         >
           <AlertCircle

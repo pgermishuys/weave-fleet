@@ -199,7 +199,7 @@ function shown<T>(path: string, matches: T[]): T[] {
 }
 
 .find-results__note--warn strong {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .find-results__note--error {

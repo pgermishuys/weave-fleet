@@ -276,11 +276,11 @@ function sessionLabel(session: DreamSessionRef): string {
           <li
             v-for="change in flags"
             :key="change.id"
-            class="rounded-card border border-amber-500/40 bg-card-bg p-3"
+            class="rounded-card border border-idle/40 bg-card-bg p-3"
             data-testid="dream-flag"
           >
             <p class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-              <span class="text-amber-300">{{ dreamKindLabel(change.kind) }}</span>
+              <span class="text-idle-text">{{ dreamKindLabel(change.kind) }}</span>
               <template v-if="change.list">
                 · {{ dreamListLabel(change.list) }} · your note
               </template>
@@ -388,11 +388,11 @@ function sessionLabel(session: DreamSessionRef): string {
             v-for="change in [...groups.applied, ...groups.left]"
             :key="change.id"
             class="rounded-card border bg-card-bg p-3"
-            :class="change.kind === 'left' ? 'border-amber-500/40' : 'border-border'"
+            :class="change.kind === 'left' ? 'border-idle/40' : 'border-border'"
             data-testid="dream-change"
           >
             <p class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-              <span :class="change.kind === 'left' ? 'text-amber-300' : 'text-accent'">{{ dreamKindLabel(change.kind) }}</span>
+              <span :class="change.kind === 'left' ? 'text-idle-text' : 'text-accent'">{{ dreamKindLabel(change.kind) }}</span>
               <template v-if="change.list">
                 · {{ dreamListLabel(change.list) }}
               </template>

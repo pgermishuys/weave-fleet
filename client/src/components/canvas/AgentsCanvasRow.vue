@@ -224,11 +224,11 @@ const label = computed(() => [props.row.name, props.row.task, props.parent ? nul
 }
 
 .agent-row--running .agent-row__state {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .agent-row--waiting .agent-row__state {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .agent-row--failed .agent-row__state {

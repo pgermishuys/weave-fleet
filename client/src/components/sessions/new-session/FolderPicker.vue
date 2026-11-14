@@ -1834,7 +1834,7 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
   padding: 0 4px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--running) 14%, transparent);
-  color: var(--running);
+  color: var(--running-text);
   font-size: 10px;
   font-weight: 600;
   line-height: 16px;

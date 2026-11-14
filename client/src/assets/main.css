@@ -50,6 +50,12 @@
   /* Error words (ErrorNote): --error moved toward --text until it reads at 4.5:1 on the error tint. */
   --error-text: #EE595A;
   --queued: #8b5cf6;
+  /* Status words: each status colour moved toward black or white (keeping its hue) until it reads at 4.5:1 on
+     every surface and on its own tint there. The colours themselves are for dots, icons and tints: 3:1. */
+  --running-text: var(--running);
+  --idle-text: var(--idle);
+  --complete-text: #4F8FF7;
+  --queued-text: #9F78F8;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --radius-card: 10px;
@@ -65,6 +71,7 @@
      resting state, so it stays quiet; waiting on the user is amber. */
   --status-idle: var(--muted);
   --status-waiting: var(--idle);
+  --status-waiting-text: var(--idle-text);
   /* Pull requests: one colour per state and for checks, on every GitHub surface. "Blocked" is an open pull
      request something stops (a failing check, a conflict, changes requested), in the waiting colour. */
   --pr-open: var(--running);
@@ -77,6 +84,14 @@
   --check-pending: var(--status-waiting);
   --diff-add: var(--running);
   --diff-del: var(--error);
+  /* The same states as words. */
+  --pr-open-text: var(--running-text);
+  --pr-blocked-text: var(--status-waiting-text);
+  --pr-merged-text: var(--queued-text);
+  --pr-closed-text: var(--error-text);
+  --check-pass-text: var(--running-text);
+  --diff-add-text: var(--running-text);
+  --diff-del-text: var(--error-text);
   --bg: var(--main-bg);
   --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
@@ -111,12 +126,16 @@
   --primary: var(--accent);
   --primary-foreground: #ffffff;
   --accent-dim: rgba(91, 110, 199, 0.12);
-  --running: #16a34a;
-  --idle: #d97706;
+  --running: #16A149;
+  --idle: #D27306;
   --complete: #2563eb;
   --error: #dc2626;
   --error-text: #BF2424;
   --queued: #7c3aed;
+  --running-text: #107435;
+  --idle-text: #975304;
+  --complete-text: #2159D4;
+  --queued-text: #7537DF;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 }
@@ -149,6 +168,10 @@
   --error: #ef4444;
   --error-text: #F17070;
   --queued: #8b5cf6;
+  --running-text: var(--running);
+  --idle-text: var(--idle);
+  --complete-text: #669EF8;
+  --queued-text: #AA88F8;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 }
@@ -181,6 +204,10 @@
   --error: #ef4444;
   --error-text: #EF4444;
   --queued: #8b5cf6;
+  --running-text: var(--running);
+  --idle-text: var(--idle);
+  --complete-text: var(--complete);
+  --queued-text: #9266F7;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 }
@@ -212,6 +239,10 @@
   --error: #BF616A;
   --error-text: #D7ACB3;
   --queued: #B48EAD;
+  --running-text: #B6CCA4;
+  --idle-text: var(--idle);
+  --complete-text: #ADC2D7;
+  --queued-text: #D1B9CC;
   --destructive: #BF616A;
   --destructive-foreground: #ECEFF4;
 }
@@ -243,6 +274,10 @@
   --error: #FF5555;
   --error-text: #FD8987;
   --queued: #FF79C6;
+  --running-text: var(--running);
+  --idle-text: var(--idle);
+  --complete-text: var(--complete);
+  --queued-text: #FF8ECF;
   --destructive: #FF5555;
   --destructive-foreground: #282A36;
 }
@@ -274,7 +309,11 @@
   --complete: #268BD2;
   --error: #DC322F;
   --error-text: #E97C73;
-  --queued: #6C71C4;
+  --queued: #6D72C5;
+  --running-text: #A0AF38;
+  --idle-text: #C5A236;
+  --complete-text: #67AEE0;
+  --queued-text: #9C9FD8;
   --destructive: #DC322F;
   --destructive-foreground: #FDF6E3;
 }
@@ -302,12 +341,16 @@
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
   --primary-foreground: #00222B;
   --accent-dim: rgba(38, 139, 210, 0.12);
-  --running: #859900;
-  --idle: #B58900;
+  --running: #7A8D00;
+  --idle: #A87F00;
   --complete: #268BD2;
   --error: #DC322F;
   --error-text: #AB3333;
   --queued: #6C71C4;
+  --running-text: #586600;
+  --idle-text: #795B00;
+  --complete-text: #1B6395;
+  --queued-text: #545899;
   --destructive: #DC322F;
   --destructive-foreground: #FDF6E3;
 }
@@ -339,6 +382,10 @@
   --error: #F92672;
   --error-text: #F98DB1;
   --queued: #AE81FF;
+  --running-text: var(--running);
+  --idle-text: var(--idle);
+  --complete-text: var(--complete);
+  --queued-text: #C8A9FF;
   --destructive: #F92672;
   --destructive-foreground: #F8F8F2;
 }
@@ -370,6 +417,10 @@
   --error: #F85149;
   --error-text: #F85149;
   --queued: #BC8CFF;
+  --running-text: var(--running);
+  --idle-text: var(--idle);
+  --complete-text: var(--complete);
+  --queued-text: var(--queued);
   --destructive: #F85149;
   --destructive-foreground: #E6EDF3;
 }
@@ -396,11 +447,15 @@
   --color-coral: var(--coral);
   --color-indigo: var(--indigo);
   --color-running: var(--running);
+  --color-running-text: var(--running-text);
   --color-idle: var(--idle);
+  --color-idle-text: var(--idle-text);
   --color-complete: var(--complete);
+  --color-complete-text: var(--complete-text);
   --color-error: var(--error);
   --color-error-text: var(--error-text);
   --color-queued: var(--queued);
+  --color-queued-text: var(--queued-text);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-surface: var(--panel-bg);

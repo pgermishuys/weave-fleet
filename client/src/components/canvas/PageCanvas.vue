@@ -414,7 +414,7 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
   display: inline-block;
   margin-right: 6px;
   vertical-align: -2px;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .page-canvas__choice-text b {

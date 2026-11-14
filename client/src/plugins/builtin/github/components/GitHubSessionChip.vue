@@ -89,7 +89,7 @@ const title = computed(() => {
 
 .gh-session-chip[data-tone="attention"] {
   background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .gh-session-chip:focus-visible {

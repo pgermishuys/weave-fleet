@@ -202,7 +202,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .msg-reads__running {
   margin-left: auto;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .msg-reads__chevron {

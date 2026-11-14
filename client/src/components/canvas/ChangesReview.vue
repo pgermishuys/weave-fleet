@@ -1327,12 +1327,12 @@ function onCodeScroll(event: Event): void {
 }
 
 .review__add {
-  color: var(--diff-add);
+  color: var(--diff-add-text);
   font-weight: 500;
 }
 
 .review__del {
-  color: var(--diff-del);
+  color: var(--diff-del-text);
   font-weight: 500;
 }
 
@@ -1749,7 +1749,7 @@ function onCodeScroll(event: Event): void {
 }
 
 .rline--add .rline__mk {
-  color: var(--diff-add);
+  color: var(--diff-add-text);
 }
 
 .rline--remove {
@@ -1761,7 +1761,7 @@ function onCodeScroll(event: Event): void {
 }
 
 .rline--remove .rline__mk {
-  color: var(--diff-del);
+  color: var(--diff-del-text);
 }
 
 .rline--pad {

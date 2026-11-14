@@ -131,6 +131,6 @@ const details = computed(() => summaryParts(props.turn.summary).join(" · "));
   height: 13px;
   margin-left: auto;
   flex-shrink: 0;
-  color: var(--running);
+  color: var(--running-text);
 }
 </style>

@@ -1647,7 +1647,7 @@ onUnmounted(() => {
 }
 
 .new-session__plan-warn {
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .new-session__no-message {

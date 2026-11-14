@@ -758,7 +758,7 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
 
 .send-btn--sent {
   border-color: transparent;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .link-card__error {

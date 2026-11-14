@@ -11,6 +11,10 @@
 //   and the open row's age 3.47:1 on its highlight.
 // - Error words: ErrorNote writes --error-text on a 10% --error tint, 4.5:1 on every surface (1.4.3). --error itself
 //   was 2.28:1 there in nord and 3.73:1 in light, and text-red-200 was near-invisible on the light theme.
+// - Status words (running, waiting, done, queued; and the PR, check and diff states built on them): --<status>-text,
+//   4.5:1 on every surface and on the status's own 14% tint there (1.4.3); the status colour itself is for dots, icons
+//   and tints, 3:1 (1.4.11). Light's --running and --idle were 2.9:1 as words, solarized-light's 2.6:1, and status
+//   pills used raw Tailwind greens and ambers (text-green-300 was 1.28:1 on the light theme).
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,6 +30,16 @@ function block(selector: string): string {
 }
 
 type Vars = Record<string, string>;
+
+let sourceFiles: { file: string; text: string }[] | undefined;
+/** Every source file under src/ (not tests), read once for the whole file. */
+function sources(): { file: string; text: string }[] {
+  const src = resolve(__dirname, "../..");
+  sourceFiles ??= readdirSync(src, { recursive: true, encoding: "utf8" })
+    .filter((f) => /\.(vue|ts|css)$/.test(f) && !/__tests__/.test(f))
+    .map((file) => ({ file, text: readFileSync(join(src, file), "utf8") }));
+  return sourceFiles;
+}
 
 function themes(): Record<string, Vars> {
   const out: Record<string, Vars> = {};
@@ -79,18 +93,13 @@ describe("text on the accent", () => {
     expect(contrast(text, accent), `${text} on ${accent}`).toBeGreaterThanOrEqual(4.5);
   });
 
-  // Reads every source file once, and only scans the files that could offend: the line check where "text-white"
+  // Scans every source file (read once for this test file), but only the files that could offend: the line check where "text-white"
   // appears, the rule check where a background is the accent. Splitting rules on "}" keeps it linear; the old
   // /[^{}]+\{([^{}]*)\}/g backtracked on every brace-free stretch, took about 3 s and hit the 5 s timeout under load.
   it("is the theme's --primary-foreground, never a hardcoded white", () => {
-    const src = resolve(__dirname, "../..");
     const offenders: string[] = [];
-    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter(
-      (f) => /\.(vue|ts|css)$/.test(f) && !/__tests__/.test(f),
-    );
     const accentBackground = /background(-color)?:\s*var\(--(accent|primary)\)/;
-    for (const file of files) {
-      const text = readFileSync(join(src, file), "utf8");
+    for (const { file, text } of sources()) {
       if (text.includes("text-white")) {
         text.split("\n").forEach((line, i) => {
           if (/\bbg-(accent|primary)\b/.test(line) && /(?<![:\w-])text-white\b/.test(line)) offenders.push(`${file}:${i + 1}`);
@@ -261,5 +270,63 @@ describe("error words", () => {
       const tint = over(error, 10, resolveVar(vars, vars[surface]));
       expect(contrast(text, tint), `${text} on 10% ${error} over --${surface} = ${tint}`).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+const STATUSES = ["running", "idle", "complete", "queued"] as const;
+// A rule may colour with a status itself (not its -text word colour) only where it draws an icon, glyph or mark.
+const NON_TEXT = /svg|icon|glyph|star|__check\b|__mark|__shield|__marker|ring__fill/;
+const STATUS_TOKEN = /var\(--(running|idle|complete|queued|status-waiting|pr-open|pr-blocked|pr-merged|pr-closed|check-pass|diff-add|diff-del)\)/;
+// Components this file checks on their own terms: the session row's mixes and the GitHub state icons.
+const OWN_TERMS = new Set(["components/github/PrBadge.vue", "components/sessions/SessionItem.vue", "components/github/CheckIcon.vue", "components/github/GitHubItemIcon.vue", "components/sessions/StatusGlyph.vue"]);
+const PALETTE = /\b(?:text|bg|border|fill|stroke|ring)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
+
+
+describe("status words", () => {
+  it.each(Object.entries(themes()))("reach 4.5:1 on every surface and their own tint in the %s theme, dots 3:1", (_name, vars) => {
+    const failures: string[] = [];
+    for (const status of STATUSES) {
+      const dot = resolveVar(vars, vars[status]);
+      const word = resolveVar(vars, vars[`${status}-text`]);
+      for (const surface of ["main-bg", "panel-bg", "card-bg"]) {
+        const bg = resolveVar(vars, vars[surface]);
+        if (contrast(dot, bg) < 3) failures.push(`--${status} ${dot} on --${surface}: ${contrast(dot, bg).toFixed(2)}`);
+        for (const ground of [bg, over(dot, 14, bg)]) {
+          const ratio = contrast(word, ground);
+          if (ratio < 4.5) failures.push(`--${status}-text ${word} on ${ground} (--${surface}): ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it("are written in the -text colours: a status colour itself colours only icons, glyphs and marks", () => {
+    const offenders: string[] = [];
+    for (const { file, text } of sources()) {
+      if (OWN_TERMS.has(file)) continue;
+      // Tailwind: text-running and friends only on an icon (a PascalCase component or an <svg>).
+      if (/\btext-(?:running|idle|complete|queued)(?![-\w/])/.test(text)) for (const tag of text.matchAll(/<([A-Za-z][\w-]*)\b[^>]*?\btext-(?:running|idle|complete|queued)(?![-\w/])/g)) {
+        if (!/^(?:[A-Z]|svg$)/.test(tag[1])) offenders.push(`${file} <${tag[1]}> uses a status colour as a text class`);
+      }
+      if (!STATUS_TOKEN.test(text)) continue;
+      const style = file.endsWith(".vue") ? text.slice(text.indexOf("<style")) : text;
+      for (const chunk of style.split("}")) {
+        const open = chunk.lastIndexOf("{");
+        if (open < 0) continue;
+        const selector = chunk.slice(0, open).replace(/^[\s\S]*<style[^>]*>/, "").split(/[{};]/).pop()!.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+        if (NON_TEXT.test(selector)) continue;
+        for (const decl of chunk.slice(open + 1).matchAll(/(?<![-\w])color:\s*([^;]+);/g)) {
+          if (STATUS_TOKEN.test(decl[1])) offenders.push(`${file} ${selector}: ${decl[1].trim()}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("never come from Tailwind's own palettes, which read on one theme only", () => {
+    const offenders = sources().flatMap(({ file, text }) =>
+      text.split("\n").flatMap((line, i) => (PALETTE.test(line) ? [`${file}:${i + 1} ${line.match(PALETTE)![0]}`] : [])),
+    );
+    expect(offenders).toEqual([]);
   });
 });

@@ -838,7 +838,7 @@ onUnmounted(() => {
 
 .ps__answered {
   display: inline;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .ps__shell {

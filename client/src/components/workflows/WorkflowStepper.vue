@@ -250,13 +250,13 @@ function open(step: WorkflowRunStep): void {
 }
 
 .wf-stp--wait {
-  color: var(--idle);
+  color: var(--idle-text);
 }
 
 .wf-stp__ok {
   width: 12px;
   height: 12px;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .wf-stp__dot {

@@ -27,6 +27,6 @@ defineProps<{
   white-space: nowrap;
 }
 
-.diff-stat__add { color: var(--diff-add); }
-.diff-stat__del { color: var(--diff-del); }
+.diff-stat__add { color: var(--diff-add-text); }
+.diff-stat__del { color: var(--diff-del-text); }
 </style>

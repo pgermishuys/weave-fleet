@@ -411,7 +411,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
 .ph-btn.ph-btn--done:disabled {
   border-color: color-mix(in srgb, var(--running) 35%, transparent);
   background: color-mix(in srgb, var(--running) 12%, var(--ph-panel));
-  color: var(--running);
+  color: var(--running-text);
   opacity: 1;
 }
 
@@ -1278,7 +1278,7 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
   width: 15px;
   height: 15px;
   flex: none;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .ph-tool__needs {
@@ -1292,11 +1292,11 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
 }
 
 .ph-add {
-  color: var(--diff-add);
+  color: var(--diff-add-text);
 }
 
 .ph-del {
-  color: var(--diff-del);
+  color: var(--diff-del-text);
 }
 
 .ph-tool--more .ph-tool__l {
@@ -2524,7 +2524,7 @@ html[data-phone].ph-kb-open .ph-sheet__foot {
   border: 1px solid color-mix(in srgb, var(--running) 30%, transparent);
   border-radius: 50%;
   background: color-mix(in srgb, var(--running) 12%, transparent);
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .ph-done-mark svg {

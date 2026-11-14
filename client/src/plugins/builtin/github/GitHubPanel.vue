@@ -334,7 +334,7 @@ async function handleRemove(fullName: string): Promise<void> {
 }
 
 .panel-row__count--hot {
-  color: var(--pr-blocked);
+  color: var(--pr-blocked-text);
 }
 
 .bookmark-item {

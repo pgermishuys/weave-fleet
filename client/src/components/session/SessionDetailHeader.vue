@@ -1008,7 +1008,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: color-mix(in srgb, var(--status-waiting) 10%, transparent);
   white-space: nowrap;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   font-size: 11px;
 }
 
@@ -1112,7 +1112,7 @@ onUnmounted(() => {
 }
 
 .session-detail-header__directory--copied .session-detail-header__copy-path {
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .session-detail-header__copied {
@@ -1201,7 +1201,7 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
   white-space: nowrap;
 }
 

@@ -479,7 +479,7 @@ function handleNewSession(): void {
 
 .dashboard__section--attention .dashboard__section-title {
   padding: 0 14px;
-  color: var(--status-waiting);
+  color: var(--status-waiting-text);
 }
 
 .dashboard__section-count {

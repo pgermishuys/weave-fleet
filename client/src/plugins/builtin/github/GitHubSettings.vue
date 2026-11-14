@@ -318,7 +318,7 @@ async function handleRefreshRepos(): Promise<void> {
 
           <div
             v-else-if="deviceState.status === 'complete'"
-            class="flex items-start gap-2 rounded-card border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300"
+            class="flex items-start gap-2 rounded-card border border-running/30 bg-running/10 px-3 py-2 text-sm text-running-text"
           >
             <CheckCircle2
               :size="16"
@@ -388,7 +388,7 @@ async function handleRefreshRepos(): Promise<void> {
           />
           <div
             v-else-if="patMessage"
-            class="flex items-start gap-2 rounded-card border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300"
+            class="flex items-start gap-2 rounded-card border border-running/30 bg-running/10 px-3 py-2 text-sm text-running-text"
           >
             <CheckCircle2
               :size="16"
@@ -456,7 +456,7 @@ async function handleRefreshRepos(): Promise<void> {
   flex-shrink: 0;
   align-self: flex-start;
   margin-top: 1px;
-  color: var(--running);
+  color: var(--running-text);
 }
 
 .github-settings__copy {
