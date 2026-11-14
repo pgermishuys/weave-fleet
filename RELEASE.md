@@ -45,7 +45,9 @@ GitHub Releases is the primary public distribution channel. The supported instal
    git push origin v0.1.0
    ```
 
-5. **Wait for the `Release` GitHub Actions workflow** to finish.
+5. **Wait for the `Release` GitHub Actions workflow** to finish. Its first job, **CI passed on this commit**, waits
+   for CI (`ci.yml`) on the tagged commit before anything is built: pushing the tag right after the version bump is
+   fine, the release just starts about 8 minutes later, once that commit's CI run is green.
 6. **Verify the GitHub Release** and release-hosted installer endpoints.
 7. **Optional: write a highlight.** Edit the release on `pgermishuys/weave-fleet` and put a sentence or two above
    "What's Changed", saying what's worth knowing about this version. Fleet's What's new card (shown once after an
@@ -53,6 +55,37 @@ GitHub Releases is the primary public distribution channel. The supported instal
    there too: lines starting "Known issue" are shown in Settings but never used as the highlight. Without a highlight,
    the card lists the first new and fixed changes. Tests, refactors, docs, CI and other behind-the-scenes changes are
    only counted, never listed.
+
+## A release needs CI to have passed on its commit
+
+The Release workflow builds and publishes nothing until `ci.yml` has passed on the exact commit the tag points at
+(`scripts/release-ci-gate.sh`, tested by `scripts/test-release-ci-gate.sh`):
+
+- It counts the commit's `push` run (the one main gets) and any `workflow_dispatch` run on it. Pull request runs don't
+  count: they test the PR merged into main, not this commit. Once `ci.yml` has a **CI passed** job, that job must have
+  passed too.
+- While a run is still going, it waits, for up to an hour.
+- A red or cancelled run blocks the release at once. So does a commit `ci.yml` never ran on, after 5 minutes for the
+  run to show up.
+- `ci.yml` skips pushes that only change `**/*.md` or `.weave/**`. A tag on such a commit is judged by the nearest
+  commit before it that CI ran on, as long as everything since then is in those paths.
+
+When it blocks a release, the job's log says why and gives the exact commands, with the run ids filled in. Nothing
+has been built or published at that point. Don't move, delete or re-push the tag, and don't publish anything by hand.
+
+- **CI failed.** Read why: `gh run view <ci run id> --log-failed`.
+  - A check failed because of the code: this version can't ship. Fix it on main in a PR, then bump the version and tag
+    that. Leave the old tag as it is: it was never released.
+  - A known flaky test or a broken runner (lost runner, network, timeout): `gh run rerun <ci run id> --failed`, and
+    wait for it to finish green (`gh run watch <ci run id> --exit-status`).
+- **CI was cancelled** (usually a newer push to main) **or never ran:** run it on the tag,
+  `gh workflow run ci.yml --ref vX.Y.Z`, and wait for it to finish green
+  (`gh run list --workflow ci.yml --commit <sha>`, then `gh run watch <id> --exit-status`).
+- **CI was still running after an hour:** wait for it with `gh run watch <id> --exit-status`. If it's stuck, cancel it
+  and run CI on the tag as above.
+
+Once CI is green on the commit, let the release carry on: `gh run rerun <release run id> --failed`. That re-runs the
+check, then builds and publishes as usual.
 
 ## What the workflow publishes
 
@@ -184,7 +217,7 @@ After the tag is pushed, verify all of the following:
 
 - [ ] `Directory.Build.props` contains the intended version.
 - [ ] The pushed tag matches that version (`vX.Y.Z` vs `X.Y.Z`).
-- [ ] GitHub Actions `Release` workflow succeeded.
+- [ ] GitHub Actions `Release` workflow succeeded, and its **CI passed on this commit** job links a green CI run.
 - [ ] All build matrix jobs succeeded.
 - [ ] The GitHub Release exists for the tag.
 - [ ] The release includes all 4 platform archives.
@@ -223,6 +256,8 @@ Do not treat `get.tryweave.io/fleet.sh` as a release blocker. Until a separate h
 
 ## Failure recovery
 
+- If the release was blocked because CI didn't pass on its commit, see
+  [A release needs CI to have passed on its commit](#a-release-needs-ci-to-have-passed-on-its-commit).
 - If the workflow fails before publishing the GitHub Release, fix the issue and re-run or push a corrected tag only if necessary.
 - If the tag version does not match `Directory.Build.props`, delete the incorrect tag locally/remotely, fix the version, and create the correct tag.
 - Do not hand-edit generated release assets; rebuild them through the workflow.
