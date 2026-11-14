@@ -9,11 +9,13 @@ import { needsYou } from "@/lib/github-items";
 import { useGitHubBookmarks } from "./composables/use-github-bookmarks";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
 const router = useRouter();
 const pathname = useLocation({ select: (location) => location.pathname });
 const { isConnected } = useGitHubAuth();
-const { bookmarks, removeBookmark } = useGitHubBookmarks();
+const { bookmarks, removeBookmark, isLoading: bookmarksLoading, error: bookmarksError } = useGitHubBookmarks();
 const { work, load, refresh } = useGitHubWork();
 
 const isAddOpen = shallowRef(false);
@@ -115,8 +117,26 @@ async function handleRemove(fullName: string): Promise<void> {
         Repositories
       </p>
 
+      <div
+        v-if="bookmarks.length === 0 && bookmarksLoading"
+        class="flex justify-center p-3"
+        data-testid="github-bookmarks-loading"
+      >
+        <Spinner
+          class="text-muted"
+          label="Loading the repositories you follow…"
+        />
+      </div>
+      <ErrorNote
+        v-else-if="bookmarks.length === 0 && bookmarksError"
+        message="Couldn't load the repositories you follow."
+        :reason="bookmarksError"
+        compact
+        class="mx-3"
+        data-testid="github-bookmarks-error"
+      />
       <EmptyState
-        v-if="bookmarks.length === 0"
+        v-else-if="bookmarks.length === 0"
         title="Follow a repository to see its pull requests and issues here"
         compact
       />

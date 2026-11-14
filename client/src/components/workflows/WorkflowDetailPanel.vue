@@ -437,6 +437,17 @@ function openRun(run: WorkflowRun): void {
             >{{ runText(run) }}</span>
           </button>
         </div>
+        <div
+          v-else-if="store.isLoading && !store.isLoaded"
+          class="wf-runs__loading"
+          data-testid="workflow-runs-loading"
+        >
+          <Spinner
+            size="sm"
+            class="text-muted"
+            label="Loading recent runs…"
+          />
+        </div>
         <EmptyState
           v-else
           title="No runs yet"
@@ -680,6 +691,12 @@ function openRun(run: WorkflowRun): void {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.wf-runs__loading {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
 }
 
 .wf-runs {

@@ -17,7 +17,7 @@ onMounted(() => {
   if (!nav.library.value) void nav.reload();
 });
 
-const repoLabel = computed(() => (nav.library.value?.repositoryName ? `${nav.library.value.repositoryName} · .weave/workflows` : "This repo · .weave/workflows"));
+const repoLabel = computed(() => (!nav.isLoadingRepository.value && nav.library.value?.repositoryName ? `${nav.library.value.repositoryName} · .weave/workflows` : "This repo · .weave/workflows"));
 
 /** The draft being asked for, or open unsaved: it has a row until it's saved or dropped. */
 const draftRow = computed(() => {
@@ -118,10 +118,21 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
       </button>
 
       <div class="group-label">
-        <span>{{ repoLabel }}</span><span>{{ nav.repoWorkflows.value.length }}</span>
+        <span>{{ repoLabel }}</span><span v-if="!nav.isLoadingRepository.value">{{ nav.repoWorkflows.value.length }}</span>
+      </div>
+      <div
+        v-if="nav.isLoadingRepository.value"
+        class="workflows-nav-repo-loading"
+        data-testid="workflows-repo-loading"
+      >
+        <Spinner
+          size="sm"
+          class="text-muted"
+          label="Loading this repo's workflows…"
+        />
       </div>
       <button
-        v-for="workflow in nav.repoWorkflows.value"
+        v-for="workflow in nav.isLoadingRepository.value ? [] : nav.repoWorkflows.value"
         :key="workflow.id"
         type="button"
         class="workflow-row"
@@ -162,7 +173,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
         <span class="workflow-row__meta workflow-row__meta--wait">{{ draftRow.label }}</span>
       </button>
       <EmptyState
-        v-if="nav.repoWorkflows.value.length === 0 && !draftRow"
+        v-if="!nav.isLoadingRepository.value && nav.repoWorkflows.value.length === 0 && !draftRow"
         :title="nav.library.value.repository ? 'No workflow files in this repo yet' : 'Pick a repository in the Run box to see its workflows'"
         compact
       />
@@ -344,6 +355,12 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 
 .workflow-row__meta--error {
   color: var(--error);
+}
+
+.workflows-nav-repo-loading {
+  display: flex;
+  justify-content: center;
+  padding: 10px 12px;
 }
 
 .workflows-nav-empty {

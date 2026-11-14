@@ -33,6 +33,7 @@ export function useMissionControl() {
     id: entry.key,
     name: entry.name,
     status: snapshot?.status ?? "connecting",
+    lastHeardAt: snapshot?.lastHeardAt ?? null,
     sessions: snapshot?.sessions ?? [],
     asks: snapshot?.asks ?? {},
     now: nowLines.value[entry.key] ?? {},

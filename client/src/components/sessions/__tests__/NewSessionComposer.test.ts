@@ -408,7 +408,7 @@ describe("NewSessionComposer", () => {
       function seedProfiles(profiles: HarnessProfile[]): void {
         const store = useHarnessProfilesStore();
         store.byHarness = { opencode: profiles };
-        vi.spyOn(store, "load").mockResolvedValue();
+        vi.spyOn(store, "load").mockResolvedValue(true);
       }
 
       it("has no chip while there are no profiles, and sends none", async () => {

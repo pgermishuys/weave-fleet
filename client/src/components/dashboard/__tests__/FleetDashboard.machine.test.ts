@@ -39,6 +39,7 @@ function item(id: string, title: string) {
 
 describe("the dashboard on another machine", () => {
   let requests: string[];
+  let falconDown: boolean;
 
   beforeEach(() => {
     localStorage.clear();
@@ -47,9 +48,11 @@ describe("the dashboard on another machine", () => {
     saveMachines([falcon]);
     navigate.mockClear();
     requests = [];
+    falconDown = false;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = input instanceof Request ? input.url : String(input);
       requests.push(url.split("?")[0]);
+      if (url.startsWith(`${falcon.baseUrl}/api/sessions`) && falconDown) return new Response("{}", { status: 503 });
       if (url.startsWith(`${falcon.baseUrl}/api/sessions`)) return json([item("f-1", "Lighthouse sensor feed")]);
       if (url.includes("/api/fleet/summary")) return json({ activeSessions: 0, idleSessions: 1, queuedTasks: 0, totalTokens: 0, totalCost: 0 });
       return json([]);
@@ -79,6 +82,25 @@ describe("the dashboard on another machine", () => {
 
     expect(remember).toHaveBeenCalledWith(falcon.id, ["f-1"]);
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "f-1" } }));
+  });
+
+  it("says it's loading that machine's sessions from the first frame, not that it has none", async () => {
+    const wrapper = mount(FleetDashboard, { global: { provide: { [MACHINE_TARGET as symbol]: () => targetFor(falcon) } } });
+
+    expect(wrapper.text()).not.toContain("No sessions yet");
+    expect(wrapper.text()).toContain("Loading sessions…");
+
+    await flushPromises();
+    expect(wrapper.text()).toContain("Lighthouse sensor feed");
+  });
+
+  it("says a failed load failed, not that there are no sessions", async () => {
+    falconDown = true;
+    const wrapper = mount(FleetDashboard, { global: { provide: { [MACHINE_TARGET as symbol]: () => targetFor(falcon) } } });
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("No sessions yet");
+    expect(wrapper.get("[data-testid='dashboard-load-error']").text()).toContain("Couldn't load sessions.");
   });
 
   it("starts its heading clear of the phone's menu button, as every other page's heading does", async () => {

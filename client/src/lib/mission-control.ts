@@ -26,6 +26,8 @@ export interface MissionMachine {
   id: string;
   name: string;
   status: FeedStatus;
+  /** When the machine last answered, in ms; null until its first answer (its sessions are still coming). */
+  lastHeardAt?: number | null;
   sessions: SessionListItem[];
   /** Asks by session id. */
   asks: Record<string, InboxAsk>;

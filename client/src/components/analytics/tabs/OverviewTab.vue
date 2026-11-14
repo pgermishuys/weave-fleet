@@ -15,6 +15,7 @@ import {
 import { Line } from "vue-chartjs"
 import StatCard from "@/components/analytics/cards/StatCard.vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
+import { Spinner } from "@/components/ui/spinner"
 import type { AnalyticsSummary, DailyAnalytics, ModelAnalytics } from "@/api/client"
 import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters"
 import { useThemeStore } from "@/stores/theme"
@@ -87,6 +88,10 @@ interface Props {
   dailyError?: string | null
   modelsError?: string | null
   projectsError?: string | null
+  /** Each part's first answer hasn't come: it says so, not that nothing matched. */
+  dailyLoading?: boolean
+  modelsLoading?: boolean
+  projectsLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -100,6 +105,9 @@ const props = withDefaults(defineProps<Props>(), {
   dailyError: null,
   modelsError: null,
   projectsError: null,
+  dailyLoading: false,
+  modelsLoading: false,
+  projectsLoading: false,
 })
 
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
@@ -443,6 +451,14 @@ function getMaxCost(costs: readonly number[]): number {
         />
       </div>
 
+      <div
+        v-else-if="dailyLoading"
+        class="flex items-center justify-center gap-2 p-6 text-sm text-muted"
+        data-testid="analytics-loading"
+      >
+        <Spinner />
+        Loading daily analytics…
+      </div>
       <ErrorNote
         v-else-if="dailyError"
         message="Unable to load analytics."
@@ -470,6 +486,7 @@ function getMaxCost(costs: readonly number[]): number {
           :items="modelBarItems"
           :empty-message="modelsEmptyMessage"
           :error="modelsError"
+          :is-loading="modelsLoading"
         />
       </section>
 
@@ -486,6 +503,7 @@ function getMaxCost(costs: readonly number[]): number {
           :items="projectBarItems"
           :empty-message="projectsEmptyMessage"
           :error="projectsError"
+          :is-loading="projectsLoading"
         />
       </section>
     </div>

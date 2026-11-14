@@ -5,8 +5,10 @@ import type { Tile } from "@/lib/mission-control";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { Spinner } from "@/components/ui/spinner";
 
-defineProps<{ items: readonly Tile[]; wide?: boolean }>();
+// `loading`: no machine has answered yet, so there's nothing to say about what's waiting.
+defineProps<{ items: readonly Tile[]; wide?: boolean; loading?: boolean }>();
 const emit = defineEmits<{
   answerQuestion: [tile: Tile, requestId: string, answers: string[][], done: (outcome: AnswerOutcome) => void];
   answerPermission: [tile: Tile, reply: PermissionReply, done: (outcome: AnswerOutcome) => void];
@@ -49,8 +51,19 @@ function answerPermission(tile: Tile, reply: PermissionReply): void {
       </h3>
       <span class="text-sm font-semibold text-accent">{{ items.length }}</span>
     </div>
+    <div
+      v-if="!items.length && loading"
+      class="flex justify-center p-4"
+      data-testid="mission-needs-you-loading"
+    >
+      <Spinner
+        size="lg"
+        class="text-muted"
+        label="Asking your machines what's waiting…"
+      />
+    </div>
     <EmptyState
-      v-if="!items.length"
+      v-else-if="!items.length"
       title="Nothing is waiting on you"
       bordered
       compact

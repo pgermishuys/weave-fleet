@@ -33,6 +33,7 @@ const projectId = computed(() => normalizedProjectId.value || undefined);
 
 const {
   summary,
+  isLoading: isSummaryLoading,
   error: summaryError,
   refetch: refetchSummary,
 } = useAnalyticsSummary({
@@ -43,6 +44,7 @@ const {
 
 const {
   daily,
+  isLoading: isDailyLoading,
   error: dailyError,
   refetch: refetchDaily,
 } = useAnalyticsDaily({
@@ -126,18 +128,24 @@ const overviewTabProps = computed(() => ({
   dailyError: dailyError.value,
   modelsError: modelsError.value,
   projectsError: summaryError.value,
+  dailyLoading: isDailyLoading.value || isRefreshingAnalytics.value,
+  // The bars fall back to the summary's top models, so they wait for both.
+  modelsLoading: isModelsLoading.value || isSummaryLoading.value || isRefreshingAnalytics.value,
+  projectsLoading: isSummaryLoading.value || isRefreshingAnalytics.value,
 }));
 
 const dailyTabProps = computed(() => ({
   daily: daily.value,
   emptyMessage: dailyEmptyMessage.value,
   error: dailyError.value,
+  isLoading: isDailyLoading.value || isRefreshingAnalytics.value,
 }));
 
 const projectsTabProps = computed(() => ({
   topProjects: scopedTopProjects.value,
   emptyMessage: projectsEmptyMessage.value,
   error: summaryError.value,
+  isLoading: isSummaryLoading.value || isRefreshingAnalytics.value,
 }));
 
 const sessionsTabProps = computed(() => ({

@@ -36,10 +36,43 @@ let store: ReturnType<typeof useHarnessProfilesStore>;
 
 beforeEach(() => {
   store = useHarnessProfilesStore();
-  vi.spyOn(store, "load").mockResolvedValue();
+  vi.spyOn(store, "load").mockResolvedValue(true);
 });
 
 describe("HarnessProfilesPanel", () => {
+  it("says it's loading, not “No profiles yet”, until the machine answers", async () => {
+    let answer!: (ok: boolean) => void;
+    vi.mocked(store.load).mockImplementation(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+    const view = mountPanel();
+    await flushPromises();
+
+    expect(view.find("[data-testid='harness-profiles-empty']").exists()).toBe(false);
+    expect(view.find("[data-testid='harness-profiles-loading']").exists()).toBe(true);
+
+    store.byHarness = { opencode: [] };
+    answer(true);
+    await flushPromises();
+
+    expect(view.find("[data-testid='harness-profiles-loading']").exists()).toBe(false);
+    expect(view.find("[data-testid='harness-profiles-empty']").exists()).toBe(true);
+  });
+
+  it("says a failed load failed, not that there are no profiles, and tries again", async () => {
+    vi.mocked(store.load).mockResolvedValue(false);
+    const view = mountPanel();
+    await flushPromises();
+
+    expect(view.find("[data-testid='harness-profiles-empty']").exists()).toBe(false);
+    expect(view.get("[data-testid='harness-profiles-load-error']").text()).toContain("Couldn't load OpenCode's profiles.");
+
+    vi.mocked(store.load).mockImplementation(async () => { store.byHarness = { opencode: [] }; return true; });
+    await view.get("[data-testid='harness-profiles-load-error'] button").trigger("click");
+    await flushPromises();
+
+    expect(view.find("[data-testid='harness-profiles-load-error']").exists()).toBe(false);
+    expect(view.find("[data-testid='harness-profiles-empty']").exists()).toBe(true);
+  });
+
   it("explains profiles when there are none", async () => {
     store.byHarness = { opencode: [] };
     const view = mountPanel();

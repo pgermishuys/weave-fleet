@@ -35,3 +35,15 @@ describe("analytics tabs with nothing to show", () => {
     expect(empty.get("[data-slot='empty-state']").text()).toContain("No sessions matched the current analytics filters");
   });
 });
+
+describe("analytics tabs before their first answer", () => {
+  it.each([
+    ["DailyTab", DailyTab, { daily: [] }],
+    ["ProjectsTab", ProjectsTab, { topProjects: [] }],
+    ["HorizontalCostBars", HorizontalCostBars, { items: [] }],
+  ] as const)("%s says it's loading, not that nothing matched", (_name, component, props) => {
+    const loading = mountAny(component, { ...props, isLoading: true, emptyMessage: "Nothing in this range." });
+    expect(loading.find("[data-testid='analytics-loading']").exists()).toBe(true);
+    expect(loading.find("[data-slot='empty-state']").exists()).toBe(false);
+  });
+});

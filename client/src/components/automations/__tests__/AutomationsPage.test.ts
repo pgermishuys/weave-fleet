@@ -352,6 +352,29 @@ describe("Automations screen", () => {
       .toBe("Every Monday at 9am, summarise the open PRs");
   });
 
+  it("shows loading, not “No automations yet”, until the first load finishes", async () => {
+    wrapper.unmount();
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    list = [];
+    let answer: (() => void) | null = null;
+    apiFetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === "/api/automations" && !init?.method
+        ? new Promise<Response>((resolve) => { answer = () => resolve(serve(url, init)); })
+        : Promise.resolve(serve(url, init)));
+    wrapper = mount(Screen, { attachTo: document.body, global: { plugins: [pinia] } });
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("No automations yet");
+    expect(wrapper.find("[data-testid='automation-loading']").exists()).toBe(true);
+
+    answer!();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='automation-loading']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("No automations yet");
+  });
+
   it("says a failed load failed, not that there are no automations, and loads on Try again", async () => {
     list = [];
     await useAutomationsNavRefresh();
