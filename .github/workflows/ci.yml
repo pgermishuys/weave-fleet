@@ -512,6 +512,11 @@ jobs:
         shell: powershell
         run: ./scripts/test-launchers.ps1
 
+      # The pre-push check runs in Git Bash on Windows, so its tests run there too.
+      - name: Test pre-push-check.sh
+        shell: bash
+        run: bash scripts/test-pre-push-check.sh
+
   # ── Windows-only process tests ───────────────────────────────────────────
   # The other .NET tests run on Linux only. A process the agent leaves running must outlive an idle stop and end
   # with the session's Job Object, which only Windows has. The mod runtime tests run here too: Fleet starts bun.exe

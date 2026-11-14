@@ -24,6 +24,7 @@ cases=(
   "mods/types/fleet-mods.d.ts|dotnet aot e2e client"
   "desktop/src/main.ts|desktop"
   "scripts/launcher.sh|aot launchers"
+  "scripts/pre-push-check.sh scripts/test-pre-push-check.sh scripts/install-pre-push.sh|launchers"
   "docs/workflows.md|dotnet aot e2e"
   "docs/machines.md|"
   "mockups/x/a.png .weave/plans/p.md README.md AGENTS.md RELEASE.md|"
