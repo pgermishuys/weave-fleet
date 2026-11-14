@@ -16,7 +16,7 @@ export class FleetError extends Error {
 const id = encodeURIComponent;
 
 /**
- * `onSignedOut` runs on a 401: the computer removed this phone, so the machine reads "signed out" instead of every call
+ * `onSignedOut` runs on a 401: the machine removed this phone, so the machine reads "signed out" instead of every call
  * failing loudly. `onUnreachable` runs when a read can't reach the machine: it picks again among the machine's
  * addresses (changing `machine.baseUrl`) and says whether it moved, and the read then goes once more.
  */
@@ -38,7 +38,7 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
     }
     if (response.status === 401) {
       onSignedOut();
-      throw new FleetError("The computer removed this phone.", 401);
+      throw new FleetError("The machine removed this phone.", 401);
     }
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;

@@ -75,7 +75,7 @@ export default function Pair() {
     setScanning(false);
     try {
       const next = targetFromScan(text);
-      if (!next) throw new Error("That isn't a Fleet pairing code. On the computer, Settings → Machines → Add a phone shows one.");
+      if (!next) throw new Error("That isn't a Fleet pairing code. In Fleet on the machine, Settings → Machines → Add a phone shows one.");
       void preview(next);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -111,7 +111,7 @@ export default function Pair() {
           <>
             <Text size={24} weight="bold">Connect this phone to {machineName}?</Text>
             <Text tone="muted">{target.baseUrl}</Text>
-            <Text tone="muted">This phone gets its own key. The computer can remove it any time in Settings → Machines.</Text>
+            <Text tone="muted">This phone gets its own key. The machine can remove it any time in Settings → Machines.</Text>
             {error && <Text tone="error">{error}</Text>}
             <Button label="Connect" variant="primary" loading={busy} onPress={() => void connect()} testID="connect" />
             <Button label="Back" variant="ghost" onPress={() => setTarget(null)} />
@@ -119,12 +119,12 @@ export default function Pair() {
         ) : (
           <>
             <Text size={28} weight="bold">Pair with Fleet</Text>
-            <Text tone="muted">On the computer, open Settings → Machines → Add a phone.</Text>
+            <Text tone="muted">In Fleet on the machine, open Settings → Machines → Add a phone.</Text>
             <Button label="Scan the QR code" variant="primary" icon="qr" onPress={() => void startScan()} />
             <Card>
               <View style={{ gap: 12 }}>
                 <Text weight="semibold">Or type it</Text>
-                <TextInput testID="address" value={address} onChangeText={setAddress} placeholder="https://your-computer.example" placeholderTextColor={color.muted} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={input} />
+                <TextInput testID="address" value={address} onChangeText={setAddress} placeholder="https://your-machine.example" placeholderTextColor={color.muted} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={input} />
                 <TextInput testID="code" value={code} onChangeText={setCode} placeholder="K7QM-4T2X" placeholderTextColor={color.muted} autoCapitalize="characters" autoCorrect={false} style={[input, { fontFamily: font.mono }]} />
                 <Button label="Continue" loading={busy} disabled={!address.trim() || !code.trim()} onPress={onTyped} testID="continue" />
               </View>
