@@ -176,7 +176,7 @@ function cancelRemove(): void {
                 :size="16"
                 aria-hidden="true"
               />
-              <span>{{ checkingUpdateKey === keyOf(skill) ? "Checking…" : "Check Update" }}</span>
+              <span>{{ checkingUpdateKey === keyOf(skill) ? "Checking…" : "Check for updates" }}</span>
             </Button>
 
             <Button
@@ -209,7 +209,7 @@ function cancelRemove(): void {
                 aria-hidden="true"
               />
               <span>
-                {{ removingKey === keyOf(skill) ? "Removing…" : confirmRemoveKey === keyOf(skill) ? "Confirm Remove" : "Remove" }}
+                {{ removingKey === keyOf(skill) ? "Removing…" : confirmRemoveKey === keyOf(skill) ? "Confirm remove" : "Remove" }}
               </span>
             </Button>
 

@@ -137,6 +137,24 @@ const machine = computed(() => node.value);
   });
 });
 
+describe("a label after a self-closing icon", () => {
+  it("is still read as the button's label", () => {
+    const sfc = `<template>
+  <Button>
+    <Spinner v-if="busy" />
+    <Download
+      v-else
+      :size="16"
+      aria-hidden="true"
+    />
+    <span>{{ busy ? "Installing…" : "Install MCP Server" }}</span>
+  </Button>
+</template>
+`;
+    expect(phrasesOf("src/X.vue", sfc).flatMap(checkPhrase).map((v) => `${v.rule}:${v.line}`)).toEqual(["TITLE_CASE:9"]);
+  });
+});
+
 describe("what it reads in a .tsx file", () => {
   const tsx = `// The pairing screen: scan the code the computer shows... (a comment)
 import { useState } from "react";

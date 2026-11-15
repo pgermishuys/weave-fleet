@@ -303,7 +303,7 @@ async function finishOnboarding(): Promise<void> {
               :size="16"
               aria-hidden="true"
             />
-            Start a Session
+            Start a session
           </button>
         </section>
 

@@ -360,7 +360,7 @@ async function submitInstall(): Promise<void> {
             :size="16"
             aria-hidden="true"
           />
-          <span>{{ isInstalling ? "Installing…" : "Install MCP Server" }}</span>
+          <span>{{ isInstalling ? "Installing…" : "Install MCP server" }}</span>
         </Button>
       </form>
     </div>

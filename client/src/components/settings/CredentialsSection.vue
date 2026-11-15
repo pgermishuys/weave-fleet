@@ -225,7 +225,7 @@ async function removeCredential(id: string): Promise<void> {
           :size="16"
           aria-hidden="true"
         />
-        Add API Key
+        Add API key
       </button>
     </div>
 
@@ -322,7 +322,7 @@ async function removeCredential(id: string): Promise<void> {
               :disabled="isSaving"
             >
               <Spinner v-if="isSaving" />
-              <span>{{ isSaving ? "Saving…" : "Save API Key" }}</span>
+              <span>{{ isSaving ? "Saving…" : "Save API key" }}</span>
             </button>
 
             <button

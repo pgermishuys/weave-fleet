@@ -155,7 +155,9 @@ export function templatePhrases(file: string, text: string, firstLine: number, j
     if (jsx && stack.length === 0 && !/(?:^|[(,=?:&|{}\[\]]|return|\n)\s*$/.test(src.slice(Math.max(0, index - 40), index))) continue;
     addText(src.slice(pos, index), pos);
     pos = index + m[0].length;
-    const [, closing, tag, attrs, selfClose] = m;
+    const [whole, closing, tag, attrs] = m;
+    // The attribute pattern can take the `/` of `/>`, so read self-closing off the tag's end.
+    const selfClose = /\/\s*>$/.test(whole);
     if (closing) {
       const i = stack.lastIndexOf(tag);
       if (i >= 0) stack.length = i;
@@ -163,7 +165,7 @@ export function templatePhrases(file: string, text: string, firstLine: number, j
     }
     const tagPlace: Place = LABEL_TAGS.has(tag.toLowerCase().replace(/-/g, "")) ? "label" : "copy";
     for (const a of (attrs ?? "").matchAll(ATTR_RE)) {
-      const [whole, rawName, dq, sq, braced] = a;
+      const [attr, rawName, dq, sq, braced] = a;
       if (dq === undefined && sq === undefined && braced === undefined) continue;
       if (rawName.startsWith("@") || (rawName.startsWith("v-") && !rawName.startsWith("v-bind:"))) continue;
       const bound = rawName.startsWith(":") || rawName.startsWith("v-bind:") || braced !== undefined;
@@ -171,7 +173,7 @@ export function templatePhrases(file: string, text: string, firstLine: number, j
       const isLabel = LABEL_PROPS.has(name) || LABEL_PROPS.has(name.replace(/-/g, ""));
       if (!isLabel && !COPY_PROPS.has(name) && !COPY_PROPS.has(name.replace(/-/g, ""))) continue;
       const value = dq ?? sq ?? braced ?? "";
-      const line = lineOf(src, index + m[0].indexOf(whole), firstLine);
+      const line = lineOf(src, index + whole.indexOf(attr), firstLine);
       for (const s of bound ? literals(value) : [value]) {
         const t = clean(s);
         if (worthy(t)) out.push({ file, line, text: t, place: isLabel || (tagPlace === "label" && name === "title") ? "label" : "copy" });
@@ -328,7 +330,7 @@ export const PROPER_NOUNS = new Set([
   "Memory", "Dreaming", "Machines", "Mods", "Skills", "Harnesses", "Integrations", "Plugins",
 ]);
 // Names of more than one word, taken out before the words are read ("Open in VS Code").
-const PROPER_PHRASES = /\b(?:Visual Studio Code|VS Code|Claude Code|GitHub Copilot|GitHub Actions|Weave Fleet|OpenCode \d|Google Chrome|Microsoft Edge|Pull Requests?(?= on GitHub))\b/g;
+const PROPER_PHRASES = /\b(?:Visual Studio Code|VS Code|Claude Code|GitHub Copilot|GitHub Actions|Weave Fleet|OpenCode \d|Google Chrome|Microsoft Edge|Stage \d+|Pull Requests?(?= on GitHub))\b/g;
 
 /** Title Case: two or more words, the first capitalised and every other real word too ("New Project", "Add Lane"). */
 export function isTitleCase(text: string): boolean {
@@ -341,7 +343,7 @@ export function isTitleCase(text: string): boolean {
   const words = plain.match(/[A-Za-z][A-Za-z'’]*/g) ?? [];
   if (words.length < 2) return false;
   const [first, ...rest] = words;
-  if (!/^[A-Z]/.test(first)) return false;
+  if (!first || !/^[A-Z]/.test(first)) return false;
   const significant = rest.filter((w) => !SMALL.has(w.toLowerCase()) && !PROPER_NOUNS.has(w.replace(/['’]s$/, "")) && !/^[A-Z0-9]+s?$/.test(w) && w.length > 1);
   return significant.length > 0 && significant.every((w) => /^[A-Z]/.test(w));
 }
