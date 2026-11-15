@@ -23,6 +23,7 @@ import { useGitHubBookmarks } from "@/plugins/builtin/github/composables/use-git
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
+import { PageHeader } from "@/components/ui/page-header";
 
 const router = useRouter();
 const smartLinks = useSmartLinksStore();
@@ -207,50 +208,47 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
     </section>
 
     <template v-else-if="isConnected">
-      <header class="gh-home__head">
-        <div>
-          <h1 class="gh-home__title">
-            Your work
-          </h1>
-          <p class="gh-home__sub">
-            {{ scope }}<template v-if="loadedAt">
-              · updated <RelativeTime
-                :at="loadedAt"
-                :now="now"
-              />
-            </template>
-          </p>
-        </div>
-        <button
-          type="button"
-          class="gh-home__btn gh-home__btn--ghost"
-          :disabled="isLoading"
-          aria-label="Refresh"
-          title="Refresh"
-          @click="refresh"
-        >
-          <Spinner
-            v-if="isLoading"
-            size="sm"
-          />
-          <RefreshCw
-            v-else
-            :size="14"
-            aria-hidden="true"
-          />
-        </button>
-        <button
-          type="button"
-          class="gh-home__btn"
-          @click="isAddOpen = true"
-        >
-          <Plus
-            :size="14"
-            aria-hidden="true"
-          />
-          Follow a repository
-        </button>
-      </header>
+      <PageHeader title="Your work">
+        <template #description>
+          {{ scope }}<template v-if="loadedAt">
+            · updated <RelativeTime
+              :at="loadedAt"
+              :now="now"
+            />
+          </template>
+        </template>
+        <template #actions>
+          <button
+            type="button"
+            class="gh-home__btn gh-home__btn--ghost"
+            :disabled="isLoading"
+            aria-label="Refresh"
+            title="Refresh"
+            @click="refresh"
+          >
+            <Spinner
+              v-if="isLoading"
+              size="sm"
+            />
+            <RefreshCw
+              v-else
+              :size="14"
+              aria-hidden="true"
+            />
+          </button>
+          <button
+            type="button"
+            class="gh-home__btn"
+            @click="isAddOpen = true"
+          >
+            <Plus
+              :size="14"
+              aria-hidden="true"
+            />
+            Follow a repository
+          </button>
+        </template>
+      </PageHeader>
 
       <p
         v-if="error"
@@ -393,31 +391,6 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
   min-height: 100%;
   margin: 0 auto;
   color: var(--text);
-}
-
-.gh-home__head {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.gh-home__head > div {
-  flex: 1;
-  min-width: 0;
-}
-
-.gh-home__title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-
-.gh-home__sub {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12.5px;
 }
 
 .gh-home__btn {

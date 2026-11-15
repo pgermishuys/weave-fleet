@@ -10,6 +10,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 
 const router = useRouter();
@@ -87,17 +88,11 @@ function goToSettings(): void {
 
 <template>
   <section class="flex h-full flex-col gap-6 overflow-auto p-6">
-    <header class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div>
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
-          Repositories
-        </h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Git repositories Fleet found in your locations (Settings → Folders).
-        </p>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-3">
+    <PageHeader
+      title="Repositories"
+      description="Git repositories Fleet found in your locations (Settings → Folders)."
+    >
+      <template #actions>
         <span class="text-xs text-muted-foreground">Last scan: {{ scannedAtLabel }}</span>
 
         <Button
@@ -125,8 +120,8 @@ function goToSettings(): void {
           <Settings2 :size="14" />
           Workspace settings
         </Button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <div
       v-if="isLoading"

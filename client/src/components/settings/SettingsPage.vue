@@ -2,6 +2,7 @@
 import { computed, nextTick, watch } from "vue";
 import MachineScope from "@/components/layout/MachineScope.vue";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import GeneralSection from "@/components/settings/GeneralSection.vue";
@@ -90,23 +91,21 @@ watch(
 
 <template>
   <section class="grid grid-cols-1 gap-6">
-    <div class="phone-menu-lane">
-      <h1
-        class="text-2xl font-semibold tracking-tight text-text"
-        data-testid="settings-page-title"
+    <PageHeader
+      :title="header.title"
+      :description="header.line"
+    >
+      <template
+        v-if="settingsMachine.enabled.value"
+        #meta
       >
-        {{ header.title }}
         <span
-          v-if="settingsMachine.enabled.value"
           class="settings-machine-chip"
           :class="{ 'settings-machine-chip--browser': isBrowserPage }"
           data-testid="settings-machine-chip"
         >{{ isBrowserPage ? "This browser" : settingsMachine.entry.value.name }}</span>
-      </h1>
-      <p class="mt-1 text-sm text-muted">
-        {{ header.line }}
-      </p>
-    </div>
+      </template>
+    </PageHeader>
 
     <MachineScope
       :key="settingsMachine.key.value"
@@ -134,47 +133,47 @@ watch(
           </Button>
         </div>
 
-      <GeneralSection v-else-if="activeSection === 'general'" />
+        <GeneralSection v-else-if="activeSection === 'general'" />
 
-      <AppearanceSection v-else-if="activeSection === 'appearance'" />
+        <AppearanceSection v-else-if="activeSection === 'appearance'" />
 
-      <HarnessesSection v-else-if="activeSection === 'harnesses'" />
+        <HarnessesSection v-else-if="activeSection === 'harnesses'" />
 
-      <PermissionsSection v-else-if="activeSection === 'permissions'" />
+        <PermissionsSection v-else-if="activeSection === 'permissions'" />
 
-      <SkillsToolsPage v-else-if="activeSection === 'skills'" />
+        <SkillsToolsPage v-else-if="activeSection === 'skills'" />
 
-      <MemorySection v-else-if="activeSection === 'memory'" />
+        <MemorySection v-else-if="activeSection === 'memory'" />
 
-      <template v-else-if="activeSection === 'folders'">
-        <WorkspaceSection />
-        <WorktreeNamingSection />
-        <div data-settings-anchor="storage">
-          <StorageSection />
-        </div>
-      </template>
+        <template v-else-if="activeSection === 'folders'">
+          <WorkspaceSection />
+          <WorktreeNamingSection />
+          <div data-settings-anchor="storage">
+            <StorageSection />
+          </div>
+        </template>
 
-      <MachinesSection v-else-if="activeSection === 'machines'" />
+        <MachinesSection v-else-if="activeSection === 'machines'" />
 
-      <LabsSection v-else-if="activeSection === 'labs'" />
+        <LabsSection v-else-if="activeSection === 'labs'" />
 
-      <UpdatesSection v-else-if="activeSection === 'updates'" />
+        <UpdatesSection v-else-if="activeSection === 'updates'" />
 
-      <CredentialsSection v-else-if="activeSection === 'credentials'" />
+        <CredentialsSection v-else-if="activeSection === 'credentials'" />
 
-      <PluginsOverview v-else-if="activeSection === 'plugins'" />
+        <PluginsOverview v-else-if="activeSection === 'plugins'" />
 
-      <PluginPage
-        v-else-if="pluginId"
-        :plugin-id="pluginId"
-      />
+        <PluginPage
+          v-else-if="pluginId"
+          :plugin-id="pluginId"
+        />
       </div>
     </MachineScope>
   </section>
 </template>
 
 <style scoped>
-.settings-machine-chip { display: inline-block; margin-left: 10px; padding: 1px 6px; border-radius: 4px; vertical-align: middle; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78571rem; font-weight: 600; letter-spacing: 0; color: var(--coral-text); background: color-mix(in srgb, var(--coral) 14%, transparent); }
+.settings-machine-chip { display: inline-block; padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78571rem; font-weight: 600; letter-spacing: 0; color: var(--coral-text); background: color-mix(in srgb, var(--coral) 14%, transparent); }
 .settings-machine-chip--browser { color: var(--muted); background: color-mix(in srgb, var(--text) 8%, transparent); }
 .settings-machine-pane { animation: settings-machine-fade 180ms ease-out; }
 @keyframes settings-machine-fade { from { opacity: 0; } to { opacity: 1; } }

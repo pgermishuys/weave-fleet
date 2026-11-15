@@ -26,6 +26,7 @@ import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 
 // The machine the view shows (MachineScope in AutomationsPage): the list, runs and every change are its.
@@ -361,12 +362,14 @@ const firstRunHint = computed(() => {
   <div class="automation-page">
     <!-- A new automation -->
     <template v-if="viewMode === 'create'">
-      <header class="automation-page__header">
-        <h2 class="automation-page__title">
-          New automation
-        </h2>
-        <span class="automation-page__pill">Not saved</span>
-      </header>
+      <PageHeader
+        title="New automation"
+        bar
+      >
+        <template #meta>
+          <span class="automation-page__pill">Not saved</span>
+        </template>
+      </PageHeader>
       <div class="automation-page__body">
         <div class="automation-page__empty">
           <strong>What should run on its own?</strong>
@@ -408,26 +411,25 @@ const firstRunHint = computed(() => {
 
     <!-- An existing automation: its runs, with its composer underneath -->
     <template v-else-if="viewMode === 'edit' && currentAutomation">
-      <header class="automation-page__header">
-        <h2
-          class="automation-page__title"
-          data-testid="automation-title"
-        >
-          {{ currentAutomation.name }}
-        </h2>
-        <Switch
-          class="automation-page__switch"
-          :model-value="currentAutomation.isEnabled"
-          :disabled="isTogglingEnabled"
-          :aria-label="currentAutomation.isEnabled ? 'On' : 'Off'"
-          data-testid="automation-enabled"
-          @update:model-value="(value: boolean) => handleToggleEnabled(value)"
-        />
-        <span
-          class="automation-page__meta"
-          data-testid="automation-header-meta"
-        >{{ headerMeta }}</span>
-        <span class="automation-page__actions">
+      <PageHeader
+        :title="currentAutomation.name"
+        bar
+      >
+        <template #meta>
+          <Switch
+            class="automation-page__switch"
+            :model-value="currentAutomation.isEnabled"
+            :disabled="isTogglingEnabled"
+            :aria-label="currentAutomation.isEnabled ? 'On' : 'Off'"
+            data-testid="automation-enabled"
+            @update:model-value="(value: boolean) => handleToggleEnabled(value)"
+          />
+          <span
+            class="automation-page__meta"
+            data-testid="automation-header-meta"
+          >{{ headerMeta }}</span>
+        </template>
+        <template #actions>
           <Button
             variant="outline"
             size="sm"
@@ -474,8 +476,8 @@ const firstRunHint = computed(() => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </span>
-      </header>
+        </template>
+      </PageHeader>
 
       <div class="automation-page__body">
         <div
@@ -555,50 +557,53 @@ const firstRunHint = computed(() => {
       </AutomationMachineScope>
     </template>
 
-    <div
-      v-else
-      class="automation-page__body"
-    >
-      <Spinner
-        v-if="firstLoad"
-        size="lg"
-        label="Loading automations…"
-        class="m-auto text-muted"
-        data-testid="automation-loading"
+    <template v-else>
+      <PageHeader
+        title="Automations"
+        bar
       />
-      <ErrorNote
-        v-else-if="loadFailed"
-        message="Couldn't load automations."
-        :reason="loadError ?? 'Trying again…'"
-        :retrying="retryingLoad"
-        class="m-auto w-full max-w-md"
-        data-testid="automation-load-error"
-        @retry="retryLoad"
-      />
-      <EmptyState
-        v-else
-        :icon="Zap"
-        :title="automations.length === 0 ? 'No automations yet' : 'Automations'"
-        :description="automations.length === 0
-          ? 'An automation runs a prompt or a workflow on a schedule, or when something happens in Fleet.'
-          : 'Pick one from the list, or make a new one.'"
-        class="m-auto"
-      >
-        <template
-          v-if="automations.length === 0"
-          #action
+      <div class="automation-page__body">
+        <Spinner
+          v-if="firstLoad"
+          size="lg"
+          label="Loading automations…"
+          class="m-auto text-muted"
+          data-testid="automation-loading"
+        />
+        <ErrorNote
+          v-else-if="loadFailed"
+          message="Couldn't load automations."
+          :reason="loadError ?? 'Trying again…'"
+          :retrying="retryingLoad"
+          class="m-auto w-full max-w-md"
+          data-testid="automation-load-error"
+          @retry="retryLoad"
+        />
+        <EmptyState
+          v-else
+          :icon="Zap"
+          :title="automations.length === 0 ? 'No automations yet' : 'Automations'"
+          :description="automations.length === 0
+            ? 'An automation runs a prompt or a workflow on a schedule, or when something happens in Fleet.'
+            : 'Pick one from the list, or make a new one.'"
+          class="m-auto"
         >
-          <Button
-            size="sm"
-            data-testid="automation-empty-create"
-            @click="startCreate"
+          <template
+            v-if="automations.length === 0"
+            #action
           >
-            <Plus class="h-4 w-4" />
-            New automation
-          </Button>
-        </template>
-      </EmptyState>
-    </div>
+            <Button
+              size="sm"
+              data-testid="automation-empty-create"
+              @click="startCreate"
+            >
+              <Plus class="h-4 w-4" />
+              New automation
+            </Button>
+          </template>
+        </EmptyState>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -608,28 +613,6 @@ const firstRunHint = computed(() => {
   height: 100%;
   min-height: 0;
   flex-direction: column;
-}
-
-/* Matches the session header: one row, same height and rule. */
-.automation-page__header {
-  display: flex;
-  min-height: 56px;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--border);
-  padding: 8px max(1rem, env(safe-area-inset-right)) 8px max(1rem, env(safe-area-inset-left));
-}
-
-.automation-page__title {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .automation-page__pill {
@@ -652,14 +635,6 @@ const firstRunHint = computed(() => {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.automation-page__actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
 }
 
 .automation-page__danger {
@@ -741,12 +716,8 @@ const firstRunHint = computed(() => {
   margin-bottom: 8px;
 }
 
-/* Clear the fixed menu button that replaces the sidebar on narrow screens. */
+/* A phone: the header keeps to the title, its switch and actions. */
 @media (max-width: 716px) {
-  .automation-page__header {
-    padding-left: 44px;
-  }
-
   .automation-page__meta {
     display: none;
   }

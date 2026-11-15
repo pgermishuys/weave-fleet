@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/vue-router";
 import { AlertCircle, Play } from "lucide-vue-next";
 import AutomationRunsList from "@/components/automations/AutomationRunsList.vue";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAutomations } from "@/composables/use-automations";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { apiFetchOn } from "@/lib/api-client";
@@ -130,23 +131,22 @@ function openMemorySettings(): void {
 
 <template>
   <div class="builtin-page">
-    <header class="builtin-page__header">
-      <h2
-        class="builtin-page__title"
-        data-testid="automation-title"
-      >
-        {{ automation.name }}
-      </h2>
-      <span
-        class="builtin-page__pill"
-        data-testid="automation-builtin-pill"
-      >Built in</span>
-      <span class="builtin-page__pill">Experimental</span>
-      <span
-        class="builtin-page__meta"
-        data-testid="automation-header-meta"
-      >{{ meta }}</span>
-    </header>
+    <PageHeader
+      :title="automation.name"
+      bar
+    >
+      <template #meta>
+        <span
+          class="builtin-page__pill"
+          data-testid="automation-builtin-pill"
+        >Built in</span>
+        <span class="builtin-page__pill">Experimental</span>
+        <span
+          class="builtin-page__meta"
+          data-testid="automation-header-meta"
+        >{{ meta }}</span>
+      </template>
+    </PageHeader>
 
     <div class="builtin-page__body">
       <p
@@ -258,23 +258,6 @@ function openMemorySettings(): void {
   flex-direction: column;
 }
 
-.builtin-page__header {
-  display: flex;
-  min-height: 56px;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--border);
-  padding: 8px max(1rem, env(safe-area-inset-right)) 8px max(1rem, env(safe-area-inset-left));
-}
-
-.builtin-page__title {
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-}
-
 .builtin-page__pill {
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -346,10 +329,6 @@ function openMemorySettings(): void {
 }
 
 @media (max-width: 716px) {
-  .builtin-page__header {
-    padding-left: 44px;
-  }
-
   .builtin-page__meta {
     display: none;
   }

@@ -424,6 +424,20 @@
     "AD_HOC_FORMAT": {
       "total": 0,
       "files": {}
+    },
+    "AD_HOC_PAGE_TITLE": {
+      "total": 15,
+      "files": {
+        "src/components/auth/LoginPage.vue": 1,
+        "src/components/pages/FeatureOffNotice.vue": 1,
+        "src/components/pages/NotFoundPage.vue": 1,
+        "src/components/pages/WelcomePage.vue": 1,
+        "src/components/phone/AnsweredPage.vue": 1,
+        "src/components/phone/InboxPage.vue": 3,
+        "src/components/phone/PairPage.vue": 5,
+        "src/components/phone/session/PhoneSessionHeader.vue": 1,
+        "src/plugins/builtin/github/pages/GitHubBrowserPage.vue": 1
+      }
     }
   }
 }

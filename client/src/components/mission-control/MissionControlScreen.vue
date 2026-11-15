@@ -12,6 +12,7 @@ import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { useMachinesStore } from "@/stores/machines";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 import { Radar } from "lucide-vue-next";
 
@@ -68,14 +69,11 @@ function nudge(tile: Tile, text: string, done: (outcome: AnswerOutcome & { queue
     class="flex h-full min-h-0 flex-col"
     data-testid="mission-control"
   >
-    <header class="flex items-center gap-3 border-b border-border px-4 py-3">
-      <h2 class="text-base font-semibold text-text">
-        Fleet
-      </h2>
-      <p class="text-xs text-muted">
-        {{ mission.summary.value.running }} running · {{ mission.summary.value.helpers }} helpers · {{ mission.summary.value.needYou }} need you
-      </p>
-    </header>
+    <PageHeader
+      title="Fleet"
+      :description="`${mission.summary.value.running} running · ${mission.summary.value.helpers} helpers · ${mission.summary.value.needYou} need you`"
+      bar
+    />
     <!-- On a phone the menu is a strip of chips here; beside the page it is the context panel. -->
     <FleetViewStrip class="fleet-view-strip" />
     <div

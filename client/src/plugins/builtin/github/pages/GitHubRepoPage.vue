@@ -27,6 +27,7 @@ import { useGitHubAssignees, useGitHubLabels, useGitHubMilestones } from "@/plug
 import { isPullRequest } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { Spinner } from "@/components/ui/spinner";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Tab = "pulls" | "issues";
 type PullFilter = "open" | "review" | "mine" | "fleet" | "closed";
@@ -172,41 +173,43 @@ function start(item: GitHubItemSummary): void {
 
 <template>
   <div class="gh-repo">
-    <header class="gh-repo__head">
-      <h1 class="gh-repo__name">
+    <PageHeader>
+      <template #title>
         <span class="gh-repo__owner">{{ owner }} /</span> {{ repo }}
-      </h1>
-      <button
-        type="button"
-        class="gh-repo__btn gh-repo__btn--ghost"
-        :disabled="list.loading"
-        aria-label="Refresh"
-        title="Refresh"
-        @click="refresh"
-      >
-        <Spinner
-          v-if="list.loading"
-          size="sm"
-        />
-        <RefreshCw
-          v-else
-          :size="14"
-          aria-hidden="true"
-        />
-      </button>
-      <a
-        class="gh-repo__btn"
-        :href="`https://github.com/${repoFullName}`"
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        <ExternalLink
-          :size="13"
-          aria-hidden="true"
-        />
-        GitHub
-      </a>
-    </header>
+      </template>
+      <template #actions>
+        <button
+          type="button"
+          class="gh-repo__btn gh-repo__btn--ghost"
+          :disabled="list.loading"
+          aria-label="Refresh"
+          title="Refresh"
+          @click="refresh"
+        >
+          <Spinner
+            v-if="list.loading"
+            size="sm"
+          />
+          <RefreshCw
+            v-else
+            :size="14"
+            aria-hidden="true"
+          />
+        </button>
+        <a
+          class="gh-repo__btn"
+          :href="`https://github.com/${repoFullName}`"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <ExternalLink
+            :size="13"
+            aria-hidden="true"
+          />
+          GitHub
+        </a>
+      </template>
+    </PageHeader>
 
     <div
       class="gh-repo__tabs"
@@ -361,24 +364,6 @@ function start(item: GitHubItemSummary): void {
   min-height: 100%;
   margin: 0 auto;
   color: var(--text);
-}
-
-.gh-repo__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.gh-repo__name {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .gh-repo__owner {

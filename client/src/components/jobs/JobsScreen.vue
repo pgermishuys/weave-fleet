@@ -14,6 +14,7 @@ import { useJobsStore } from "@/stores/jobs";
 import { useMachinesStore } from "@/stores/machines";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** The Jobs screen: what's queued, running and finished across the machines, and each machine's seats. */
 const store = useJobsStore();
@@ -65,51 +66,55 @@ async function cancel(job: Job): Promise<void> {
     class="flex h-full flex-col overflow-hidden"
     data-testid="jobs-screen"
   >
-    <header class="flex flex-wrap items-center gap-4 border-b border-border px-5 py-3">
-      <h1 class="text-lg font-semibold text-text">
-        Jobs
-      </h1>
-      <div
-        class="flex rounded-btn border border-border p-0.5 text-sm"
-        role="tablist"
-      >
-        <button
-          v-for="name in (['queue', 'agents'] as const)"
-          :key="name"
-          type="button"
-          role="tab"
-          :aria-selected="tab === name"
-          class="rounded-btn px-3 py-1 capitalize transition-colors"
-          :class="tab === name ? 'bg-border/60 text-text' : 'text-muted hover:text-text'"
-          :data-testid="`jobs-tab-${name}`"
-          @click="tab = name"
+    <PageHeader
+      title="Jobs"
+      bar
+    >
+      <template #meta>
+        <div
+          class="flex rounded-btn border border-border p-0.5 text-sm"
+          role="tablist"
         >
-          {{ name }}
-        </button>
-      </div>
-      <ul
-        class="ml-auto flex flex-wrap items-center gap-2"
-        data-testid="jobs-seats"
-      >
-        <li
-          v-for="machine in seated"
-          :key="machine.id"
-          class="rounded-full border border-border px-3 py-1 font-mono text-xs text-text"
-          :class="machine.status !== 'online' ? 'opacity-50' : ''"
-          data-testid="jobs-seat-chip"
+          <button
+            v-for="name in (['queue', 'agents'] as const)"
+            :key="name"
+            type="button"
+            role="tab"
+            :aria-selected="tab === name"
+            class="rounded-btn px-3 py-1 capitalize transition-colors"
+            :class="tab === name ? 'bg-border/60 text-text' : 'text-muted hover:text-text'"
+            :data-testid="`jobs-tab-${name}`"
+            @click="tab = name"
+          >
+            {{ name }}
+          </button>
+        </div>
+      </template>
+      <template #actions>
+        <ul
+          class="flex flex-wrap items-center gap-2"
+          data-testid="jobs-seats"
         >
-          {{ machine.name }} {{ machine.used }}/{{ machine.seats }}
-        </li>
-      </ul>
-      <Button
-        size="sm"
-        data-testid="jobs-new"
-        @click="isNewOpen = true"
-      >
-        <Plus :size="16" />
-        New job
-      </Button>
-    </header>
+          <li
+            v-for="machine in seated"
+            :key="machine.id"
+            class="rounded-full border border-border px-3 py-1 font-mono text-xs text-text"
+            :class="machine.status !== 'online' ? 'opacity-50' : ''"
+            data-testid="jobs-seat-chip"
+          >
+            {{ machine.name }} {{ machine.used }}/{{ machine.seats }}
+          </li>
+        </ul>
+        <Button
+          size="sm"
+          data-testid="jobs-new"
+          @click="isNewOpen = true"
+        >
+          <Plus :size="16" />
+          New job
+        </Button>
+      </template>
+    </PageHeader>
 
     <ErrorNote
       v-if="store.error"

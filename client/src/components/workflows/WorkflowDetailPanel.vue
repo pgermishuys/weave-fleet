@@ -27,6 +27,7 @@ import type { WorkflowFile } from "@/lib/workflow-draft";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -255,50 +256,52 @@ function openRun(run: WorkflowRun): void {
       v-else-if="workflow && !showEditor"
       class="wf-detail__inner"
     >
-      <header class="wf-detail__head">
-        <span class="wf-detail__icon"><WorkflowIcon aria-hidden="true" /></span>
-        <h2>{{ workflow.name }}</h2>
-        <span
-          class="wf-pill"
-          :class="{ 'wf-pill--accent': !workflow.builtIn }"
-        >{{ workflow.builtIn ? "Built into Fleet" : workflow.file }}</span>
-        <Button
-          variant="outline"
-          size="sm"
-          class="wf-detail__repeat"
-          data-testid="workflow-repeat-on-schedule"
-          :disabled="!nav.repositoryPath.value || workflow.errors.length > 0"
-          :title="nav.repositoryPath.value ? 'Run this workflow on a schedule, as an automation' : 'Pick a repository in the Run box first'"
-          @click="repeatOnSchedule"
-        >
-          <CalendarClock
-            class="size-3.5"
-            aria-hidden="true"
-          />
-          Repeat on a schedule…
-        </Button>
-        <Button
-          v-if="workflow.builtIn"
-          size="sm"
-          class="wf-detail__action"
-          :disabled="!nav.repositoryPath.value"
-          :title="nav.repositoryPath.value ? undefined : 'Pick a repository in the Run box first'"
-          data-testid="workflow-duplicate"
-          @click="duplicate"
-        >
-          <Copy class="size-3.5" />Duplicate to this repo
-        </Button>
-        <Button
-          v-else
-          size="sm"
-          variant="outline"
-          class="wf-detail__action"
-          data-testid="workflow-edit"
-          @click="nav.showRuns(false)"
-        >
-          <Pencil class="size-3.5" />Edit
-        </Button>
-      </header>
+      <PageHeader :title="workflow.name">
+        <template #leading>
+          <span class="wf-detail__icon"><WorkflowIcon aria-hidden="true" /></span>
+        </template>
+        <template #meta>
+          <span
+            class="wf-pill"
+            :class="{ 'wf-pill--accent': !workflow.builtIn }"
+          >{{ workflow.builtIn ? "Built into Fleet" : workflow.file }}</span>
+        </template>
+        <template #actions>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="workflow-repeat-on-schedule"
+            :disabled="!nav.repositoryPath.value || workflow.errors.length > 0"
+            :title="nav.repositoryPath.value ? 'Run this workflow on a schedule, as an automation' : 'Pick a repository in the Run box first'"
+            @click="repeatOnSchedule"
+          >
+            <CalendarClock
+              class="size-3.5"
+              aria-hidden="true"
+            />
+            Repeat on a schedule…
+          </Button>
+          <Button
+            v-if="workflow.builtIn"
+            size="sm"
+            :disabled="!nav.repositoryPath.value"
+            :title="nav.repositoryPath.value ? undefined : 'Pick a repository in the Run box first'"
+            data-testid="workflow-duplicate"
+            @click="duplicate"
+          >
+            <Copy class="size-3.5" />Duplicate to this repo
+          </Button>
+          <Button
+            v-else
+            size="sm"
+            variant="outline"
+            data-testid="workflow-edit"
+            @click="nav.showRuns(false)"
+          >
+            <Pencil class="size-3.5" />Edit
+          </Button>
+        </template>
+      </PageHeader>
 
       <p
         v-if="workflow.builtIn"
@@ -477,6 +480,13 @@ function openRun(run: WorkflowRun): void {
       :message="nav.libraryError.value"
       class="m-auto max-w-md"
     />
+    <!-- Nothing picked yet (or the library is still loading): the view's own title. -->
+    <div
+      v-else-if="!showEditor"
+      class="wf-detail__inner"
+    >
+      <PageHeader title="Workflows" />
+    </div>
 
     <WorkflowCreateDialog
       :open="nav.creating.value !== null"
@@ -491,14 +501,6 @@ function openRun(run: WorkflowRun): void {
 </template>
 
 <style scoped>
-.wf-detail__repeat {
-  margin-left: auto;
-}
-
-.wf-detail__repeat + .wf-detail__action {
-  margin-left: 0;
-}
-
 .wf-detail {
   display: flex;
   flex: 1;
@@ -510,10 +512,6 @@ function openRun(run: WorkflowRun): void {
 .wf-detail--editor {
   justify-content: stretch;
   overflow: hidden;
-}
-
-.wf-detail__action {
-  margin-left: auto;
 }
 
 .wf-detail__hint {
@@ -529,19 +527,6 @@ function openRun(run: WorkflowRun): void {
   flex-direction: column;
   gap: 20px;
   padding: 28px 24px 40px;
-}
-
-.wf-detail__head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.wf-detail__head h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
 }
 
 .wf-detail__icon {

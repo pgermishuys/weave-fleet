@@ -77,6 +77,13 @@ No gutter between the rail and the context area.
 - **Buttons:** `<Button>` with a variant (`default` primary, `destructive`, `outline`, `secondary`, `ghost`, `link`,
   `toolbar-icon` / `toolbar-icon-danger` for icon-only toolbar buttons, `filter` for toggles) and a size (`default`,
   `sm`, `lg`, `icon`, `icon-sm`, `icon-lg`, `toolbar`, `toolbar-lg`). They're defined in `ui/button/index.ts`.
+- **Page titles:** `<PageHeader>` (`ui/page-header`) is the top of every page: the title at one size (`text-2xl`,
+  semibold), an optional `description` line, `#actions` on the right and `#meta` beside the title (a pill, a switch,
+  tabs). `trail` is the way back for a detail page: one link reads "‹ Automations", more read as a trail. `bar` is for
+  a page whose body scrolls under it (Jobs, Fleet, Board, an automation): full width, padded, a rule under it. It keeps
+  clear of the phone's menu button (`phone-menu-lane`), and on a phone its actions take their own row. A view with
+  nothing picked still has its title ("Automations", "Workflows"). A centred notice (a feature that's off, 404) and the
+  phone app's own pages aren't page headers.
 - **Empty states:** `<EmptyState>` (`ui/empty-state`) for a list, panel or page with nothing in it: an optional icon, a
   title, one line of text and an optional `#action`. `bordered` draws the dashed card; `compact` is for side panels and
   narrow lists. A picker's "no matches" row (`CommandEmpty`) and a one-line note inside a card are not empty states.
@@ -114,8 +121,8 @@ No gutter between the rail and the context area.
 - **Ratchet:** `bun run lint` includes the design lint (`client/scripts/lint-design-system.ts`).
   - In a `.vue` file outside `components/ui/`, it fails a new raw `<button>`, a border-radius that isn't 0, 50% or a
     token, a duration that isn't `var(--transition…)`, and an element with its own empty-state class (`x__empty`,
-    `empty-message`), any red-palette class or `text-error` / `text-destructive` as a text colour, and `animate-spin`
-    or a rotating `@keyframes`.
+    `empty-message`), any red-palette class or `text-error` / `text-destructive` as a text colour, `animate-spin`
+    or a rotating `@keyframes`, and an `<h1>` of its own (a page title: use `<PageHeader>`).
   - In any `.vue` or `.ts` file under `src/` (tests aside), it fails `window.confirm`, `alert` or `prompt`, and
     (outside `src/lib/format/`) a new `Intl.DateTimeFormat` / `NumberFormat` / `RelativeTimeFormat` or `toLocale*`
     call.
