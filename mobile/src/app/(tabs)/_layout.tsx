@@ -23,7 +23,7 @@ function TabButton({ label, icon, dot, isFocused, onPress }: TabTriggerSlotProps
         <Icon name={icon} size={22} color={tint} />
         {dot && <View style={{ position: "absolute", top: -2, right: -5, width: 9, height: 9, borderRadius: 5, backgroundColor: color.waiting }} />}
       </View>
-      <Text size={11} weight={isFocused ? "semibold" : "medium"} style={{ color: tint }}>{label}</Text>
+      <Text size={11} weight={isFocused ? "semibold" : "medium"} tone={isFocused ? "accent" : "muted"}>{label}</Text>
     </Pressable>
   );
 }

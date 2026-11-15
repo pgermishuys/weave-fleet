@@ -88,6 +88,15 @@ export function buildScheme(vars: Vars, scheme: "dark" | "light") {
     waitingEdge: css(mix(waiting, 40, border)),
     diffAdd: get("--diff-add"),
     diffDel: get("--diff-del"),
+    // Words in a status colour: the colours above are for dots, icons and tints (3:1); these read at 4.5:1.
+    accentText: get("--accent-text"),
+    runningText: get("--running-text"),
+    waitingText: get("--status-waiting-text"),
+    completeText: get("--complete-text"),
+    errorText: get("--error-text"),
+    queuedText: get("--queued-text"),
+    diffAddText: get("--diff-add-text"),
+    diffDelText: get("--diff-del-text"),
   };
 }
 

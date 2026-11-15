@@ -25,7 +25,15 @@ export const tokens = {
     "waitingBg": "#26221f",
     "waitingEdge": "rgba(246, 168, 36, 0.445)",
     "diffAdd": "#22c55e",
-    "diffDel": "#ef4444"
+    "diffDel": "#ef4444",
+    "accentText": "#8284F4",
+    "runningText": "#22c55e",
+    "waitingText": "#f59e0b",
+    "completeText": "#4F8FF7",
+    "errorText": "#EF5E5F",
+    "queuedText": "#9F78F8",
+    "diffAddText": "#22c55e",
+    "diffDelText": "#EF5E5F"
   },
   "light": {
     "chrome": "#F3F2EF",
@@ -50,7 +58,15 @@ export const tokens = {
     "waitingBg": "#fdf8f3",
     "waitingEdge": "rgba(188, 104, 8, 0.454)",
     "diffAdd": "#16A149",
-    "diffDel": "#dc2626"
+    "diffDel": "#dc2626",
+    "accentText": "#4D5EA9",
+    "runningText": "#107435",
+    "waitingText": "#975304",
+    "completeText": "#2159D4",
+    "errorText": "#B92323",
+    "queuedText": "#7537DF",
+    "diffAddText": "#107435",
+    "diffDelText": "#B92323"
   },
   "radius": {
     "card": 10,
