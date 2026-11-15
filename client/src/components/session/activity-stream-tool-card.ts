@@ -143,7 +143,7 @@ function buildPreview(output: string | undefined, summary: string | undefined): 
     }
 
     const truncated = firstNonEmpty.length > 80 
-      ? `${firstNonEmpty.slice(0, 77)}...` 
+      ? `${firstNonEmpty.slice(0, 79)}…` 
       : firstNonEmpty;
 
     const totalLines = lines.length;

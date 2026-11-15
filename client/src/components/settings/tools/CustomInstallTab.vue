@@ -334,7 +334,7 @@ async function submitInstall(): Promise<void> {
         </label>
 
         <label class="grid gap-1 text-sm text-text">
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Environment Variables (KEY=VALUE per line)</span>
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Environment variables (KEY=VALUE per line)</span>
           <textarea
             v-model="mcpEnv"
             rows="4"
@@ -360,7 +360,7 @@ async function submitInstall(): Promise<void> {
             :size="16"
             aria-hidden="true"
           />
-          <span>{{ isInstalling ? "Installing…" : "Install MCP Server" }}</span>
+          <span>{{ isInstalling ? "Installing…" : "Install MCP server" }}</span>
         </Button>
       </form>
     </div>

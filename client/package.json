@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "lint": "eslint . && node --experimental-strip-types scripts/lint-design-system.ts",
+    "lint": "eslint . && node --experimental-strip-types scripts/lint-design-system.ts && node --experimental-strip-types scripts/lint-words.ts",
+    "lint:words": "node --experimental-strip-types scripts/lint-words.ts",
     "lint:design": "node --experimental-strip-types scripts/lint-design-system.ts",
     "generate-api": "openapi-typescript openapi.json -o src/api/generated/schema.d.ts"
   },

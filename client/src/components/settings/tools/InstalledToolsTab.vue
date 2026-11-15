@@ -166,7 +166,7 @@ function formatCommand(command: string | null | undefined, args: readonly string
                 aria-hidden="true"
               />
               <span>
-                {{ removingKey === keyOf(tool) ? "Removing…" : confirmRemoveKey === keyOf(tool) ? "Confirm Remove" : "Remove" }}
+                {{ removingKey === keyOf(tool) ? "Removing…" : confirmRemoveKey === keyOf(tool) ? "Confirm remove" : "Remove" }}
               </span>
             </Button>
 

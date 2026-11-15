@@ -71,7 +71,7 @@ public static class HarnessEndpoints
             CancellationToken ct) =>
         {
             if (fleetOptions.Cloud.Enabled)
-                return Results.NotFound(new ApiErrorResponse("Harnesses can only be updated from Fleet when it runs on your own computer."));
+                return Results.NotFound(new ApiErrorResponse("Harnesses can only be updated from Fleet when it runs on your own machine."));
 
             var started = await updates.StartAsync(type, ct);
             return started.IsSuccess ? Results.Accepted(value: started.Value) : UpdateError(started.Error);

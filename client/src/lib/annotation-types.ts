@@ -31,5 +31,5 @@ export type AnnotationAnchor = ElementAnchor | TextRangeAnchor
  */
 export function extractAnchorText(anchor: AnnotationAnchor): string {
   const text = anchor.type === 'element' ? anchor.elementText : anchor.selectedText
-  return text.length > 240 ? text.slice(0, 240) + '...' : text
+  return text.length > 240 ? text.slice(0, 240) + '…' : text
 }

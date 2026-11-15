@@ -156,7 +156,7 @@ public static class MachinesEndpoints
             CancellationToken cancellationToken) =>
         {
             if (FleetClaims.DeviceIdOf(http.User) is not { } deviceId)
-                return Results.BadRequest(new ErrorResponse("Only a paired device asks for a device grant; a computer uses the machine token."));
+                return Results.BadRequest(new ErrorResponse("Only a paired device asks for a device grant; a machine uses its machine token."));
             var device = await devices.ValidateDeviceAsync(deviceId);
             if (device is null)
                 return Results.Unauthorized();
