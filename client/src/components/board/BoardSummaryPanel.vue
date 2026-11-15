@@ -93,6 +93,13 @@ const spendSegments = computed(() => {
   }));
 });
 
+/** What the bar draws, for a screen reader: each agent's share of the spend (or of the sessions, with no spend). */
+const spendLabel = computed(() => {
+  const parts = spendSegments.value.map((agent) => `${agent.agent} ${Math.round(parseFloat(agent.width))}%`);
+  const of = visibleCostTotal.value > 0 ? "spend" : "sessions";
+  return parts.length ? `Share of ${of} by agent: ${parts.join(", ")}` : "No spend by agent yet";
+});
+
 const queuedTasksCount = computed(() => {
   return summary.value?.queuedTasks;
 });
@@ -155,7 +162,8 @@ const liveFleetSummaryLabel = computed(() => {
 
       <div
         class="stacked-bar"
-        aria-label="Visible session spend distribution"
+        role="img"
+        :aria-label="spendLabel"
       >
         <div
           v-for="agent in spendSegments"
@@ -168,12 +176,14 @@ const liveFleetSummaryLabel = computed(() => {
 
       <div
         class="agents-list"
+        role="list"
         aria-label="Agent session counts"
       >
         <div
           v-for="agent in agentStats"
           :key="agent.agent"
           class="agent-row"
+          role="listitem"
         >
           <div class="agent-copy">
             <span class="agent-name">{{ agent.agent }}</span>

@@ -249,6 +249,14 @@ const projectBarItems = computed<CostBarItem[]>(() => {
   }))
 })
 
+// The chart is a canvas: its name says what it draws, and a table only a screen reader sees holds its numbers.
+const dailyChartLabel = computed(() => {
+  const days = props.daily
+  if (days.length === 0) return "Daily tokens and cost"
+  const [first, last] = [days[0], days[days.length - 1]]
+  return `Line chart of daily tokens and cost, ${formatShortDate(first.date)} to ${formatShortDate(last.date)}. The numbers follow in a table.`
+})
+
 const dailyTrendData = computed<ChartData<"line">>(() => ({
   labels: props.daily.map((point) => formatShortDate(point.date)),
   datasets: [
@@ -448,7 +456,39 @@ function getMaxCost(costs: readonly number[]): number {
         <Line
           :data="dailyTrendData"
           :options="dailyTrendOptions"
+          :aria-label="dailyChartLabel"
         />
+        <table
+          class="sr-only"
+          data-testid="analytics-daily-trend-table"
+        >
+          <caption>Daily tokens and cost</caption>
+          <thead>
+            <tr>
+              <th scope="col">
+                Day
+              </th>
+              <th scope="col">
+                Tokens
+              </th>
+              <th scope="col">
+                Cost
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="point in props.daily"
+              :key="point.date"
+            >
+              <th scope="row">
+                {{ formatShortDate(point.date) }}
+              </th>
+              <td>{{ compactNumberFormatter.format(point.tokens) }}</td>
+              <td>{{ formatCurrency(point.cost) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div

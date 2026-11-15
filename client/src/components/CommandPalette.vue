@@ -120,7 +120,12 @@ function handleInputKeyDown(event: KeyboardEvent): void {
       @keydown="handleInputKeyDown"
     />
 
-    <CommandList class="max-h-[50vh] sm:max-h-[300px]">
+    <!-- Reached from the box above: its arrow keys move through the list and scroll it (aria-activedescendant), so the
+         list itself takes no tab stop. With focus, reka's list ignores the arrows while a filter box is mounted. -->
+    <CommandList
+      class="max-h-[50vh] sm:max-h-[300px]"
+      aria-label="Commands"
+    >
       <CommandEmpty>No commands found.</CommandEmpty>
 
       <CommandGroup v-if="subStack.length > 0">

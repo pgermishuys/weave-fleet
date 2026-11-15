@@ -44,6 +44,9 @@ const rows = computed(() =>
     <div
       v-if="rows.length > 0"
       class="daily-tab__shell"
+      role="region"
+      aria-label="Daily analytics table"
+      tabindex="0"
     >
       <table class="daily-tab__table">
         <thead>

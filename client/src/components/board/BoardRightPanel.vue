@@ -61,7 +61,12 @@ const { hideRightPanel } = useSidebarMobile();
     />
 
     <div class="right-content">
-      <div class="right-content__panel">
+      <div
+        :id="`panel-${activeTabId}`"
+        class="right-content__panel"
+        role="tabpanel"
+        :aria-labelledby="`tab-${activeTabId}`"
+      >
         <BoardSummaryPanel v-if="activeTabId === 'summary'" />
         <BoardActivityPanel v-else-if="activeTabId === 'activity'" />
       </div>

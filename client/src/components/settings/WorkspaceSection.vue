@@ -265,6 +265,8 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
                 type="button"
                 :class="buttonSecondaryClass"
                 class="shrink-0"
+                aria-label="Browse for a folder"
+                title="Browse for a folder"
                 :disabled="isAddingWorkspaceRoot"
                 @click="openDirectoryPicker"
               >

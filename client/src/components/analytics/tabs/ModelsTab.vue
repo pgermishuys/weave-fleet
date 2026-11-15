@@ -124,7 +124,13 @@ const tableRows = computed<ModelTableRow[]>(() => {
         <h2 class="models-tab__title">
           Model details
         </h2>
-        <div class="models-tab__table-shell">
+        <!-- Scrolls sideways on a phone: a tab stop lets the arrow keys scroll it. -->
+        <div
+          class="models-tab__table-shell"
+          role="region"
+          aria-label="Model details table"
+          tabindex="0"
+        >
           <table class="models-tab__table">
             <caption class="models-tab__sr-only">
               Model analytics including model, provider, tokens, cost, estimated cost, messages, and average cost per message.

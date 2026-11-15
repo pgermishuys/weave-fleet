@@ -97,65 +97,71 @@ async function handleDelete(): Promise<void> {
 </script>
 
 <template>
+  <!-- The whole row opens the session on a click; the keyboard's stop is the part before the actions, so the
+       Archive and Delete buttons sit beside it rather than inside a button. -->
   <div
     class="dash-row"
     :data-session-id="sessionId"
     data-testid="dashboard-session-row"
-    role="button"
-    tabindex="0"
-    :aria-label="`${title}, ${status.description}`"
     @click="emit('select', session)"
-    @keydown.enter.prevent="emit('select', session)"
-    @keydown.space.prevent="emit('select', session)"
   >
-    <span class="dash-row__glyph">
-      <StatusGlyph
-        v-if="isLive"
-        :status="session.sessionStatus"
-        :activity="session.activityStatus"
-        :label="status.description"
-      />
-      <span
-        v-else
-        class="dash-row__quiet-dot"
-        aria-hidden="true"
-      />
-    </span>
-
-    <span class="dash-row__main">
-      <span class="dash-row__title">{{ title }}</span>
-      <span
-        v-if="place"
-        class="dash-row__place"
-      >{{ place }}</span>
-    </span>
-
-    <span
-      v-if="progress"
-      class="dash-row__progress"
-      :title="progress.current ? `Now: ${progress.current}` : undefined"
+    <div
+      class="dash-row__open"
+      role="button"
+      tabindex="0"
+      :aria-label="`${title}, ${status.description}`"
+      @keydown.enter.prevent="emit('select', session)"
+      @keydown.space.prevent="emit('select', session)"
     >
+      <span class="dash-row__glyph">
+        <StatusGlyph
+          v-if="isLive"
+          :status="session.sessionStatus"
+          :activity="session.activityStatus"
+          :label="status.description"
+        />
+        <span
+          v-else
+          class="dash-row__quiet-dot"
+          aria-hidden="true"
+        />
+      </span>
+
+      <span class="dash-row__main">
+        <span class="dash-row__title">{{ title }}</span>
+        <span
+          v-if="place"
+          class="dash-row__place"
+        >{{ place }}</span>
+      </span>
+
       <span
-        v-if="progress.current && isLive"
-        class="dash-row__current"
-      >{{ progress.current }}</span>
-      <ProgressRing
-        :done="progress.done"
-        :total="progress.total"
-      />
-      <span class="dash-row__count">{{ progress.done }}/{{ progress.total }}</span>
-    </span>
+        v-if="progress"
+        class="dash-row__progress"
+        :title="progress.current ? `Now: ${progress.current}` : undefined"
+      >
+        <span
+          v-if="progress.current && isLive"
+          class="dash-row__current"
+        >{{ progress.current }}</span>
+        <ProgressRing
+          :done="progress.done"
+          :total="progress.total"
+        />
+        <span class="dash-row__count">{{ progress.done }}/{{ progress.total }}</span>
+      </span>
 
-    <span
-      v-if="isArchived"
-      class="dash-row__tag"
-    >Archived</span>
+      <span
+        v-if="isArchived"
+        class="dash-row__tag"
+      >Archived</span>
 
-    <span
-      v-if="status.label"
-      class="dash-row__status"
-      :class="`dash-row__status--${status.tone}`"
-    >{{ status.label }}</span>
+      <span
+        v-if="status.label"
+        class="dash-row__status"
+        :class="`dash-row__status--${status.tone}`"
+      >{{ status.label }}</span>
+    </div>
 
     <span
       v-if="canArchive || canDelete"
@@ -202,14 +208,21 @@ async function handleDelete(): Promise<void> {
   --dash-row-hover: color-mix(in srgb, var(--text) 5%, var(--panel-bg));
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 6px 10px;
   border-radius: var(--radius-btn);
   color: var(--text);
   cursor: pointer;
   transition: background-color var(--transition);
+}
+
+.dash-row__open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 10px;
+  border-radius: inherit;
 }
 
 .dash-row:hover,
@@ -217,7 +230,7 @@ async function handleDelete(): Promise<void> {
   background: var(--dash-row-hover);
 }
 
-.dash-row:focus-visible {
+.dash-row__open:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
