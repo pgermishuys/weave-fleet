@@ -255,7 +255,7 @@ const dailyChartLabel = computed(() => {
   const days = props.daily
   if (days.length === 0) return "Daily tokens and cost"
   const [first, last] = [days[0], days[days.length - 1]]
-  return `Line chart of daily tokens and cost, ${formatShortDate(first.date)} to ${formatShortDate(last.date)}. The numbers follow in a table.`
+  return `Line chart of daily tokens and cost, ${formatDate(first.date)} to ${formatDate(last.date)}. The numbers follow in a table.`
 })
 
 const dailyTrendData = computed<ChartData<"line">>(() => ({
@@ -476,7 +476,7 @@ function getMaxCost(costs: readonly number[]): number {
               :key="point.date"
             >
               <th scope="row">
-                {{ formatShortDate(point.date) }}
+                {{ formatDate(point.date) }}
               </th>
               <td>{{ compactNumberFormatter.format(point.tokens) }}</td>
               <td>{{ formatCurrency(point.cost) }}</td>
