@@ -69,6 +69,19 @@ cat > "$HOME/src/demo-app/pages/paging.html" <<'HTML'
 </body></html>
 HTML
 
+# A 40-line module for the scripted model's edit-file keyword: its edit changes three lines in the middle.
+mkdir -p "$HOME/src/demo-app/src"
+python3 - "$HOME/src/demo-app/src/paginate.py" <<'PY'
+import sys
+head = ['"""Splits a list of rows into pages."""', "", "DEFAULT_SIZE = 20", "", ""]
+for n in range(1, 4):
+    head += [f"def page_{n}(rows, size=DEFAULT_SIZE):", f'    """Page {n} of the rows."""', f"    start = {n - 1} * size", "    return rows[start:start + size]", "", ""]
+body = ["def last_page(total, size=DEFAULT_SIZE):", '    """The index of the last page."""',
+        "    last = total // size", "    if last * size == total:", "        last -= 1", "    return last", "", ""]
+tail = ["def first_page(rows, size=DEFAULT_SIZE):", '    """Page 0 of the rows."""', "    return rows[:size]", "", "",
+        "def page_count(total, size=DEFAULT_SIZE):", '    """How many pages total rows need."""', "    return last_page(total, size) + 1"]
+open(sys.argv[1], "w").write("\n".join(head + body + tail) + "\n")
+PY
 ( cd "$HOME/src/demo-app" && git init -q && echo "# demo" > README.md && git add . && git -c user.email=e2e@example.com -c user.name=e2e commit -qm init )
 
 # Fleet's build output sits under a runtime folder (bin/Debug/net10.0/<rid>/) on some platforms.
