@@ -6,12 +6,17 @@
 //
 //   node report.mjs [--out=out] [--previous=<an earlier summary.json>] [--gate]
 //
-// Gates (a red night): page errors (and screens the crawl couldn't reach), console errors, failed requests, and
-// sideways overflow at 390 px. Report only, until their counts come down: axe WCAG 2 A/AA, icon-only controls with
-// no name, overflow at 1440 px, console warnings, and mock gaps (/api routes mock mode answers with 501).
+// Gates (a red night): page errors (and screens the crawl couldn't reach), console errors, failed requests, sideways
+// overflow at 390 px, and the axe ratchet: each axe WCAG 2 A/AA rule's count against axe-baseline.json, over the
+// screens this run visited. A rule above its baseline fails (naming the screens that grew); below it passes and asks
+// you to lower the baseline, so the counts only go down. Report only: icon-only controls with no name, overflow at
+// 1440 px, console warnings, and mock gaps (/api routes mock mode answers with 501).
+//
+//   node report.mjs --out=<out> --update-baseline   write this run's axe counts as axe-baseline.json (a full crawl only)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SCREENS, VARIANTS } from "./screens.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -58,19 +63,56 @@ for (const r of crawl) {
     axe[v.id].screens += 1;
   }
 }
+// --- the axe ratchet
+const BASELINE = join(here, "axe-baseline.json");
+const UPDATE = argv.includes("--update-baseline");
+const perScreen = {};
+for (const r of crawl) for (const v of r.axe ?? []) (perScreen[v.id] ??= {})[key(r)] = v.count;
+const visited = new Set(crawl.map(key));
+const fullCrawl = crawl.length === SCREENS.length * Object.values(VARIANTS).filter((v) => !v.onRequest).length;
+if (UPDATE) {
+  if (!fullCrawl) {
+    console.error(`--update-baseline needs a full crawl (every screen in every nightly variant); this one has ${crawl.length} screens`);
+    process.exit(2);
+  }
+  const rules = Object.fromEntries(
+    Object.keys(perScreen).sort().map((id) => [
+      id,
+      { total: axe[id].nodes, screens: Object.fromEntries(Object.entries(perScreen[id]).sort(([a], [b]) => a.localeCompare(b))) },
+    ]),
+  );
+  writeFileSync(BASELINE, JSON.stringify({ rules }, null, 2) + "\n");
+  console.log(`Axe baseline written: ${Object.entries(rules).map(([id, r]) => `${id} ${r.total}`).join(", ")}`);
+}
+const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { rules: {} };
+const ratchet = { rose: [], fell: [] };
+for (const id of [...new Set([...Object.keys(perScreen), ...Object.keys(baseline.rules)])].sort()) {
+  const was = baseline.rules[id]?.screens ?? {};
+  const now = perScreen[id] ?? {};
+  // Only the screens this run visited, so a run with --only compares like with like.
+  const sum = (counts) => Object.entries(counts).filter(([k]) => visited.has(k)).reduce((n, [, c]) => n + c, 0);
+  const [nowTotal, wasTotal] = [sum(now), sum(was)];
+  if (nowTotal > wasTotal) {
+    const grew = [...visited].filter((k) => (now[k] ?? 0) > (was[k] ?? 0)).map((k) => `${k} ${was[k] ?? 0} → ${now[k]}`);
+    ratchet.rose.push({ id, now: nowTotal, was: wasTotal, grew });
+  } else if (nowTotal < wasTotal) ratchet.fell.push({ id, now: nowTotal, was: wasTotal });
+}
+if (UPDATE) ratchet.rose = [];
+
 const mockGaps = [...new Set(crawl.flatMap((r) => r.mockGaps ?? []))].sort();
 const report = {
   unnamedControls: crawl.reduce((n, r) => n + r.unnamedButtons.length, 0),
   deskOverflowScreens: crawl.filter((r) => !r.phone && (r.overflow?.offenderCount || r.overflow?.pageOverflows)).length,
   consoleWarnings: crawl.reduce((n, r) => n + r.console.filter((c) => c.type === "warning").length, 0),
 };
-const red = Object.values(gates).some((g) => g.screens > 0);
+const red = Object.values(gates).some((g) => g.screens > 0) || ratchet.rose.length > 0;
 const summary = {
   screens: crawl.length,
   red,
   gates: Object.fromEntries(Object.entries(gates).map(([id, g]) => [id, { screens: g.screens, items: g.items }])),
   axe: Object.fromEntries(Object.entries(axe).map(([id, a]) => [id, { nodes: a.nodes, screens: a.screens }])),
   axeNodes: Object.values(axe).reduce((n, a) => n + a.nodes, 0),
+  ratchet: { rose: ratchet.rose.map(({ id, now, was }) => ({ id, now, was })), fell: ratchet.fell },
   report,
   mockGaps,
   seconds: Math.round(crawl.reduce((n, r) => n + r.ms, 0) / 1000),
@@ -96,7 +138,17 @@ for (const [id, g] of Object.entries(gates)) {
   for (const s of g.failing.slice(0, 30)) md.push(`- \`${s.screen}\`: ${s.items.slice(0, 3).map((x) => x.replaceAll("|", "\\|")).join("; ")}`);
   if (g.failing.length > 30) md.push(`- … and ${g.failing.length - 30} more screens (report.html)`);
 }
-md.push("", "### Report only (not gated)", "", "| Rule (axe WCAG 2 A/AA) | Impact | Elements | Screens |", "|---|---|---:|---:|");
+md.push("", "### Axe ratchet (scripts/ui-crawl/axe-baseline.json)", "");
+if (!ratchet.rose.length && !ratchet.fell.length) md.push("Every rule is at its baseline.");
+for (const r of ratchet.rose) {
+  md.push(`- ✗ \`${r.id}\`: ${r.now}, baseline ${r.was} (+${r.now - r.was}). Screens that grew:`);
+  for (const g of r.grew.slice(0, 15)) md.push(`  - \`${g}\``);
+}
+for (const r of ratchet.fell) md.push(`- ↓ \`${r.id}\`: ${r.now}, baseline ${r.was} (−${r.was - r.now}).`);
+if (ratchet.fell.length) {
+  md.push("", "Lower the baseline so it stays down: `UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh` (or `node scripts/ui-crawl/report.mjs --out=<out> --update-baseline` on a crawl's output), and commit axe-baseline.json.");
+}
+md.push("", "### Axe rules", "", "| Rule (axe WCAG 2 A/AA) | Impact | Elements | Screens |", "|---|---|---:|---:|");
 const axeIds = [...new Set([...Object.keys(axe), ...Object.keys(previous?.axe ?? {})])].sort(
   (a, b) => (axe[b]?.nodes ?? 0) - (axe[a]?.nodes ?? 0),
 );
@@ -149,13 +201,15 @@ ul{margin:0;padding-left:18px}code{font-size:12px}
 <h1>UI crawl: ${red ? "red" : "green"}, ${crawl.length} screens</h1>
 <table><tr><th>Gate</th><th>Screens</th><th>Findings</th></tr>
 ${Object.values(gates).map((g) => `<tr><td>${esc(g.label)}</td><td>${g.screens}</td><td>${g.items}</td></tr>`).join("")}
-<tr><td>axe (report only)</td><td></td><td>${summary.axeNodes}</td></tr></table>
+<tr><td>axe (ratchet: ${ratchet.rose.length ? `${ratchet.rose.map((r) => esc(r.id)).join(", ")} rose` : "at or under the baseline"})</td><td></td><td>${summary.axeNodes}</td></tr></table>
 ${rows}
 </html>
 `,
 );
 
 console.log(md.slice(0, 8).join("\n"));
+for (const r of ratchet.rose) console.error(`✗ axe ${r.id}: ${r.now}, baseline ${r.was}. Screens that grew: ${r.grew.slice(0, 10).join("; ")}`);
+for (const r of ratchet.fell) console.log(`↓ axe ${r.id}: ${r.now}, baseline ${r.was}. Lower the baseline: UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh`);
 if (argv.includes("--gate") && red) {
   console.error("UI crawl gates failed: see summary.md / report.html");
   process.exit(1);

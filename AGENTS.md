@@ -171,8 +171,12 @@ Skip rebuild on iteration: `dotnet test tests/WeaveFleet.E2E -p:SkipFrontendBuil
 
 `scripts/ui-crawl/run.sh` builds the client in mock mode and visits every screen in `scripts/ui-crawl/screens.mjs` in
 5 variants (dark/light, 1440/390 px, Labs on/off): page and console errors, failed requests and sideways overflow at
-390 px fail it; axe and screenshots are a report (`out/report.html`). `ui-crawl.yml` runs it every night on main and
-keeps one issue open while it's red. Add a screen there when you add a route.
+390 px fail it; screenshots are a report (`out/report.html`). Axe (WCAG 2 A/AA) is a ratchet: each rule's count is
+compared with `scripts/ui-crawl/axe-baseline.json`, and a rise fails the crawl, naming the screens that grew. When a
+count falls, lower the baseline in the same PR: `UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh` (a full crawl),
+or `node scripts/ui-crawl/report.mjs --out=<out> --update-baseline` on a CI run's `ui-crawl-report` artifact. The
+baseline holds CI's counts. `ui-crawl.yml` runs it every night on main and on a PR that changes the crawl, and keeps
+one issue open while it's red. Add a screen there when you add a route.
 
 ### Decision Tree: Where to Start
 

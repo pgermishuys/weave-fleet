@@ -138,6 +138,26 @@ async function visit(browser, vName, screen) {
       await page.waitForTimeout(500);
     }
     await page.waitForTimeout(700);
+    // Then until the page stops changing: 500 ms without a DOM change (5 s at most). A screen whose data arrives late
+    // (the analytics tables and charts on a busy machine) was measured half-drawn on some runs and whole on others,
+    // and a count that moves on its own can't be a ratchet.
+    rec.settleMs = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const started = performance.now();
+          let last = started;
+          const observer = new MutationObserver(() => (last = performance.now()));
+          observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+          const tick = () => {
+            const now = performance.now();
+            if (now - last >= 500 || now - started >= 5000) {
+              observer.disconnect();
+              resolve(Math.round(now - started));
+            } else setTimeout(tick, 100);
+          };
+          setTimeout(tick, 100);
+        }),
+    );
     rec.finalUrl = strip(page.url());
     rec.title = await page.title();
     rec.overflow = await page.evaluate(() => {
