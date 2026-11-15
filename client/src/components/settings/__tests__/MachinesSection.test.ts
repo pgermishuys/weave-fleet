@@ -8,6 +8,8 @@ import MachinesSection from "@/components/settings/MachinesSection.vue";
 
 const routerNavigate = vi.hoisted(() => vi.fn());
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: routerNavigate }) }));
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn(async () => true) }));
+vi.mock("@/components/ui/confirm", () => ({ confirmAction }));
 
 enableAutoUnmount(afterEach);
 
@@ -77,6 +79,58 @@ describe("Settings → Machines", () => {
   afterEach(() => {
     setActiveMachine(null);
     vi.unstubAllGlobals();
+  });
+
+  describe("asks before", () => {
+    it("forgetting a machine, and keeps it when cancelled", async () => {
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      const card = () => wrapper.find(`[data-testid='machine-card'][data-machine='${mini.id}']`);
+
+      confirmAction.mockResolvedValueOnce(false);
+      await card().get("[data-testid='machine-forget']").trigger("click");
+      await flushPromises();
+      expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: "Forget mini?",
+        confirmLabel: "Forget machine",
+        destructive: true,
+      }));
+      expect(card().exists()).toBe(true);
+
+      confirmAction.mockResolvedValueOnce(true);
+      await card().get("[data-testid='machine-forget']").trigger("click");
+      await flushPromises();
+      expect(card().exists()).toBe(false);
+    });
+
+    it("replacing this machine's token, and replaces nothing when cancelled", async () => {
+      const access = { token: "old-token-0123456789", tokenSource: "saved", host: "0.0.0.0", port: 2113, remoteReachable: true, requiresToken: true, addresses: [] };
+      const posts: string[] = [];
+      routes["/api/machine/access"] = () => json(access);
+      routes["/api/machine/access/token"] = (url) => {
+        posts.push(url ?? "");
+        return json({ ...access, token: "new-token-9876543210" });
+      };
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      const replace = () => wrapper.findAll("button").find((button) => button.text().includes("Replace token"))!;
+
+      confirmAction.mockResolvedValueOnce(false);
+      await replace().trigger("click");
+      await flushPromises();
+      expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: "Replace this machine's token?",
+        confirmLabel: "Replace token",
+        destructive: true,
+      }));
+      expect(posts).toHaveLength(0);
+
+      confirmAction.mockResolvedValueOnce(true);
+      await replace().trigger("click");
+      await flushPromises();
+      expect(posts).toHaveLength(1);
+      expect(wrapper.text()).toContain("new-token-9876543210");
+    });
   });
 
   it("opens the Add a machine form when something else asked for it", async () => {

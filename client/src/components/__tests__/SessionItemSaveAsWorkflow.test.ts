@@ -37,7 +37,6 @@ const stubs = {
   ContextMenuSubContent: { template: "<div><slot /></div>" },
   ContextMenuSubTrigger: { template: "<button type=\"button\"><slot /></button>" },
   ContextMenuTrigger: { template: "<div><slot /></div>" },
-  ConfirmDeleteSessionDialog: { template: "<div />" },
   OpenToolContextSubmenu: { template: "<div />" },
 };
 

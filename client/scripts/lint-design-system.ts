@@ -11,6 +11,8 @@
 //                     `text-error` / `text-destructive` for words, which miss 4.5:1 in most themes. Use <ErrorNote>,
 //                     or `text-error-text` for an error word that isn't a note
 //   AD_HOC_SPINNER    a home-made spinner: `animate-spin`, or an @keyframes that rotates. Use <Spinner>
+//   NATIVE_DIALOG     window.confirm / alert / prompt, in any .vue or .ts file under src/ (tests aside). Use
+//                     confirmAction() from components/ui/confirm: one look, keyboard and focus right, works on a phone
 //
 // The counts are compared with design-lint-baseline.json. A count above its baseline fails (the output names
 // the files that grew); a count below it passes and asks you to lower the baseline, so it only ever goes down.
@@ -22,7 +24,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER"] as const;
+export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER", "NATIVE_DIALOG"] as const;
 export type Rule = (typeof RULES)[number];
 
 export interface Violation {
@@ -40,14 +42,14 @@ export interface Baseline {
 const clientRoot = process.cwd();
 const baselinePath = join(clientRoot, "scripts", "design-lint-baseline.json");
 
-function findVueFiles(dir: string, skip: string[]): string[] {
+function findFiles(dir: string, skip: string[], extensions: string[] = [".vue"]): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === "__tests__" || skip.includes(full)) continue;
-      files.push(...findVueFiles(full, skip));
-    } else if (entry.name.endsWith(".vue")) {
+      files.push(...findFiles(full, skip, extensions));
+    } else if (extensions.some((ext) => entry.name.endsWith(ext)) && !/\.(test|spec)\.ts$/.test(entry.name)) {
       files.push(full);
     }
   }
@@ -201,6 +203,20 @@ export function checkSpinners(file: string, template: Block[], style: Block[]): 
   return out;
 }
 
+// The browser's own confirm, alert and prompt: unstyled, a different look on every browser, and gone in some
+// webviews. A call through window, globalThis or self counts; a method of your own called confirm() doesn't.
+const NATIVE_DIALOG = /(?<![\w$.])(?:window|globalThis|self)\s*\.\s*(confirm|alert|prompt)\s*\(/g;
+
+export function checkNativeDialogs(file: string, content: string): Violation[] {
+  const out: Violation[] = [];
+  content.split("\n").forEach((line, i) => {
+    for (const m of line.matchAll(NATIVE_DIALOG)) {
+      out.push({ rule: "NATIVE_DIALOG", file, line: i + 1, detail: `window.${m[1]}(); use confirmAction() from @/components/ui/confirm` });
+    }
+  });
+  return out;
+}
+
 export function lintFile(file: string, content: string): Violation[] {
   const { template, style } = extractBlocks(content);
   return [
@@ -210,14 +226,24 @@ export function lintFile(file: string, content: string): Violation[] {
     ...checkEmptyStates(file, template),
     ...checkErrorRed(file, content),
     ...checkSpinners(file, template, style),
+    ...checkNativeDialogs(file, content),
   ];
 }
 
 export function lintClient(root: string = clientRoot): Violation[] {
   const src = join(root, "src");
-  return findVueFiles(src, [join(src, "components", "ui")]).flatMap((full) =>
-    lintFile(relative(root, full).split(sep).join("/"), readFileSync(full, "utf8")),
+  const relativeTo = (full: string) => relative(root, full).split(sep).join("/");
+  const vue = findFiles(src, [join(src, "components", "ui")]).flatMap((full) =>
+    lintFile(relativeTo(full), readFileSync(full, "utf8")),
   );
+  // Native dialogs count everywhere in src/, scripts and the design system too.
+  const scripts = findFiles(src, [], [".ts", ".tsx"]).flatMap((full) =>
+    checkNativeDialogs(relativeTo(full), readFileSync(full, "utf8")),
+  );
+  const uiVue = findFiles(join(src, "components", "ui"), []).flatMap((full) =>
+    checkNativeDialogs(relativeTo(full), readFileSync(full, "utf8")),
+  );
+  return [...vue, ...scripts, ...uiVue];
 }
 
 export function countsOf(violations: Violation[]): Baseline {

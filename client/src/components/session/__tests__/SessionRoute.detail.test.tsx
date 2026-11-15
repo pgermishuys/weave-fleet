@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   abortSession: vi.fn(),
   deleteSession: vi.fn(),
   renameSession: vi.fn(),
+  confirmAction: vi.fn(),
 }));
 
 vi.mock("@tanstack/vue-router", () => ({
@@ -70,14 +71,7 @@ vi.mock("@/components/session/ForkSessionDialog.vue", () => ({
     template: '<div data-testid="fork-dialog" :data-open="open" />',
   },
 }));
-vi.mock("@/components/sessions/ConfirmDeleteSessionDialog.vue", () => ({
-  default: {
-    name: "ConfirmDeleteStub",
-    props: { open: Boolean },
-    emits: ["confirm", "update:open"],
-    template: '<button data-testid="confirm-delete" :data-open="open" @click="$emit(\'confirm\')" />',
-  },
-}));
+vi.mock("@/components/ui/confirm", () => ({ confirmAction: h.confirmAction, ConfirmHost: { template: "<div />" } }));
 vi.mock("@/components/session/SessionDetailHeader.vue", () => ({
   default: {
     name: "HeaderStub",
@@ -426,35 +420,63 @@ describe("session route: actions", () => {
     expect(wrapper.find('[data-testid="fork-dialog"]').exists()).toBe(false);
   });
 
-  it("delete_opens_the_confirm_dialog_and_confirming_deletes_then_goes_home", async () => {
+  /** Answers the confirm the way the shared dialog does: Delete runs the action and resolves true once it works. */
+  function answerConfirm(choice: "delete" | "cancel"): void {
+    h.confirmAction.mockImplementation(async (options: { run?: () => Promise<unknown> }) => {
+      if (choice === "cancel") return false;
+      try {
+        await options.run?.();
+        return true;
+      } catch {
+        // The dialog stays open with the error; the user cancels it in the end.
+        return false;
+      }
+    });
+  }
+
+  it("delete_asks_first_naming_the_session_then_deletes_and_goes_home", async () => {
+    answerConfirm("delete");
     const wrapper = await mountRoute();
     expect(h.deleteSession).not.toHaveBeenCalled();
     await wrapper.get('[data-testid="act-delete"]').trigger("click");
-    expect(wrapper.get('[data-testid="confirm-delete"]').attributes("data-open")).toBe("true");
-
-    await wrapper.get('[data-testid="confirm-delete"]').trigger("click");
     await flushPromises();
+
+    expect(h.confirmAction).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Delete this session?",
+      confirmLabel: "Delete session",
+      destructive: true,
+    }));
     expect(h.deleteSession).toHaveBeenCalledWith("session-1", "instance-1");
     expect(h.navigateMock).toHaveBeenCalledWith({ to: "/" });
-    expect(wrapper.get('[data-testid="confirm-delete"]').attributes("data-open")).toBe("false");
   });
 
-  it("delete_failure_keeps_the_dialog_open_and_does_not_navigate", async () => {
+  it("delete_failure_does_not_navigate", async () => {
+    answerConfirm("delete");
     h.deleteSession.mockRejectedValue(new Error("nope"));
     const wrapper = await mountRoute();
     await wrapper.get('[data-testid="act-delete"]').trigger("click");
-    await wrapper.get('[data-testid="confirm-delete"]').trigger("click");
     await flushPromises();
-    expect(wrapper.get('[data-testid="confirm-delete"]').attributes("data-open")).toBe("true");
+    expect(h.deleteSession).toHaveBeenCalled();
+    expect(h.navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("delete_cancelled_deletes_nothing", async () => {
+    answerConfirm("cancel");
+    const wrapper = await mountRoute();
+    await wrapper.get('[data-testid="act-delete"]').trigger("click");
+    await flushPromises();
+    expect(h.confirmAction).toHaveBeenCalled();
+    expect(h.deleteSession).not.toHaveBeenCalled();
     expect(h.navigateMock).not.toHaveBeenCalled();
   });
 
   it("delete_is_ignored_when_capabilities_forbid_it", async () => {
+    answerConfirm("delete");
     respond({ id: "session-1", capabilities: { ...capabilities, canDelete: false } });
     const wrapper = await mountRoute();
     await wrapper.get('[data-testid="act-delete"]').trigger("click");
-    expect(wrapper.get('[data-testid="confirm-delete"]').attributes("data-open")).toBe("false");
-    await wrapper.get('[data-testid="confirm-delete"]').trigger("click");
+    await flushPromises();
+    expect(h.confirmAction).not.toHaveBeenCalled();
     expect(h.deleteSession).not.toHaveBeenCalled();
   });
 

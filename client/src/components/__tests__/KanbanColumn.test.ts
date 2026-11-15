@@ -1,5 +1,8 @@
-import { mount, type VueWrapper } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
+
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn(async () => true) }));
+vi.mock("@/components/ui/confirm", () => ({ confirmAction }));
 import KanbanColumn from "@/components/board/KanbanColumn.vue";
 import type { BoardCard, BoardLane } from "@/stores/board";
 
@@ -97,5 +100,35 @@ describe("KanbanColumn", () => {
     await getButtonByText(wrapper, "Rename").trigger("click");
 
     expect((wrapper.get(".kanban-col__rename-input").element as HTMLInputElement).value).toBe("Backlog");
+  });
+
+  it("asks before deleting a lane, says its cards go too, and deletes once confirmed", async () => {
+    confirmAction.mockResolvedValueOnce(true);
+    const wrapper = mountColumn({ isManageMode: true });
+
+    const deleteLane = wrapper.get(".kanban-col__lane-actions").findAll("button").find((button) => button.text() === "Delete")!;
+    await deleteLane.trigger("click");
+    await flushPromises();
+
+    expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: "Delete this lane?",
+      subject: "Backlog",
+      body: expect.stringContaining("Its cards are removed too"),
+      confirmLabel: "Delete lane",
+      destructive: true,
+    }));
+    expect(wrapper.emitted("deleteLane")).toEqual([["lane-1"]]);
+  });
+
+  it("keeps the lane when the confirm is cancelled", async () => {
+    confirmAction.mockResolvedValueOnce(false);
+    const wrapper = mountColumn({ isManageMode: true, cards: [] });
+
+    const deleteLane = wrapper.get(".kanban-col__lane-actions").findAll("button").find((button) => button.text() === "Delete")!;
+    await deleteLane.trigger("click");
+    await flushPromises();
+
+    expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({ body: "The lane is empty, so no cards are lost." }));
+    expect(wrapper.emitted("deleteLane")).toBeUndefined();
   });
 });

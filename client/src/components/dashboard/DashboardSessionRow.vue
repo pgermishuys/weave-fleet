@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed } from "vue";
 import { Archive, Trash2 } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
-import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
+import { confirmAction } from "@/components/ui/confirm";
 import ProgressRing from "@/components/sessions/ProgressRing.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useArchiveSession, useDeleteSession } from "@/composables/use-session-actions";
@@ -28,7 +28,6 @@ const emit = defineEmits<{
 const sessionsStore = useSessionsStore();
 const { archiveSession, isArchiving } = useArchiveSession();
 const { deleteSession, isDeleting } = useDeleteSession();
-const isDeleteDialogOpen = shallowRef(false);
 
 const sessionId = computed(() => props.session.session.id);
 const title = computed(() => props.session.session.title?.trim() || "Untitled session");
@@ -79,16 +78,21 @@ async function handleArchive(): Promise<void> {
 
 async function handleDelete(): Promise<void> {
   if (!canDelete.value) return;
-  try {
-    await deleteSession(sessionId.value, props.session.instanceId);
-    isDeleteDialogOpen.value = false;
-    sessionCache.delete(sessionId.value, props.session.instanceId);
-    dispatchSessionRemoved(sessionId.value);
-    sessionsStore.removeSession(sessionId.value);
-    emit("changed");
-  } catch {
-    // Mutation state is owned by the composable.
-  }
+  const deleted = await confirmAction({
+    title: "Delete this session?",
+    subject: title.value,
+    body: "It and its session data are deleted for good.",
+    confirmLabel: "Delete session",
+    busyLabel: "Deleting…",
+    errorMessage: "Couldn't delete the session.",
+    destructive: true,
+    run: () => deleteSession(sessionId.value, props.session.instanceId),
+  });
+  if (!deleted) return;
+  sessionCache.delete(sessionId.value, props.session.instanceId);
+  dispatchSessionRemoved(sessionId.value);
+  sessionsStore.removeSession(sessionId.value);
+  emit("changed");
 }
 </script>
 
@@ -181,7 +185,7 @@ async function handleDelete(): Promise<void> {
         :disabled="isPending"
         aria-label="Delete session"
         title="Delete"
-        @click.stop="isDeleteDialogOpen = true"
+        @click.stop="void handleDelete()"
         @keydown.stop
       >
         <Trash2
@@ -191,13 +195,6 @@ async function handleDelete(): Promise<void> {
       </button>
     </span>
   </div>
-
-  <ConfirmDeleteSessionDialog
-    v-model:open="isDeleteDialogOpen"
-    :is-deleting="isDeleting"
-    :session-title="title"
-    @confirm="void handleDelete()"
-  />
 </template>
 
 <style scoped>

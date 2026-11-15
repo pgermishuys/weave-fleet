@@ -4,6 +4,7 @@ import { useRouter } from "@tanstack/vue-router";
 import { AlertTriangle, Bot, CalendarClock, Check, Copy, Pencil, Repeat, Sparkles, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm";
 import WorkflowCreateDialog from "@/components/workflows/WorkflowCreateDialog.vue";
 import WorkflowEditor from "@/components/workflows/WorkflowEditor.vue";
 import WorkflowRunBox from "@/components/workflows/WorkflowRunBox.vue";
@@ -63,10 +64,22 @@ watch(() => [editor.isDirty.value, editor.file.value?.workflowId] as const, ([di
   nav.unsavedWorkflowId.value = dirty && id ? id : null;
 });
 
-nav.setLeaveGuard(() => !editor.isDirty.value
-  || window.confirm(editor.drafted.value
-    ? `Discard the drafted workflow${editor.draft.value?.name ? ` ${editor.draft.value.name}` : ""}? It hasn't been saved.`
-    : `Discard your unsaved changes to ${editor.draft.value?.name || editor.file.value?.file || "this workflow"}?`));
+// Leaving unsaved edits asks first; with nothing unsaved it answers at once, so the move isn't delayed.
+nav.setLeaveGuard(() => !editor.isDirty.value || confirmAction(editor.drafted.value
+  ? {
+    title: "Discard the drafted workflow?",
+    subject: editor.draft.value?.name || undefined,
+    body: "It hasn't been saved.",
+    confirmLabel: "Discard draft",
+    destructive: true,
+  }
+  : {
+    title: "Discard your unsaved changes?",
+    subject: editor.draft.value?.name || editor.file.value?.file || undefined,
+    body: "Your edits to this workflow are lost.",
+    confirmLabel: "Discard changes",
+    destructive: true,
+  }));
 
 /** Saved: a drafted workflow is the repository's own now, and the library lists it. */
 function onSaved(): void {

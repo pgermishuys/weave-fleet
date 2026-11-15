@@ -67,8 +67,7 @@ import PrBadge from "@/components/github/PrBadge.vue";
 import { prState, prWords } from "@/lib/pr-state";
 import { linkNumber, linkPrFacts } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
-import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
-import ConfirmClearAttachmentsDialog from "./ConfirmClearAttachmentsDialog.vue";
+import { confirmAction } from "@/components/ui/confirm";
 import { clearSessionAttachments } from "@/api/session-attachments";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
@@ -122,12 +121,8 @@ const workflowsNav = useWorkflowsNav();
 
 const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
-const isDeleteDialogOpen = shallowRef(false);
 const machine = useMachineTarget();
 const machines = useMachinesStore();
-const isClearDialogOpen = shallowRef(false);
-const isClearing = shallowRef(false);
-const clearError = shallowRef<string | null>(null);
 const isRestoring = shallowRef(false);
 const renameDraft = shallowRef("");
 const initialRenameTitle = shallowRef("");
@@ -595,31 +590,18 @@ async function handleCopySessionId(): Promise<void> {
   }
 }
 
-function openDeleteDialog(): void {
-  if (!canDelete.value) {
-    return;
-  }
-
-  isContextMenuOpen.value = false;
-  isDeleteDialogOpen.value = true;
-}
-
-function openClearDialog(): void {
-  isContextMenuOpen.value = false;
-  clearError.value = null;
-  isClearDialogOpen.value = true;
-}
-
 async function handleClearAttachments(): Promise<void> {
-  isClearing.value = true;
-  try {
-    await clearSessionAttachments(machine, sessionId.value);
-    isClearDialogOpen.value = false;
-  } catch (error) {
-    clearError.value = error instanceof Error ? error.message : "Couldn't clear the attachments.";
-  } finally {
-    isClearing.value = false;
-  }
+  isContextMenuOpen.value = false;
+  await confirmAction({
+    title: "Clear attachments?",
+    subject: displayTitle.value,
+    body: "This deletes the files attached to this session. The agent can't read them again. The conversation stays.",
+    confirmLabel: "Clear attachments",
+    busyLabel: "Clearing…",
+    errorMessage: "Couldn't clear the attachments.",
+    destructive: true,
+    run: () => clearSessionAttachments(machine, sessionId.value),
+  });
 }
 
 async function handleDelete(): Promise<void> {
@@ -627,13 +609,18 @@ async function handleDelete(): Promise<void> {
     return;
   }
 
-  try {
-    await deleteSession(sessionId.value, instanceId.value);
-    isDeleteDialogOpen.value = false;
-    removeSessionFromStore();
-  } catch {
-    // Errors are handled by the mutation composable state.
-  }
+  isContextMenuOpen.value = false;
+  const deleted = await confirmAction({
+    title: "Delete this session?",
+    subject: displayTitle.value,
+    body: "It and its session data are deleted for good.",
+    confirmLabel: "Delete session",
+    busyLabel: "Deleting…",
+    errorMessage: "Couldn't delete the session.",
+    destructive: true,
+    run: () => deleteSession(sessionId.value, instanceId.value),
+  });
+  if (deleted) removeSessionFromStore();
 }
 
 function removeSessionFromStore(): void {
@@ -1097,7 +1084,7 @@ function removeSessionFromStore(): void {
           :disabled="isAnyActionPending"
           hint="Deletes the files you attached to this session's prompts. Fleet asks first."
           data-testid="session-context-clear-attachments"
-          @select="openClearDialog"
+          @select="void handleClearAttachments()"
         >
           <Paperclip class="size-3.5" />
           Clear attachments…
@@ -1110,7 +1097,7 @@ function removeSessionFromStore(): void {
             variant="destructive"
             :disabled="isAnyActionPending"
             hint="Deletes the session and its history. Fleet asks first; it can't be undone."
-            @select="openDeleteDialog"
+            @select="void handleDelete()"
           >
             <Trash2 class="size-3.5" />
             Delete permanently…
@@ -1123,21 +1110,6 @@ function removeSessionFromStore(): void {
       </ContextMenuHint>
     </ContextMenuContent>
   </ContextMenu>
-
-  <ConfirmClearAttachmentsDialog
-    v-model:open="isClearDialogOpen"
-    :session-title="displayTitle"
-    :is-clearing="isClearing"
-    :error="clearError"
-    @confirm="handleClearAttachments"
-  />
-
-  <ConfirmDeleteSessionDialog
-    v-model:open="isDeleteDialogOpen"
-    :is-deleting="isDeleting"
-    :session-title="displayTitle"
-    @confirm="handleDelete"
-  />
 </template>
 
 <style scoped>

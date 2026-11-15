@@ -94,9 +94,6 @@ const contextMenuStubs = {
   ContextMenuTrigger: {
     template: "<div><slot /></div>",
   },
-  ConfirmDeleteSessionDialog: {
-    template: "<div data-testid=\"confirm-delete-dialog\" />",
-  },
   OpenToolContextSubmenu: {
     template: "<div data-testid=\"open-tool-submenu\" />",
   },

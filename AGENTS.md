@@ -84,6 +84,12 @@ No gutter between the rail and the context area.
   server's words) and, when you listen for `@retry`, a "Try again" button (`retrying` holds it). `compact` drops the
   tint for a line under a field. Its words are `--error-text`, which every theme keeps at 4.5:1 on the error tint;
   `--error` itself is for icons and borders. Never Tailwind's red palette.
+- **Confirming:** `await confirmAction({ title, body, confirmLabel, destructive })` (`ui/confirm`) before an action that
+  can't be taken back; it resolves true or false. `<ConfirmHost>` in `App.vue` draws it on AlertDialog: Esc and Cancel
+  answer false, focus starts on Cancel when `destructive` and goes back where it was. The button says the action
+  ("Delete card"), never "OK". `subject` names the thing (`monoSubject` for a path). With `run`, the dialog stays open
+  and busy while the action runs and shows its error if it fails. Where an action offers undo, don't ask first. A dialog
+  with inputs or more than two choices is its own AlertDialog. Never `window.confirm` / `alert` / `prompt`.
 - **Loading:** `<Spinner>` (`ui/spinner`), sizes `xs` 12px (a chip or dense row), `sm` 14px (a small button), `md`
   16px (the default) and `lg` 20px (a panel or page). It turns only for `motion-safe` and fades slowly under
   prefers-reduced-motion. Pass `label` when nothing beside it says what's loading. Busy refresh buttons show a
@@ -100,6 +106,7 @@ No gutter between the rail and the context area.
     token, a duration that isn't `var(--transition…)`, and an element with its own empty-state class (`x__empty`,
     `empty-message`), any red-palette class or `text-error` / `text-destructive` as a text colour, and `animate-spin`
     or a rotating `@keyframes`.
+  - In any `.vue` or `.ts` file under `src/` (tests aside), it fails `window.confirm`, `alert` or `prompt`.
   - The counts are compared with `scripts/design-lint-baseline.json`; `--list <RULE>` prints every one.
 
 ## Diagnostics and Testing

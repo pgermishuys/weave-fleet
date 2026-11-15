@@ -1,4 +1,5 @@
 import { computed, shallowRef, type ShallowRef } from "vue";
+import { confirmAction } from "@/components/ui/confirm";
 import {
   useAbortSession,
   useDeleteSession,
@@ -15,6 +16,8 @@ export interface SessionDetailActionsInput {
   canDelete: () => boolean;
   canArchive: () => boolean;
   canRestore: () => boolean;
+  /** The title the delete confirm names. */
+  sessionTitle: () => string;
   /** The fetched detail; a rename updates its title. */
   remoteSession: ShallowRef<SessionDetailResponse | null>;
   /** The retention state the page holds optimistically, if any (a restore clears it). */
@@ -35,7 +38,6 @@ export function useSessionDetailActions(input: SessionDetailActionsInput) {
   const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
   const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
   const isRestoring = shallowRef(false);
-  const isDeleteDialogOpen = shallowRef(false);
   const isForkDialogOpen = shallowRef(false);
 
   const isAnyActionPending = computed(() => isAborting.value
@@ -69,27 +71,25 @@ export function useSessionDetailActions(input: SessionDetailActionsInput) {
     isForkDialogOpen.value = true;
   }
 
-  function handleDelete(): void {
-    if (!input.sessionId() || !input.instanceId() || !input.canDelete()) {
-      return;
-    }
-
-    isDeleteDialogOpen.value = true;
-  }
-
-  async function handleDeleteConfirmed(): Promise<void> {
+  /** Asks first; the dialog stays open while the delete runs and shows why if it fails. */
+  async function handleDelete(): Promise<void> {
+    const sessionId = input.sessionId();
     const instanceId = input.instanceId();
-    if (!input.sessionId() || !instanceId || !input.canDelete()) {
+    if (!sessionId || !instanceId || !input.canDelete()) {
       return;
     }
 
-    try {
-      await deleteSession(input.sessionId(), instanceId);
-      isDeleteDialogOpen.value = false;
-      await input.goHome();
-    } catch {
-      // Error is exposed inline by the action toolbar.
-    }
+    const deleted = await confirmAction({
+      title: "Delete this session?",
+      subject: input.sessionTitle(),
+      body: "It and its session data are deleted for good.",
+      confirmLabel: "Delete session",
+      busyLabel: "Deleting…",
+      errorMessage: "Couldn't delete the session.",
+      destructive: true,
+      run: () => deleteSession(sessionId, instanceId),
+    });
+    if (deleted) await input.goHome();
   }
 
   async function handleRename(proposedTitle: string): Promise<void> {
@@ -143,14 +143,12 @@ export function useSessionDetailActions(input: SessionDetailActionsInput) {
     isDeleting,
     isRenaming,
     isRestoring,
-    isDeleteDialogOpen,
     isForkDialogOpen,
     isAnyActionPending,
     actionErrors,
     handleAbort,
     handleFork,
     handleDelete,
-    handleDeleteConfirmed,
     handleRename,
     handleArchive,
     handleRestore,

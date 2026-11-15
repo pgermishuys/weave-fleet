@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compare, countsOf, lintFile, type Baseline } from "../lint-design-system";
+import { checkNativeDialogs, compare, countsOf, lintFile, type Baseline } from "../lint-design-system";
 
 const sfc = `<script setup lang="ts">
 const a = 1
@@ -131,6 +131,28 @@ describe("home-made spinners", () => {
 
   it("counts animate-spin in the template and a rotating @keyframes, not other animations", () => {
     expect(lines).toEqual([2, 3, 9]);
+  });
+});
+
+describe("the browser's own dialogs", () => {
+  const code = [
+    "if (!window.confirm(`Delete ${name}?`)) return;",
+    "window.alert('Saved');",
+    "const answer = globalThis.prompt('Name?');",
+    "self . confirm('Sure?');",
+    "const selected = inputHistory.confirm();",
+    "function confirm(): void {}",
+    "await confirmAction({ title: 'Delete this card?' });",
+    "// Never use window.confirm: the design lint fails it.",
+  ].join("\n");
+
+  it("counts window/globalThis/self confirm, alert and prompt calls, not a method of your own", () => {
+    expect(checkNativeDialogs("src/lib/example.ts", code).map((v) => v.line)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("counts them in a .vue file too", () => {
+    const sfc = "<script setup lang=\"ts\">\nfunction drop() { if (window.confirm('Drop?')) go(); }\n</script>\n";
+    expect(lintFile("src/components/Example.vue", sfc).filter((v) => v.rule === "NATIVE_DIALOG").map((v) => v.line)).toEqual([2]);
   });
 });
 

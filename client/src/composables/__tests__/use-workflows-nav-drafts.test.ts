@@ -120,3 +120,59 @@ describe("useWorkflowsNav: drafting a workflow", () => {
     expect(nav.drafted.value).toBeNull();
   });
 });
+
+describe("useWorkflowsNav: leaving unsaved edits", () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset();
+    apiFetchMock.mockImplementation(() => respond({ repository: "/work/repo", repositoryName: "repo", workflows: [] }));
+    const nav = useWorkflowsNav();
+    nav.setLeaveGuard(null);
+    nav.cancelDraft();
+  });
+
+  it("moves at once when the guard answers yes on the spot", () => {
+    const nav = useWorkflowsNav();
+    nav.setActiveWorkflow("builtin:review");
+    nav.setLeaveGuard(() => true);
+
+    nav.setActiveWorkflow("builtin:ship");
+
+    expect(nav.activeWorkflowId.value).toBe("builtin:ship");
+  });
+
+  it("waits for the user's answer while the guard asks, and stays when they cancel", async () => {
+    const nav = useWorkflowsNav();
+    nav.setActiveWorkflow("builtin:review");
+    let answer: (ok: boolean) => void = () => {};
+    nav.setLeaveGuard(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+
+    nav.setActiveWorkflow("builtin:ship");
+    expect(nav.activeWorkflowId.value).toBe("builtin:review");
+    answer(false);
+    await flushPromises();
+
+    expect(nav.activeWorkflowId.value).toBe("builtin:review");
+  });
+
+  it("moves once the user says to discard", async () => {
+    const nav = useWorkflowsNav();
+    nav.setActiveWorkflow("builtin:review");
+    nav.setLeaveGuard(() => Promise.resolve(true));
+
+    nav.setActiveWorkflow("builtin:ship");
+    await flushPromises();
+
+    expect(nav.activeWorkflowId.value).toBe("builtin:ship");
+  });
+
+  it("doesn't start a draft over unsaved edits the user keeps", async () => {
+    const nav = useWorkflowsNav();
+    nav.setActiveWorkflow("builtin:review");
+    nav.setLeaveGuard(() => Promise.resolve(false));
+
+    await nav.draftFromSession("session-1", "Fix the login bug");
+
+    expect(nav.activeWorkflowId.value).toBe("builtin:review");
+    expect(apiFetchMock.mock.calls.some(([path]) => String(path).startsWith("/api/workflows/drafts"))).toBe(false);
+  });
+});

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/vue-router";
 import { computed, defineComponent, nextTick, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { ArrowLeft, Bot } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
-import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import ActivityStream from "@/components/session/ActivityStream.vue";
 import Composer from "@/components/session/Composer.vue";
 import RecapLine from "@/components/session/RecapLine.vue";
@@ -402,14 +401,12 @@ const SessionDetailPage = defineComponent({
       isDeleting,
       isRenaming,
       isRestoring,
-      isDeleteDialogOpen,
       isForkDialogOpen,
       isAnyActionPending,
       actionErrors,
       handleAbort,
       handleFork,
       handleDelete,
-      handleDeleteConfirmed,
       handleRename,
       handleArchive,
       handleRestore,
@@ -421,6 +418,7 @@ const SessionDetailPage = defineComponent({
       canDelete: () => canDelete.value,
       canArchive: () => canArchive.value,
       canRestore: () => canRestore.value,
+      sessionTitle: () => selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session",
       remoteSession,
       optimisticRetentionStatus: () => optimisticSessionState.value?.retentionStatus,
       onSessionStateChanged: handleSessionStateChanged,
@@ -688,12 +686,6 @@ const SessionDetailPage = defineComponent({
           key={params.value.id}
           sessionId={params.value.id}
           directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
-        />
-        <ConfirmDeleteSessionDialog
-          v-model:open={isDeleteDialogOpen.value}
-          isDeleting={isDeleting.value}
-          sessionTitle={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
-          onConfirm={() => void handleDeleteConfirmed()}
         />
         <DiffsTray
           open={isDiffsTrayOpen.value}

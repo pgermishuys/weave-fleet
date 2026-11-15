@@ -416,6 +416,10 @@
         "src/components/github/CheckIcon.vue": 1,
         "src/components/mods/ModIcon.vue": 1
       }
+    },
+    "NATIVE_DIALOG": {
+      "total": 0,
+      "files": {}
     }
   }
 }

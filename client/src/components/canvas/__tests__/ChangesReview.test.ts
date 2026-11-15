@@ -1,20 +1,28 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { computed, defineComponent, h, ref } from "vue";
+import { computed, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesReview from "@/components/canvas/ChangesReview.vue";
 import type { FileDiffItem } from "@/api/client";
 import { useDraftState } from "@/composables/use-draft-state";
 import { sessionCommands } from "@/lib/session-commands";
 import { useCanvasesStore } from "@/stores/canvases";
+import type { ConfirmOptions } from "@/components/ui/confirm";
 
-const { readSessionFileMock, writeSessionFileMock, restoreSessionFileMock, fetchMock, searchMock } = vi.hoisted(() => ({
+const { readSessionFileMock, writeSessionFileMock, restoreSessionFileMock, fetchMock, searchMock, confirmMock, asked } = vi.hoisted(() => {
+  const asked: { options: ConfirmOptions; resolve: (ok: boolean) => void }[] = [];
+  return {
+  asked,
+  confirmMock: vi.fn((options: ConfirmOptions) => new Promise<boolean>((resolve) => { asked.push({ options, resolve }); })),
   searchMock: vi.fn(async (): Promise<ReadonlyMap<string, number> | null> => null),
   readSessionFileMock: vi.fn(),
   restoreSessionFileMock: vi.fn(),
   writeSessionFileMock: vi.fn(),
   fetchMock: vi.fn(),
-}));
+  };
+});
+
+vi.mock("@/components/ui/confirm", () => ({ confirmAction: confirmMock }));
 
 vi.mock("@/api/session-files", () => ({
   readSessionFile: readSessionFileMock,
@@ -55,25 +63,17 @@ let pinia = createPinia();
 function mountReview(options: { attachTo?: HTMLElement } = {}) {
   return mount(ChangesReview, {
     props: { sessionId: "s1" },
-    global: { plugins: [pinia], provide: { sharedDiffs }, stubs: dialogStubs },
+    global: { plugins: [pinia], provide: { sharedDiffs } },
     ...options,
   });
 }
 
-const pass = (name: string) => defineComponent({ name, setup: (_p, { slots }) => () => h("div", slots.default?.()) });
-const dialogStubs = {
-  AlertDialog: defineComponent({ name: "AlertDialogStub", props: { open: Boolean }, setup: (props, { slots }) => () => (props.open ? h("div", slots.default?.()) : null) }),
-  AlertDialogContent: pass("AlertDialogContent"),
-  AlertDialogDescription: pass("AlertDialogDescription"),
-  AlertDialogFooter: pass("AlertDialogFooter"),
-  AlertDialogHeader: pass("AlertDialogHeader"),
-  AlertDialogTitle: pass("AlertDialogTitle"),
-  AlertDialogCancel: defineComponent({ name: "AlertDialogCancel", setup: (_p, { slots }) => () => h("button", slots.default?.()) }),
-  AlertDialogAction: defineComponent({ name: "AlertDialogAction", setup: (_p, { slots, attrs }) => () => h("button", attrs, slots.default?.()) }),
-};
-
-function confirm(wrapper: ReturnType<typeof mountReview>): Promise<void> {
-  return wrapper.get("[data-testid='review-revert-confirm']").trigger("click");
+/** Answers the confirm the last revert asked, the way a click on its action would. */
+async function confirm(answer = true): Promise<void> {
+  const ask = asked.pop();
+  expect(ask, "a revert should ask first").toBeDefined();
+  ask!.resolve(answer);
+  await flushPromises();
 }
 
 function notesSection(wrapper: ReturnType<typeof mountReview>) {
@@ -95,6 +95,8 @@ describe("ChangesReview", () => {
     pinia = createPinia();
     setActivePinia(pinia);
     localStorage.clear();
+    asked.length = 0;
+    confirmMock.mockClear();
     sharedDiffs.diffs.value = summary;
     readSessionFileMock.mockReset();
     writeSessionFileMock.mockReset();
@@ -279,8 +281,14 @@ describe("ChangesReview", () => {
 
     await notesSection(wrapper).get("[data-testid='review-revert-hunk']").trigger("click");
     expect(writeSessionFileMock).not.toHaveBeenCalled();
+    expect(confirmMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Revert this change?",
+      subject: "src/notes.ts",
+      confirmLabel: "Revert change",
+      destructive: true,
+    }));
     await flushPromises();
-    await confirm(wrapper);
+    await confirm();
     await flushPromises();
 
     expect(writeSessionFileMock).toHaveBeenCalledTimes(1);
@@ -292,6 +300,19 @@ describe("ChangesReview", () => {
     expect(sharedDiffs.fetchDiffs).toHaveBeenCalled();
   });
 
+  it("reverts nothing when the confirm is cancelled", async () => {
+    readSessionFileMock.mockResolvedValue({ path: "src/notes.ts", content: AFTER, hash: "h1" });
+    const wrapper = mountReview();
+    await flushPromises();
+
+    await notesSection(wrapper).get("[data-testid='review-revert-file']").trigger("click");
+    expect(confirmMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Revert this file?", confirmLabel: "Revert file" }));
+    await confirm(false);
+
+    expect(writeSessionFileMock).not.toHaveBeenCalled();
+    expect(restoreSessionFileMock).not.toHaveBeenCalled();
+  });
+
   it("refuses to revert from a stale picture of the file", async () => {
     readSessionFileMock.mockResolvedValue({ path: "src/notes.ts", content: "something newer", hash: "h1" });
     const wrapper = mountReview();
@@ -299,7 +320,7 @@ describe("ChangesReview", () => {
 
     await notesSection(wrapper).get("[data-testid='review-revert-file']").trigger("click");
     await flushPromises();
-    await confirm(wrapper);
+    await confirm();
     await flushPromises();
 
     expect(writeSessionFileMock).not.toHaveBeenCalled();
@@ -319,7 +340,7 @@ describe("ChangesReview", () => {
       await flushPromises();
       await sectionOf(wrapper, path).get("[data-testid='review-revert-file']").trigger("click");
       await flushPromises();
-      await confirm(wrapper);
+      await confirm();
       await flushPromises();
       return wrapper;
     }
@@ -352,7 +373,7 @@ describe("ChangesReview", () => {
       expect(before).toBeGreaterThan(0);
       await sectionOf(wrapper, "new.txt").get("[data-testid='review-revert-file']").trigger("click");
       await flushPromises();
-      await confirm(wrapper);
+      await confirm();
       await flushPromises();
       expect(restoreSessionFileMock).toHaveBeenCalled();
       expect(askedFor()).toBe(before);
@@ -377,7 +398,7 @@ describe("ChangesReview", () => {
       await flushPromises();
       await sectionOf(wrapper, "crlf.txt").get("[data-testid='review-revert-hunk']").trigger("click");
       await flushPromises();
-      await confirm(wrapper);
+      await confirm();
       await flushPromises();
       expect(writeSessionFileMock.mock.calls[0]![3]).toBe(before);
     });
@@ -453,7 +474,7 @@ describe("ChangesReview", () => {
     it("opens on Ctrl+F inside Changes, keeps the browser's find out, and closes on Esc without reaching the app", async () => {
       const wrapper = mount(ChangesReview, {
         props: { sessionId: "s1" },
-        global: { plugins: [pinia], provide: { sharedDiffs }, stubs: dialogStubs },
+        global: { plugins: [pinia], provide: { sharedDiffs } },
         attachTo: document.body,
       });
       await flushPromises();

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { removeDevice, type PairedDevice } from "@/lib/devices-api";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { ErrorNote } from "@/components/ui/error-note";
+import { confirmAction } from "@/components/ui/confirm";
 
 /**
  * Settings → Machines → This machine → Devices with access: this computer, then each paired device with when it
@@ -33,7 +34,13 @@ function lastSeen(device: PairedDevice): string {
 }
 
 async function remove(device: PairedDevice): Promise<void> {
-  if (!window.confirm(`Remove ${device.name}? It loses access to this machine at once. Other devices aren't affected.`)) return;
+  const confirmed = await confirmAction({
+    title: `Remove ${device.name}?`,
+    body: "It loses access to this machine at once. Other devices aren't affected.",
+    confirmLabel: device.kind === "machine" ? "Remove machine" : "Remove device",
+    destructive: true,
+  });
+  if (!confirmed) return;
   busy.value = device.id;
   error.value = null;
   try {

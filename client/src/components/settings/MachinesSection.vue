@@ -30,6 +30,7 @@ import { normalizeManualCode } from "@/lib/pairing";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
+import { confirmAction } from "@/components/ui/confirm";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -251,8 +252,14 @@ async function setAgentWork(entry: MachineEntry, value: MachineAgentWork): Promi
   }
 }
 
-function forget(entry: MachineEntry): void {
-  if (!window.confirm(`Forget ${entry.name}? Its sessions stay on ${entry.name}; this device just stops listing them.`)) return;
+async function forget(entry: MachineEntry): Promise<void> {
+  const confirmed = await confirmAction({
+    title: `Forget ${entry.name}?`,
+    body: `Its sessions stay on ${entry.name}; this device just stops listing them.`,
+    confirmLabel: "Forget machine",
+    destructive: true,
+  });
+  if (!confirmed) return;
   machines.forgetMachine(entry.key);
 }
 
@@ -389,7 +396,13 @@ async function copy(value: string, what: string): Promise<void> {
 }
 
 async function replaceToken(): Promise<void> {
-  if (!window.confirm("Replace this machine's token? Every device using the old one loses access until you give it the new one.")) return;
+  const confirmed = await confirmAction({
+    title: "Replace this machine's token?",
+    body: "Every device using the old one loses access until you give it the new one.",
+    confirmLabel: "Replace token",
+    destructive: true,
+  });
+  if (!confirmed) return;
   isReplacing.value = true;
   accessError.value = null;
   try {

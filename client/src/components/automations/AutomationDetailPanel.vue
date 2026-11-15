@@ -10,16 +10,7 @@ import BuiltinAutomationDetail from "@/components/automations/BuiltinAutomationD
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { confirmAction } from "@/components/ui/confirm";
 import { freshComposerState, useAutomationsNav, type AutomationComposerState } from "@/composables/use-automations-nav";
 import { useAutomations } from "@/composables/use-automations";
 import { useRepositories } from "@/composables/use-repositories";
@@ -77,7 +68,6 @@ const machines = useMachinesStore();
 const composerRef = useTemplateRef<InstanceType<typeof AutomationComposer>>("composer");
 const isSubmitting = shallowRef(false);
 const isTogglingEnabled = shallowRef(false);
-const deleteConfirmOpen = shallowRef(false);
 /** Why the server refused the last create or save; shown above the composer. */
 const formError = shallowRef<string | null>(null);
 /** A short note: that a run started, that it was saved, or why the switch, Run now or Delete failed. */
@@ -292,13 +282,19 @@ async function handleToggleEnabled(enabled: boolean): Promise<void> {
 async function confirmDelete(): Promise<void> {
   const automation = currentAutomation.value;
   if (!automation) return;
+  const confirmed = await confirmAction({
+    title: "Delete this automation?",
+    subject: automation.name,
+    body: "It stops running. The sessions its runs started stay in Sessions.",
+    confirmLabel: "Delete automation",
+    destructive: true,
+  });
+  if (!confirmed) return;
   try {
     await deleteAutomation(automation.id);
     clearSelection();
   } catch (error) {
     showNotice("error", messageOf(error, "Couldn't delete the automation."));
-  } finally {
-    deleteConfirmOpen.value = false;
   }
 }
 
@@ -466,7 +462,7 @@ const firstRunHint = computed(() => {
               <DropdownMenuItem
                 class="ns-option automation-page__danger"
                 data-testid="automation-delete"
-                @select="deleteConfirmOpen = true"
+                @select="void confirmDelete()"
               >
                 <Trash2
                   class="ns-option__icon"
@@ -603,23 +599,6 @@ const firstRunHint = computed(() => {
         </template>
       </EmptyState>
     </div>
-
-    <AlertDialog v-model:open="deleteConfirmOpen">
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete this automation?</AlertDialogTitle>
-          <AlertDialogDescription>
-            It stops running. The sessions its runs started stay in Sessions.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction @click="confirmDelete">
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   </div>
 </template>
 

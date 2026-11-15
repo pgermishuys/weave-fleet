@@ -13,16 +13,7 @@ import {
   Undo2,
   WrapText,
 } from "lucide-vue-next";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { confirmAction } from "@/components/ui/confirm";
 import { readSessionFile, restoreSessionFile, searchSessionChanges, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
 import LinesBar from "@/components/canvas/LinesBar.vue";
@@ -331,50 +322,43 @@ function segments(line: ReviewLine) {
 
 // ─── Revert ──────────────────────────────────────────────────────────────────
 
-interface PendingRevert {
+interface RevertRequest {
   path: string;
   hunk: ReviewHunk | null;
-  title: string;
-  detail: string;
 }
-const pending = shallowRef<PendingRevert | null>(null);
-const confirmOpen = computed({
-  get: () => pending.value !== null,
-  // The dialog reports itself closed before the Revert button's click handler runs; clearing the request at once
-  // would leave that handler nothing to revert.
-  set: (open: boolean) => {
-    if (!open) setTimeout(() => { pending.value = null; }, 0);
-  },
-});
 const notice = shallowRef<string | null>(null);
 const reverting = shallowRef(false);
 
-function askRevertFile(path: string, status: FileDiffItem["status"]): void {
-  pending.value = {
-    path,
-    hunk: null,
+async function askRevertFile(path: string, status: FileDiffItem["status"]): Promise<void> {
+  const confirmed = await confirmAction({
     title: "Revert this file?",
-    detail:
+    subject: path,
+    monoSubject: true,
+    body:
       status === "added"
         ? "Deletes the file: the session created it. Its contents are lost."
         : status === "deleted"
           ? "Puts the deleted file back as it was."
           : "Puts the file back as it was before the agent changed it. The agent's edits to it are lost.",
-  };
+    confirmLabel: "Revert file",
+    destructive: true,
+  });
+  if (confirmed) await revert({ path, hunk: null });
 }
-function askRevertHunk(path: string, hunk: ReviewHunk): void {
-  pending.value = {
-    path,
-    hunk,
+async function askRevertHunk(path: string, hunk: ReviewHunk): Promise<void> {
+  const confirmed = await confirmAction({
     title: "Revert this change?",
-    detail: "Puts these lines back as they were. The agent's other edits to the file stay.",
-  };
+    subject: path,
+    monoSubject: true,
+    body: "Puts these lines back as they were. The agent's other edits to the file stay.",
+    confirmLabel: "Revert change",
+    destructive: true,
+  });
+  if (confirmed) await revert({ path, hunk });
 }
 
-async function confirmRevert(): Promise<void> {
-  const request = pending.value;
-  pending.value = null;
-  if (!request || reverting.value) return;
+async function revert(request: RevertRequest): Promise<void> {
+  if (reverting.value) return;
   const view = views.value[request.path];
   if (view?.entry?.status !== "ready") return;
   const item = view.entry.item;
@@ -932,7 +916,7 @@ function onCodeScroll(event: Event): void {
               :disabled="!canRevertFile(file) || reverting"
               :title="revertFileBlocker(file) ?? (file.status === 'added' ? 'Revert file: delete this new file' : 'Revert file')"
               data-testid="review-revert-file"
-              @click="askRevertFile(file.file, file.status)"
+              @click="void askRevertFile(file.file, file.status)"
             >
               <Undo2
                 :size="14"
@@ -1112,7 +1096,7 @@ function onCodeScroll(event: Event): void {
                     :disabled="reverting || file.status !== 'modified'"
                     :title="file.status === 'modified' ? 'Revert hunk' : 'Revert the whole file instead'"
                     data-testid="review-revert-hunk"
-                    @click="askRevertHunk(file.file, item)"
+                    @click="void askRevertHunk(file.file, item)"
                   >
                     <Undo2
                       :size="12"
@@ -1238,30 +1222,6 @@ function onCodeScroll(event: Event): void {
     >
       {{ toastMessage }}
     </div>
-
-    <AlertDialog
-      :open="confirmOpen"
-      @update:open="confirmOpen = $event"
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ pending?.title }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            <span class="block font-mono text-foreground">{{ pending?.path }}</span>
-            <span class="block">{{ pending?.detail }}</span>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            data-testid="review-revert-confirm"
-            @click="confirmRevert"
-          >
-            Revert
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   </div>
 </template>
 

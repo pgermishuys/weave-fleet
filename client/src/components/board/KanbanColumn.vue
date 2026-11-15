@@ -3,6 +3,7 @@ import type { BoardCard, BoardLane } from "@/stores/board";
 import { computed, shallowRef, watch } from "vue";
 import KanbanCard from "@/components/board/KanbanCard.vue";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm";
 
 interface CardDraftPayload {
   laneId: string;
@@ -199,13 +200,17 @@ async function submitLaneRename(): Promise<void> {
   cancelLaneRename();
 }
 
-function handleDeleteLane(): void {
+async function handleDeleteLane(): Promise<void> {
   const hasCards = props.cards.length > 0;
-  const confirmation = window.confirm(
-    hasCards
-      ? `Delete lane “${props.lane.name}”? Existing cards in this lane will also be removed if the API does not migrate them.`
-      : `Delete lane “${props.lane.name}”?`,
-  );
+  const confirmation = await confirmAction({
+    title: "Delete this lane?",
+    subject: props.lane.name,
+    body: hasCards
+      ? "Its cards are removed too, unless the server moves them to another lane."
+      : "The lane is empty, so no cards are lost.",
+    confirmLabel: "Delete lane",
+    destructive: true,
+  });
 
   if (!confirmation) {
     return;

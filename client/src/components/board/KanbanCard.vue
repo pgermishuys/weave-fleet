@@ -4,6 +4,7 @@ import type { BoardCard } from "@/stores/board";
 import { computed, shallowRef } from "vue";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm";
 
 interface Props {
   card: BoardCard;
@@ -156,8 +157,15 @@ function submitRename(): void {
   cancelRename();
 }
 
-function handleDelete(): void {
-  if (!window.confirm(`Delete card “${props.card.title}”?`)) {
+async function handleDelete(): Promise<void> {
+  const confirmed = await confirmAction({
+    title: "Delete this card?",
+    subject: props.card.title,
+    body: "It's removed from the board. Archive it instead to keep it out of the way.",
+    confirmLabel: "Delete card",
+    destructive: true,
+  });
+  if (!confirmed) {
     return;
   }
 
