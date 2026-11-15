@@ -25,9 +25,9 @@ const fleetHighlight = HighlightStyle.define([
   { tag: [t.emphasis], fontStyle: "italic" },
   { tag: [t.strikethrough], textDecoration: "line-through" },
   { tag: [t.punctuation, t.bracket, t.separator, t.operator], color: "var(--muted)" },
-  { tag: [t.invalid], color: "var(--error)" },
-  { tag: [t.inserted], color: "var(--running)" },
-  { tag: [t.deleted], color: "var(--error)" },
+  { tag: [t.invalid], color: "var(--error-text)" },
+  { tag: [t.inserted], color: "var(--running-text)" },
+  { tag: [t.deleted], color: "var(--error-text)" },
 ]);
 
 const mix = (color: string, percent: number) => `color-mix(in srgb, ${color} ${percent}%, transparent)`;

@@ -194,3 +194,79 @@ export function resolveCodePalette(selection: CodeThemeSelection, themeId: Theme
   const theme = codeThemes.find((t) => t.id === id) ?? codeThemes[0];
   return colorScheme === "light" && theme.light ? theme.light : theme.dark;
 }
+
+// ─── Readable on the app theme ────────────────────────────────────────────────
+
+/** The surfaces code is drawn on under one app theme: its three surfaces, and each with the 4% `--text` tint of a code block. */
+export interface CodeGrounds {
+  text: string;
+  surfaces: string[];
+}
+
+const channels = (hex: string): number[] => [0, 2, 4].map((i) => parseInt(hex.replace("#", "").slice(i, i + 2), 16));
+const toHex = (c: number[]): string => `#${c.map((x) => Math.round(x).toString(16).padStart(2, "0")).join("")}`;
+const isHex = (value: string): boolean => /^#[0-9a-f]{6}$/i.test(value.trim());
+
+/**
+ * A CSS colour as #rrggbb, or null. The built CSS is minified, so the page reports #fff for #ffffff, and a browser may
+ * report rgb(); both come back as six digits.
+ */
+export function normalizeHex(value: string): string | null {
+  const v = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(v)) return v;
+  if (/^#[0-9a-f]{3}$/.test(v)) return `#${[...v.slice(1)].map((c) => c + c).join("")}`;
+  const rgb = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)\s*(?:[,/]\s*1(?:\.0*)?\s*)?\)$/.exec(v);
+  return rgb ? toHex(rgb.slice(1, 4).map(Number)) : null;
+}
+
+function luminance(hex: string): number {
+  const f = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const [r, g, b] = channels(hex).map((c) => f(c / 255));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrastRatio(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+
+/** `a` at `percent` over `b`, as color-mix(in srgb, a p%, b) draws it. */
+export function mixHex(a: string, percent: number, b: string): string {
+  const [x, y] = [channels(a), channels(b)];
+  return toHex(x.map((v, i) => v * percent / 100 + y[i] * (1 - percent / 100)));
+}
+
+/** Every background code can sit on: the bare surfaces (the Files editor) and the code block's tint over each. */
+export function codeBackgrounds(grounds: CodeGrounds): string[] {
+  return grounds.surfaces.flatMap((s) => [s, mixHex(grounds.text, 4, s)]);
+}
+
+/**
+ * The palette with every colour that reads below 4.5:1 on one of these backgrounds moved toward black (on a light theme)
+ * or white (a dark one), keeping its hue, just until it reads. Colours that already read are left as they are, so a
+ * scheme looks like itself wherever it can.
+ */
+export function readablePalette(palette: CodePalette, grounds: CodeGrounds): CodePalette {
+  if (![grounds.text, ...grounds.surfaces].every(isHex)) return palette;
+  const backgrounds = codeBackgrounds(grounds);
+  const toward = luminance(grounds.text) < 0.5 ? "#000000" : "#ffffff";
+  const reads = (c: string) => backgrounds.every((bg) => contrastRatio(c, bg) >= 4.5);
+  const out = { ...palette };
+  for (const token of syntaxTokens) {
+    const base = palette[token];
+    if (!isHex(base) || reads(base)) continue;
+    let k = 1;
+    while (k < 100 && !reads(mixHex(toward, k, base))) k++;
+    out[token] = mixHex(toward, k, base);
+  }
+  return out;
+}
+
+/** The current app theme's grounds, read from the page; null where the page has no theme (tests, server). */
+export function documentCodeGrounds(): CodeGrounds | null {
+  if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return null;
+  const style = getComputedStyle(document.documentElement);
+  const read = (name: string) => normalizeHex(style.getPropertyValue(name));
+  const [text, ...surfaces] = ["--text", "--main-bg", "--panel-bg", "--card-bg"].map(read);
+  return text && surfaces.every((c): c is string => c !== null) ? { text, surfaces } : null;
+}

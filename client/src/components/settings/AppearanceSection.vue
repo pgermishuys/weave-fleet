@@ -12,7 +12,7 @@ import {
   type ThemeSelection,
   type ThinkingDisplay,
 } from "@/stores/theme";
-import { codeThemeLabel, codeThemes, isCodeThemeAvailable, resolveCodePalette, resolveCodeThemeId, type CodePalette, type CodeThemeSelection } from "@/lib/code-themes";
+import { codeThemeLabel, codeThemes, documentCodeGrounds, isCodeThemeAvailable, readablePalette, resolveCodePalette, resolveCodeThemeId, type CodePalette, type CodeThemeSelection } from "@/lib/code-themes";
 
 const themeStore = useThemeStore();
 
@@ -36,12 +36,18 @@ interface CodeThemeCard {
 const codeThemeCards = computed<CodeThemeCard[]>(() => {
   const theme = themeStore.resolvedTheme;
   const matched = codeThemes.find((t) => t.id === resolveCodeThemeId("match", theme.id, theme.colorScheme));
+  // Preview what code will look like: the colours as lifted for this theme (see readablePalette).
+  const grounds = documentCodeGrounds();
+  const shown = (selection: CodeThemeSelection) => {
+    const palette = resolveCodePalette(selection, theme.id, theme.colorScheme);
+    return grounds ? readablePalette(palette, grounds) : palette;
+  };
   return [
-    { id: "match", label: "Match theme", note: matched && codeThemeLabel(matched, theme.colorScheme), palette: resolveCodePalette("match", theme.id, theme.colorScheme), available: true },
+    { id: "match", label: "Match theme", note: matched && codeThemeLabel(matched, theme.colorScheme), palette: shown("match"), available: true },
     ...codeThemes.map((t) => {
       const available = isCodeThemeAvailable(t.id, theme.colorScheme);
       // An unavailable card still previews the scheme's own colours, so you can see why it's for dark themes.
-      return { id: t.id, label: codeThemeLabel(t, theme.colorScheme), note: available ? undefined : "Dark themes only", palette: available ? resolveCodePalette(t.id, theme.id, theme.colorScheme) : t.dark, available };
+      return { id: t.id, label: codeThemeLabel(t, theme.colorScheme), note: available ? undefined : "Dark themes only", palette: available ? shown(t.id) : t.dark, available };
     }),
   ];
 });

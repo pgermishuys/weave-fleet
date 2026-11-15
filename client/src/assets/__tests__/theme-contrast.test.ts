@@ -19,10 +19,14 @@
 //   tint. The default --accent as words was 3.81:1 on a card, solarized-light's 3.00:1.
 // - Error and coral: --error-text and --coral-text as words, the colours themselves 3:1 as icons (nord's --error was
 //   2.46:1, monokai's 2.89:1).
+// - Code colours: every code scheme's colours, as the theme store writes them (readablePalette), 4.5:1 on the code
+//   block and the editor under every theme the scheme can be used with. One Light's functions were 3.74:1, Solarized's
+//   comments 1.68:1; a colour that already reads keeps its scheme's own value.
 // - Muted words: --muted, 4.5:1 on every surface (solarized's own was 4.11:1 and 3.64:1).
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { codeBackgrounds, codeThemes, normalizeHex, readablePalette, syntaxTokens } from "../../lib/code-themes";
 import prBadgeSource from "../../components/github/PrBadge.vue?raw";
 import sessionItemSource from "../../components/sessions/SessionItem.vue?raw";
 import draftRowSource from "../../components/sessions/DraftSessionRow.vue?raw";
@@ -362,5 +366,43 @@ describe("status words", () => {
       text.split("\n").flatMap((line, i) => (PALETTE.test(line) ? [`${file}:${i + 1} ${line.match(PALETTE)![0]}`] : [])),
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("code colours", () => {
+  const LIGHT_THEMES = new Set(["light", "solarized-light"]);
+  it.each(Object.entries(themes()))("read at 4.5:1 in every scheme the %s theme can use", (name, vars) => {
+    const grounds = { text: resolveVar(vars, vars.text), surfaces: ["main-bg", "panel-bg", "card-bg"].map((s) => resolveVar(vars, vars[s])) };
+    const backgrounds = codeBackgrounds(grounds);
+    const failures: string[] = [];
+    for (const scheme of codeThemes) {
+      const palette = LIGHT_THEMES.has(name) ? scheme.light : scheme.dark;
+      if (!palette) continue;
+      const shown = readablePalette(palette, grounds);
+      for (const token of syntaxTokens) {
+        for (const bg of backgrounds) {
+          const ratio = contrast(shown[token], bg);
+          if (ratio < 4.5) failures.push(`${scheme.id} ${token} ${shown[token]} on ${bg}: ${ratio.toFixed(2)}`);
+        }
+        if (backgrounds.every((bg) => contrast(palette[token], bg) >= 4.5)) {
+          expect(shown[token], `${scheme.id} ${token} already reads, so it keeps its own colour`).toBe(palette[token]);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  // The built CSS is minified: the page reported light's #ffffff surfaces as #fff, so no light theme was lifted.
+  it("are measured from the page's colours however the browser writes them", () => {
+    expect(normalizeHex("#fff")).toBe("#ffffff");
+    expect(normalizeHex(" #1A1918")).toBe("#1a1918");
+    expect(normalizeHex("rgb(243, 242, 239)")).toBe("#f3f2ef");
+    expect(normalizeHex("rgba(26, 25, 24, 0.09)")).toBeNull();
+    expect(normalizeHex("var(--x)")).toBeNull();
+  });
+
+  it("are left alone where the page has no theme to measure", () => {
+    const palette = codeThemes[0].dark;
+    expect(readablePalette(palette, { text: "", surfaces: ["", "", ""] })).toEqual(palette);
   });
 });

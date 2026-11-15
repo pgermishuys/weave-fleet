@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
-import { isValidCodeTheme, resolveCodePalette, syntaxTokens, type CodeThemeSelection } from "@/lib/code-themes";
+import { documentCodeGrounds, isValidCodeTheme, readablePalette, resolveCodePalette, syntaxTokens, type CodeThemeSelection } from "@/lib/code-themes";
 
 export type ThemeId =
   | "dark"
@@ -258,7 +258,10 @@ export const useThemeStore = defineStore("theme", () => {
     }
 
     const theme = resolvedTheme.value;
-    const palette = resolveCodePalette(codeTheme.value, theme.id, theme.colorScheme);
+    // Each colour is lifted just enough to read at 4.5:1 on this theme's code backgrounds (see readablePalette).
+    const scheme = resolveCodePalette(codeTheme.value, theme.id, theme.colorScheme);
+    const grounds = documentCodeGrounds();
+    const palette = grounds ? readablePalette(scheme, grounds) : scheme;
     for (const token of syntaxTokens) {
       document.documentElement.style.setProperty(`--syntax-${token}`, palette[token]);
     }
