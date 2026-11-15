@@ -18,6 +18,11 @@ Replies word by word (so streaming shows), and on keywords in the last user text
   ask-permission -> calls the write tool on notes/report.md in the session's folder, which the harness asks permission for
                 when Fleet's PermissionLevel preference is "ask" (start-fleet.sh sets it); on allow it says "Wrote the report,
                 run N", on deny "Couldn't write the report, run N". With the level on "allow everything" there's no card.
+  write-file -> calls the write tool on src/page_size.py (a new file of about 15 lines) in the session's folder, then says
+                "Wrote src/page_size.py."
+  edit-file -> calls the edit tool on src/paginate.py (start-fleet.sh makes it, 39 lines), changing 3 lines in the middle,
+                so the diff has unchanged runs of 10+ lines on both sides, then says "Edited src/paginate.py."
+                Both need "Allow once" under "ask", like ask-permission.
 Anything else gets a short Markdown reply.
 """
 import json, os, re, sys, threading, time
@@ -25,6 +30,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1])
 LOG = open(sys.argv[2], "a")
+
+PAGE_SIZE_PY = """\"\"\"How many rows a page holds.\"\"\"
+
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+
+
+def clamp_page_size(requested):
+    \"\"\"Keeps a requested page size between 1 and the maximum.\"\"\"
+    if requested is None:
+        return DEFAULT_PAGE_SIZE
+    return max(1, min(int(requested), MAX_PAGE_SIZE))
+
+
+def page_count(total_rows, page_size):
+    \"\"\"The number of pages needed for total_rows.\"\"\"
+    size = clamp_page_size(page_size)
+    return (total_rows + size - 1) // size
+"""
+# src/paginate.py as start-fleet.sh writes it: these three lines sit in the middle of 39 (25 lines before, 11 after).
+PAGINATE_OLD = "    last = total // size\n    if last * size == total:\n        last -= 1\n"
+PAGINATE_NEW = "    last = (total + size - 1) // size - 1\n    if last < 0:\n        last = 0\n"
 
 REPLY = (
     "Here's the plan.\n\n"
@@ -103,6 +130,10 @@ class H(BaseHTTPRequestHandler):
         if task_done:
             head = "Background work finished" if "background-work" in text else "Sub-agent reported: the off-by-one is in paginate()"
             reply = f"{head}, run {next_run(msgs, head)} of the suite."
+        elif last_role == "tool" and tool_call_name(msgs) in ("write", "edit") and ("write-file" in text or "edit-file" in text):
+            ok = "error" not in str(msgs[-1].get("content", "")).lower() and "rejected" not in str(msgs[-1].get("content", "")).lower()
+            name = "src/page_size.py" if "write-file" in text else "src/paginate.py"
+            reply = f"{'Wrote' if 'write-file' in text else 'Edited'} {name}." if ok else f"Couldn't change {name}."
         elif last_role == "tool" and tool_call_name(msgs) == "write":
             ok = "error" not in str(msgs[-1].get("content", "")).lower() and "rejected" not in str(msgs[-1].get("content", "")).lower()
             reply = f"{'Wrote the report' if ok else 'Couldn' + chr(39) + 't write the report'}, run {next_run(msgs, 'the report, run ')}."
@@ -128,6 +159,11 @@ class H(BaseHTTPRequestHandler):
         elif "ask-permission" in text and "write" in tools:
             call = ("write", {"filePath": os.path.join(os.environ["HOME"], "src/demo-app/notes/report.md"),
                               "content": "# Report\n\nThe off-by-one is fixed.\n"})
+        elif "write-file" in text and "write" in tools:
+            call = ("write", {"filePath": os.path.join(os.environ["HOME"], "src/demo-app/src/page_size.py"), "content": PAGE_SIZE_PY})
+        elif "edit-file" in text and "edit" in tools:
+            call = ("edit", {"filePath": os.path.join(os.environ["HOME"], "src/demo-app/src/paginate.py"),
+                             "oldString": PAGINATE_OLD, "newString": PAGINATE_NEW})
         elif slow:
             call = ("bash", {"command": "sleep 45 && echo migrated", "description": "Migrate the cache"})
         elif "show-page" in text and page_tool:
