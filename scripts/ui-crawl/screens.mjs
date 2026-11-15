@@ -92,6 +92,18 @@ export const SCREENS = [
   { id: "not-found", path: "/no-such-page" },
   { id: "palette", path: "/", setup: (page) => page.keyboard.press("Control+k") },
   { id: "palette-shortcuts", path: "/", setup: (page) => page.keyboard.press("Control+/") },
+  // The shared confirm (confirmAction), as Delete session opens it from the session's More actions.
+  {
+    id: "confirm-delete-session",
+    path: "/sessions/mock-session-1",
+    setup: async (page) => {
+      await page.locator("[data-testid='session-more-actions']").click();
+      await page.locator("[data-testid='session-delete-button']").click();
+      await page.locator("[data-testid='confirm-dialog']").waitFor({ state: "visible", timeout: 5000 }).catch(() => {
+        throw new Error("setup: Delete session didn't open the confirm");
+      });
+    },
+  },
 ];
 
 // A rich but invented conversation for the faked hub: text, tools (done, failed, running) and a question.

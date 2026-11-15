@@ -1,5 +1,8 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
+
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn(async () => true) }));
+vi.mock("@/components/ui/confirm", () => ({ confirmAction }));
 import KanbanCard from "@/components/board/KanbanCard.vue";
 import type { BoardCard } from "@/stores/board";
 
@@ -33,6 +36,41 @@ function createGitHubMetadata(overrides: Record<string, unknown> = {}): string {
 }
 
 describe("KanbanCard", () => {
+  describe("Delete", () => {
+    function mountCard() {
+      return mount(KanbanCard, { props: { card: createBoardCard(), isDragging: false, isMutating: false } });
+    }
+    function deleteButton(wrapper: ReturnType<typeof mountCard>) {
+      return wrapper.findAll("button").find((button) => button.text() === "Delete")!;
+    }
+
+    it("asks first, naming the card, and deletes once confirmed", async () => {
+      confirmAction.mockResolvedValueOnce(true);
+      const wrapper = mountCard();
+
+      await deleteButton(wrapper).trigger("click");
+      await flushPromises();
+
+      expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: "Delete this card?",
+        subject: "Ship the Vue migration",
+        confirmLabel: "Delete card",
+        destructive: true,
+      }));
+      expect(wrapper.emitted("delete")).toHaveLength(1);
+    });
+
+    it("keeps the card when the confirm is cancelled", async () => {
+      confirmAction.mockResolvedValueOnce(false);
+      const wrapper = mountCard();
+
+      await deleteButton(wrapper).trigger("click");
+      await flushPromises();
+
+      expect(wrapper.emitted("delete")).toBeUndefined();
+    });
+  });
+
   it("renders the card summary and metadata", () => {
     const wrapper = mount(KanbanCard, {
       props: {

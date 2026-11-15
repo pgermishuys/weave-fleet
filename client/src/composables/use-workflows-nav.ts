@@ -33,7 +33,9 @@ const drafting = shallowRef<{ sessionTitle: string | null; error: string | null;
 const drafted = shallowRef<DraftedWorkflow | null>(null);
 let draftController: AbortController | null = null;
 /** Asked before another workflow opens, so unsaved edits aren't dropped without a word. */
-let leaveGuard: (() => boolean) | null = null;
+/** Answers at once (true or false) when it can; a promise while it asks the user. */
+type LeaveGuard = () => boolean | Promise<boolean>;
+let leaveGuard: LeaveGuard | null = null;
 let watching = false;
 /** Which machine the view shows; made once, with the watchers below, so the state follows it. */
 let machine: MachineChoice | null = null;
@@ -111,7 +113,13 @@ export function useWorkflowsNav() {
 
   function setActiveWorkflow(id: string): void {
     if (id === activeWorkflowId.value) return;
-    if (leaveGuard && !leaveGuard()) return;
+    const allowed = leaveGuard?.() ?? true;
+    if (allowed === true) moveTo(id);
+    else if (allowed !== false) void allowed.then((ok) => { if (ok) moveTo(id); });
+  }
+
+  function moveTo(id: string): void {
+    if (id === activeWorkflowId.value) return;
     if (activeWorkflowId.value === DRAFT_ID) forgetDraft();
     activeWorkflowId.value = id;
     showingRuns.value = false;
@@ -122,7 +130,10 @@ export function useWorkflowsNav() {
    * first. The server deletes whatever it made for the question either way.
    */
   async function startDraft(sessionTitle: string | null, ask: (signal: AbortSignal) => Promise<DraftedWorkflow>): Promise<void> {
-    if (activeWorkflowId.value !== DRAFT_ID && leaveGuard && !leaveGuard()) return;
+    if (activeWorkflowId.value !== DRAFT_ID && leaveGuard) {
+      const allowed = leaveGuard();
+      if (allowed !== true && !(await allowed)) return;
+    }
     draftController?.abort();
     const controller = new AbortController();
     draftController = controller;
@@ -174,7 +185,7 @@ export function useWorkflowsNav() {
   }
 
   /** The editor says whether it's all right to leave it (nothing unsaved, or the user said so). */
-  function setLeaveGuard(guard: (() => boolean) | null): void {
+  function setLeaveGuard(guard: LeaveGuard | null): void {
     leaveGuard = guard;
   }
 

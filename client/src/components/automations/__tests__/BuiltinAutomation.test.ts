@@ -11,6 +11,8 @@ vi.mock("@/lib/api-client", () => ({
 }));
 vi.mock("@tanstack/vue-router", () => ({ useNavigate: () => navigate, useRouter: () => ({ navigate }) }));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn(async () => true) }));
+vi.mock("@/components/ui/confirm", () => ({ confirmAction }));
 vi.mock("@/lib/automations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/automations")>()),
   browserTimeZone: () => "Africa/Johannesburg",
@@ -48,6 +50,7 @@ function serve(url: string, init?: RequestInit): Response {
   if (/\/runs$/.test(url)) return json({ runs });
   if (method === "PUT" && url === "/api/memory/dreaming/nightly") return json({ time: "04:30", timeZone: "Africa/Johannesburg" });
   if (method === "POST" && /\/disable$/.test(url)) return json({});
+  if (method === "DELETE") return new Response(null, { status: 204 });
   return json({ error: `not faked: ${method} ${url}` }, 404);
 }
 
@@ -137,5 +140,66 @@ describe("The built-in Dreaming automation", () => {
     expect(rows[0].text()).toContain("Done");
     expect(rows[1].text()).toContain("nothing to read");
     expect(rows[1].text()).toContain("Skipped");
+  });
+});
+
+describe("Deleting your own automation", () => {
+  let wrapper: VueWrapper;
+
+  // jsdom can't open reka's menu, so the More menu renders its items in place.
+  const menuStubs = {
+    DropdownMenu: { template: "<div><slot /></div>" },
+    DropdownMenuTrigger: { template: "<div><slot /></div>" },
+    DropdownMenuContent: { template: "<div><slot /></div>" },
+    DropdownMenuItem: { emits: ["select"], template: "<button type=\"button\" @click=\"$emit('select', $event)\"><slot /></button>" },
+  };
+
+  async function openMine(): Promise<void> {
+    wrapper = mount(Screen, { attachTo: document.body, global: { stubs: menuStubs } });
+    await flushPromises();
+    await wrapper.findAll("[data-testid='automation-row']").find((row) => row.text().includes("Weekly bump"))!.trigger("click");
+    await flushPromises();
+  }
+
+  async function chooseDelete(): Promise<void> {
+    await wrapper.get("[data-testid='automation-delete']").trigger("click");
+    await flushPromises();
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useAutomationsNav().clearSelection();
+    list = [mine, dreaming];
+    runs = [];
+    sent.length = 0;
+    confirmAction.mockClear();
+    apiFetchMock.mockReset();
+    apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => serve(url, init));
+  });
+  afterEach(() => wrapper?.unmount());
+
+  it("asks first, naming it, and deletes once confirmed", async () => {
+    confirmAction.mockResolvedValueOnce(true);
+    await openMine();
+
+    await chooseDelete();
+
+    expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Delete this automation?",
+      subject: "Weekly bump",
+      confirmLabel: "Delete automation",
+      destructive: true,
+    }));
+    expect(sent.some((s) => s.method === "DELETE" && s.url === "/api/automations/a-mine")).toBe(true);
+  });
+
+  it("deletes nothing when the confirm is cancelled", async () => {
+    confirmAction.mockResolvedValueOnce(false);
+    await openMine();
+
+    await chooseDelete();
+
+    expect(confirmAction).toHaveBeenCalled();
+    expect(sent.some((s) => s.method === "DELETE")).toBe(false);
   });
 });
