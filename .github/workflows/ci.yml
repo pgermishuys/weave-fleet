@@ -621,24 +621,43 @@ jobs:
             exit 1
           fi
 
+      # The watchdog the page check below runs under, checked on this runner before it's relied on.
+      - name: Check the watchdog
+        if: runner.os == 'macOS'
+        timeout-minutes: 2
+        shell: bash
+        run: .github/scripts/run-with-watchdog.test.sh
+
       # On a Mac, headless Chrome under a HOME with no login keychain loaded nothing until it was told to use a stand-in
       # keychain (--use-mock-keychain): every page check waited out its 30 s timeout. Fleet runs that way on CI (the phone
       # app's walk-throughs) and for anyone who runs it with another HOME, so the check runs here under an empty HOME.
-      # It takes 8-33 s. On 14 November 2026 a run hung here until the job's 15 minutes ran out, and GitHub kept no log
-      # of it. Now a test that hangs is named and its test host stopped (with a dump) after 2 minutes, the step can't
-      # outlast 5, and a failure shows what the browser was doing.
+      # It takes 8-37 s. Six times between 9 and 14 November 2026 (of about 760 runs since 28 October) the runner died here:
+      # no timeout fired, GitHub cancelled the job 20 minutes after it started, and kept no log. On a GitHub Mac the step
+      # shares one process group with the runner, and when Chrome doesn't quit within 2 s Fleet ends it with .NET's
+      # Process.Kill(entireProcessTree: true), which stops the tree and then kills it; macOS then sends SIGHUP to the whole
+      # group (the orphaned-group rule), runner included: on a scratch branch that call killed the runner on 2 Macs of 2.
+      # So the tests run under run-with-watchdog.sh, in a process group of
+      # their own: past 210 s it prints what was running and kills them and every browser they started. Before that, a
+      # test that hangs is named and its test host stopped (with a dump) after 2 minutes. Every 15 s it writes load,
+      # memory and the browser's processes into this job's own check run, which outlives the runner:
+      #   gh api repos/pgermishuys/weave-fleet/check-runs/<job id> --jq .output.text
       - name: Check pages in headless Chrome under an empty HOME
         if: runner.os == 'macOS'
         timeout-minutes: 5
         shell: bash
         env:
           FLEET_TEST_CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+          WATCHDOG_CHECK_RUN: ${{ job.check_run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # The tests pass without running when there's no browser, so make sure there is one.
           test -x "$FLEET_TEST_CHROME" || { echo "::error::No Chrome at $FLEET_TEST_CHROME"; exit 1; }
           "$FLEET_TEST_CHROME" --version || true
           mkdir -p "$RUNNER_TEMP/empty-home"
+          # The browser runs with its profile folder (fleet-screenshots-…) in its command line, so the watchdog finds it
+          # even after the test host has gone.
           HOME="$RUNNER_TEMP/empty-home" DOTNET_CLI_HOME="$RUNNER_TEMP/dotnet-home" NUGET_PACKAGES="$HOME/.nuget/packages" \
+          WATCHDOG_ALSO=fleet-screenshots- .github/scripts/run-with-watchdog.sh 210 \
             dotnet test tests/WeaveFleet.Infrastructure.Tests --configuration Release --no-build \
             --filter "FullyQualifiedName~HeadlessChromePageCheckerTests" -p:SkipFrontendBuild=true \
             --logger "console;verbosity=normal" --results-directory test-results/page-check \
