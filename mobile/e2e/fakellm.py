@@ -1,7 +1,7 @@
 """Scripted OpenAI-compatible model for the native-client experiment.
 
 Replies word by word (so streaming shows), and on keywords in the last user text:
-  run-tests -> calls the bash tool once (`ls -la && echo tests passed`), then says "run N of the suite, All 42 tests pass"
+  run-tests -> calls the bash tool once (a fixed `printf` listing, then `echo tests passed`; no user, group or home path), then says "run N of the suite, All 42 tests pass"
   ask-me    -> calls the question tool with two choices
   show-page -> calls fleet_page_show on pages/paging.html (waitForChoice), then says "Going with **<pick>**, run N"
   slow-task -> calls the bash tool with a 45 s command, so the session stays working
@@ -134,7 +134,7 @@ class H(BaseHTTPRequestHandler):
             call = (page_tool, {"path": os.path.join(os.environ["HOME"], "src/demo-app/pages/paging.html"),
                                 "placement": "tab", "title": "Three ways to page the results", "waitForChoice": True})
         elif "run-tests" in text and "bash" in tools:
-            call = ("bash", {"command": "ls -la && echo tests passed", "description": "Run the tests"})
+            call = ("bash", {"command": "printf 'README.md\\nsrc\\ntests\\npackage.json\\n' && echo tests passed", "description": "Run the tests"})
         elif "long-reply" in text:
             reply = "Every step:\n\n" + "\n".join(f"{i}. Step {i}" for i in range(1, 41)) + f"\n\nThat's every step, run {next_run(msgs, 'every step, run ')}."
             # The walk scrolls up while this streams, then checks the turn hasn't finished. Maestro's steps take
