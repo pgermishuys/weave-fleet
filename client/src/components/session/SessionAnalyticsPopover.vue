@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, formatMoney } from "@/lib/format";
 import { computed } from "vue";
 import { ChartNoAxesColumn } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,11 +27,7 @@ const metrics = computed(() => [
 ]);
 
 function formatNumber(value: number | null): string {
-  if (value === null) {
-    return "—";
-  }
-
-  return value.toLocaleString();
+  return value === null ? "—" : formatCount(value);
 }
 
 function formatCurrency(amount: number | null): string {
@@ -38,12 +35,7 @@ function formatCurrency(amount: number | null): string {
     return "—";
   }
 
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  return formatMoney(amount);
 }
 </script>
 

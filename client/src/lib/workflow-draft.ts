@@ -4,6 +4,7 @@
  * goes to `/api/workflows/check`, which writes it in Fleet's layout and runs the parser runs use.
  */
 import type { WorkflowChoice, WorkflowStep } from "@/lib/workflows";
+import { formatCount } from "@/lib/format";
 
 /** Where an outcome or a choice leads when the run is over. */
 export const END = "end";
@@ -79,8 +80,8 @@ export function draftedFrom(drafted: Pick<DraftedWorkflow, "sessionTitle">): str
 export function draftCost(drafted: Pick<DraftedWorkflow, "asks" | "tokens">): string {
   const asked = drafted.asks > 1 ? "Asked the model twice: its first answer had errors" : "Asked the model once";
   if (!drafted.tokens) return `${asked}.`;
-  const total = drafted.tokens.total.toLocaleString("en-US");
-  const cached = drafted.tokens.fromCache > 0 ? `, ${drafted.tokens.fromCache.toLocaleString("en-US")} from the cache` : "";
+  const total = formatCount(drafted.tokens.total);
+  const cached = drafted.tokens.fromCache > 0 ? `, ${formatCount(drafted.tokens.fromCache)} from the cache` : "";
   return `${asked} · ${total} tokens${cached}.`;
 }
 

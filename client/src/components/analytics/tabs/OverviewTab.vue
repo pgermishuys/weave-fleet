@@ -21,7 +21,7 @@ import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters
 import { useThemeStore } from "@/stores/theme"
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
-import { formatDate } from "@/lib/format";
+import { formatCount, formatDate, formatMoney, formatTokens } from "@/lib/format";
 
 ChartJS.register(CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip)
 
@@ -111,12 +111,6 @@ const props = withDefaults(defineProps<Props>(), {
   projectsLoading: false,
 })
 
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-})
-
-const integerFormatter = new Intl.NumberFormat("en-US")
 
 const totalTokens = computed(() => {
   if (props.summary) {
@@ -177,9 +171,9 @@ const averageDailyCost = computed(() => {
 const summaryCards = computed<SummaryCardItem[]>(() => [
   {
     label: "Tokens",
-    value: compactNumberFormatter.format(totalTokens.value),
+    value: formatTokens(totalTokens.value),
     detail: props.daily.length > 0
-      ? `${compactNumberFormatter.format(averageDailyTokens.value)} avg / day`
+      ? `${formatTokens(averageDailyTokens.value)} avg / day`
       : "No daily token breakdown available",
   },
   {
@@ -192,16 +186,16 @@ const summaryCards = computed<SummaryCardItem[]>(() => [
   },
   {
     label: "Sessions",
-    value: integerFormatter.format(totalSessions.value),
+    value: formatCount(totalSessions.value),
     detail: props.summary
-      ? `${integerFormatter.format(totalMessages.value)} total messages`
+      ? `${formatCount(totalMessages.value)} total messages`
       : "Derived from the daily activity trend",
   },
   {
     label: "Messages",
-    value: compactNumberFormatter.format(totalMessages.value),
+    value: formatCount(totalMessages.value),
     detail: props.summary
-      ? `${integerFormatter.format(totalSessions.value)} active sessions`
+      ? `${formatCount(totalSessions.value)} active sessions`
       : "Derived from the daily activity trend",
   },
 ])
@@ -246,7 +240,7 @@ const projectBarItems = computed<CostBarItem[]>(() => {
     name: project.name,
     cost: project.cost,
     maxCost,
-    detail: `${compactNumberFormatter.format(project.tokens)} tokens`,
+    detail: `${formatTokens(project.tokens)} tokens`,
   }))
 })
 
@@ -318,7 +312,7 @@ const dailyTrendOptions = computed<ChartOptions<"line">>(() => ({
             return `Cost: ${formatCurrency(value)}`
           }
 
-          return `Tokens: ${integerFormatter.format(value)}`
+          return `Tokens: ${formatCount(value)}`
         },
         afterLabel(context) {
           if (context.dataset.label !== "Cost") {
@@ -358,7 +352,7 @@ const dailyTrendOptions = computed<ChartOptions<"line">>(() => ({
         color: palette.value.muted,
         font: { size: 11 },
         callback(value) {
-          return compactNumberFormatter.format(Number(value))
+          return formatTokens(Number(value))
         },
       },
       grid: {
@@ -390,18 +384,7 @@ const dailyTrendOptions = computed<ChartOptions<"line">>(() => ({
 }))
 
 function formatCurrency(amount: number): string {
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return "$0.00"
-  }
-
-  if (amount < 0.01) {
-    return `$${amount.toFixed(3)}`
-  }
-
-  return `$${amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
+  return formatMoney(Number.isFinite(amount) && amount > 0 ? amount : 0)
 }
 
 function getMaxCost(costs: readonly number[]): number {
@@ -478,7 +461,7 @@ function getMaxCost(costs: readonly number[]): number {
               <th scope="row">
                 {{ formatDate(point.date) }}
               </th>
-              <td>{{ compactNumberFormatter.format(point.tokens) }}</td>
+              <td>{{ formatTokens(point.tokens) }}</td>
               <td>{{ formatCurrency(point.cost) }}</td>
             </tr>
           </tbody>

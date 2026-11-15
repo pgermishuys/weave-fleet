@@ -139,11 +139,6 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** "~2.4k tokens" or "~380 tokens". */
-export function formatTokens(tokens: number): string {
-  return tokens >= 1000 ? `~${(tokens / 1000).toFixed(1)}k tokens` : `~${tokens} tokens`;
-}
-
 // ── What Improve can include from the session ────────────────────────────────
 
 /** The parts of a conversation message Improve reads. */

@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { formatCount, formatMoney } from "@/lib/format";
 import { computed } from "vue";
 import type { DailyAnalytics } from "@/api/client";
-import { formatAnalyticsCost } from "@/lib/format-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,7 +20,6 @@ const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
 });
 
-const integerFormatter = new Intl.NumberFormat("en-US");
 
 // Newest day first: the day you came to check is on top.
 const rows = computed(() =>
@@ -28,10 +27,10 @@ const rows = computed(() =>
     .sort((left, right) => right.date.localeCompare(left.date))
     .map((day) => ({
       date: day.date,
-      tokens: integerFormatter.format(day.tokens),
-      cost: formatAnalyticsCost(day.cost),
-      sessions: integerFormatter.format(day.sessions),
-      messages: integerFormatter.format(day.messages),
+      tokens: formatCount(day.tokens),
+      cost: formatMoney(day.cost),
+      sessions: formatCount(day.sessions),
+      messages: formatCount(day.messages),
     })),
 );
 </script>

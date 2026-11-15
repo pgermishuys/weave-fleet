@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBytes } from "@/lib/format";
 import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, RefreshCw } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
@@ -90,11 +91,7 @@ const downloadProgressLabel = computed(() => {
   if (s?.status !== "downloading") return null;
   const received = s.downloadBytesReceived ?? 0;
   const total = s.downloadBytesTotal;
-  const fmt = (bytes: number) => {
-    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${bytes} B`;
-  };
+  const fmt = (bytes: number) => formatBytes(bytes);
   if (total && total > 0) return `${fmt(received)} / ${fmt(total)}`;
   return `${fmt(received)}`;
 });

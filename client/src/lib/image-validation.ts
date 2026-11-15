@@ -1,3 +1,4 @@
+import { formatBytes } from "@/lib/format";
 /**
  * Shared image attachment validation — used by both client and server.
  */
@@ -51,7 +52,7 @@ export function validateImageAttachment(
   if (approxBytes > MAX_IMAGE_BYTES) {
     return {
       index,
-      message: `Image exceeds 5MB limit (${(approxBytes / 1024 / 1024).toFixed(1)}MB)`,
+      message: `Image exceeds the 5 MB limit (${formatBytes(approxBytes)})`,
     };
   }
   return null;

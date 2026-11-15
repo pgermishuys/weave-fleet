@@ -5,7 +5,7 @@ import type { ModelOption } from "@/composables/use-models";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { useUsageLimits } from "@/composables/use-usage-limits";
 import { modelProviderUsage } from "@/lib/usage-providers";
-import { formatTokens } from "@/lib/context-usage";
+import { formatTokens } from "@/lib/format";
 import { groupModels } from "@/lib/model-picker-groups";
 import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 
@@ -63,7 +63,7 @@ function itemFor(model: ModelOption) {
     label: model.name,
     description: isHydraFusion(model.id) ? HYDRAFUSION_NOTE : model.description,
     meta: model.provider,
-    contextSize: model.contextWindow ? formatTokens(model.contextWindow).toUpperCase() : undefined,
+    contextSize: model.contextWindow ? formatTokens(model.contextWindow) : undefined,
     price: model.priceTier ? PRICE_LABELS[model.priceTier] : undefined,
     priceNote: model.capability ? model.capability.charAt(0).toUpperCase() + model.capability.slice(1) : undefined,
     starred: props.harnessType

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { AlertCircle } from "lucide-vue-next";
 import type { components } from "@/api/generated/schema";
 import { extractApiError } from "@/lib/api-error";
-import { formatBytes } from "@/lib/format-utils";
+import { formatBytes } from "@/lib/format";
 import { useMachineTarget } from "@/lib/machine-target";
 import { recentStorageSizes, rememberStorageSize } from "@/lib/storage-size-cache";
 import { Spinner } from "@/components/ui/spinner";

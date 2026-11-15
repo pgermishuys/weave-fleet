@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTokens } from "@/lib/format";
 import { localTimeZone } from "@/lib/format";
 import { computed, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
@@ -12,7 +13,6 @@ import { keyForModel, modelFromKey, modelFromPath, modelToPath } from "@/lib/age
 import {
   DREAM_BUDGETS,
   NIGHTLY_HARNESSES,
-  formatTokens,
   getNightlyDreaming,
   setNightlyDreaming,
   type NightlyDreamingChange,

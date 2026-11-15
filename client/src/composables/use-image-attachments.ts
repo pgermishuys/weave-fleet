@@ -1,6 +1,7 @@
 import { onScopeDispose, shallowRef, type Ref } from "vue";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { ALLOWED_IMAGE_MIMES, MAX_ATTACHMENTS_PER_PROMPT, MAX_IMAGE_BYTES, sniffImageMime } from "@/lib/image-validation";
+import { formatBytes } from "@/lib/format";
 
 const PASTE_ERROR_MS = 5000;
 
@@ -42,7 +43,7 @@ export function useImageAttachments(key: string, supportsImages: Readonly<Ref<bo
       return;
     }
     if (blob.size > MAX_IMAGE_BYTES) {
-      setPasteError(`Image exceeds 5MB limit (${(blob.size / 1024 / 1024).toFixed(1)}MB)`);
+      setPasteError(`Image exceeds the 5 MB limit (${formatBytes(blob.size)})`);
       return;
     }
     if (attachments.value.length >= MAX_ATTACHMENTS_PER_PROMPT) {

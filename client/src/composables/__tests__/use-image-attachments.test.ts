@@ -89,7 +89,7 @@ describe("useImageAttachments", () => {
     addImage(new File(["x"], "notes.txt", { type: "text/plain" }));
     expect(pasteError.value).toBe("Unsupported image type: text/plain");
     addImage(png("big.png", 5 * 1024 * 1024 + 1));
-    expect(pasteError.value).toMatch(/exceeds 5MB/);
+    expect(pasteError.value).toMatch(/exceeds the 5 MB limit/);
     expect(reads).toHaveLength(0);
     expect(attachments.value).toHaveLength(0);
   });

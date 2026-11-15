@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, formatTokens } from "@/lib/format";
 import { computed, shallowRef, watch } from "vue";
 import { Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import ProfileConfigEditor from "@/components/settings/ProfileConfigEditor.vue";
 import SkillDiff from "@/components/skills/SkillDiff.vue";
 import {
   estimateTokens,
-  formatTokens,
   getSkill,
   improveSkill,
   saveSkillVersion,
@@ -46,6 +46,8 @@ const open = defineModel<boolean>("open", { required: true });
 
 /** What the question adds around the parts: the rules and the tags. */
 const QUESTION_OVERHEAD_TOKENS = 250;
+/** "~2.4k tokens", "~380 tokens": an estimate, so it says so. */
+const aboutTokens = (tokens: number) => `~${formatTokens(tokens)} tokens`;
 
 const target = useMachineTarget();
 const store = useBuiltInSkillsStore(target);
@@ -223,7 +225,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
               disabled
             >
             <span>The skill, <code>SKILL.md</code></span>
-            <span class="improve-sees__tokens">{{ formatTokens(skillTokens) }}</span>
+            <span class="improve-sees__tokens">{{ aboutTokens(skillTokens) }}</span>
           </label>
           <label>
             <input
@@ -232,7 +234,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
               disabled
             >
             <span>Your note</span>
-            <span class="improve-sees__tokens">{{ formatTokens(estimateTokens(note)) }}</span>
+            <span class="improve-sees__tokens">{{ aboutTokens(estimateTokens(note)) }}</span>
           </label>
           <label :class="{ 'improve-sees--off': wholeConversation || !turn.exchange }">
             <input
@@ -242,7 +244,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
               data-testid="improve-skill-include-exchange"
             >
             <span>What you asked, and the reply</span>
-            <span class="improve-sees__tokens">{{ formatTokens(exchangeTokens) }}</span>
+            <span class="improve-sees__tokens">{{ aboutTokens(exchangeTokens) }}</span>
           </label>
           <label :class="{ 'improve-sees--off': wholeConversation || !turn.toolCalls }">
             <input
@@ -252,7 +254,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
               data-testid="improve-skill-include-tools"
             >
             <span>The tool calls in that turn</span>
-            <span class="improve-sees__tokens">{{ formatTokens(toolTokens) }}</span>
+            <span class="improve-sees__tokens">{{ aboutTokens(toolTokens) }}</span>
           </label>
           <label>
             <input
@@ -265,7 +267,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
           </label>
           <p class="improve-sees__total">
             <span>Asked once, on this session's model</span>
-            <span class="whitespace-nowrap">{{ wholeConversation ? `${formatTokens(totalTokens)} + the session` : formatTokens(totalTokens) }}</span>
+            <span class="whitespace-nowrap">{{ wholeConversation ? `${aboutTokens(totalTokens)} + the session` : aboutTokens(totalTokens) }}</span>
           </p>
         </fieldset>
 
@@ -320,8 +322,8 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
           v-if="proposal.tokens"
           class="text-xs text-muted"
         >
-          The question used {{ proposal.tokens.total.toLocaleString() }} tokens<template v-if="proposal.tokens.fromCache">
-            ({{ proposal.tokens.fromCache.toLocaleString() }} from the cache)
+          The question used {{ formatCount(proposal.tokens.total) }} tokens<template v-if="proposal.tokens.fromCache">
+            ({{ formatCount(proposal.tokens.fromCache) }} from the cache)
           </template>.
         </p>
 

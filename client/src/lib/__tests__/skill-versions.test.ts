@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTokens, improveTurn, versionLabel, type ImproveMessage } from "@/lib/skill-versions";
+import { improveTurn, versionLabel, type ImproveMessage } from "@/lib/skill-versions";
 
 const conversation: ImproveMessage[] = [
   { id: "u1", role: "user", body: "fix the tests" },
@@ -44,10 +44,8 @@ describe("improveTurn", () => {
 });
 
 describe("labels", () => {
-  it("names the copy sessions get and rounds token counts", () => {
+  it("names the copy sessions get", () => {
     expect(versionLabel(null)).toBe("Fleet's");
     expect(versionLabel(3)).toBe("Yours · v3");
-    expect(formatTokens(380)).toBe("~380 tokens");
-    expect(formatTokens(2412)).toBe("~2.4k tokens");
   });
 });

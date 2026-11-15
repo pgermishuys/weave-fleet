@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDate } from "@/lib/format";
+import { formatCount, formatDate, formatMoney, formatTokens } from "@/lib/format";
 import { computed, onMounted, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { ChevronRight } from "lucide-vue-next";
@@ -32,23 +32,15 @@ watch(pendingIds, (now, before) => {
   if (before.size > 0 && now.size === 0) void refetchSummary();
 });
 
-const integerFormatter = new Intl.NumberFormat("en-US");
-const compactFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const metrics = computed<SummaryMetric[]>(() => {
   const current = summary.value;
   return [
-    { testId: "summary-active-count", label: "Working", value: integerFormatter.format(counts.value.active) },
-    { testId: "summary-idle-count", label: "Idle", value: integerFormatter.format(counts.value.idle) },
-    { testId: "summary-queued-count", label: "Queued", value: integerFormatter.format(current?.queuedTasks ?? 0) },
-    { testId: "summary-tokens-count", label: "Total tokens", value: compactFormatter.format(current?.totalTokens ?? 0) },
-    { testId: "summary-cost-count", label: "Total spend", value: currencyFormatter.format(current?.totalCost ?? 0) },
+    { testId: "summary-active-count", label: "Working", value: formatCount(counts.value.active) },
+    { testId: "summary-idle-count", label: "Idle", value: formatCount(counts.value.idle) },
+    { testId: "summary-queued-count", label: "Queued", value: formatCount(current?.queuedTasks ?? 0) },
+    { testId: "summary-tokens-count", label: "Total tokens", value: formatTokens(current?.totalTokens ?? 0) },
+    { testId: "summary-cost-count", label: "Est. spend", value: formatMoney(current?.totalCost ?? 0) },
   ];
 });
 
@@ -116,12 +108,12 @@ function openAnalytics(): void {
     <button
       type="button"
       class="summary-bar__spend"
-      :aria-label="`Spend over the last ${SPARK_DAYS} days: ${currencyFormatter.format(spendTotal)}. Open Analytics`"
+      :aria-label="`Estimated spend over the last ${SPARK_DAYS} days: ${formatMoney(spendTotal)}. Open Analytics`"
       @click="openAnalytics"
     >
       <span class="summary-bar__spend-copy">
         <span class="summary-bar__label">Last {{ SPARK_DAYS }} days</span>
-        <span class="summary-bar__spend-total">{{ currencyFormatter.format(spendTotal) }}</span>
+        <span class="summary-bar__spend-total">{{ formatMoney(spendTotal) }}</span>
       </span>
       <span
         class="summary-bar__spark"
@@ -133,7 +125,7 @@ function openAnalytics(): void {
           class="summary-bar__bar"
           :class="{ 'summary-bar__bar--today': index === days.length - 1 }"
           :style="{ height: barHeight(day.cost) }"
-          :title="`${day.label}: ${currencyFormatter.format(day.cost)}`"
+          :title="`${day.label}: ${formatMoney(day.cost)}`"
         />
       </span>
       <ChevronRight

@@ -118,18 +118,6 @@ export function turnsBeforeCompaction(context: SessionContextUsage, sample = 5):
   return Math.max(0, Math.floor((context.compactsAt - context.used) / growth));
 }
 
-/** A token count the way the meter writes it: 950, 17.1k, 200k, 1M. */
-export function formatTokens(tokens: number): string {
-  if (tokens < 1000) {
-    return String(Math.round(tokens));
-  }
-  if (tokens < 1_000_000) {
-    const thousands = tokens / 1000;
-    return `${thousands >= 100 ? Math.round(thousands) : trimZero(thousands.toFixed(1))}k`;
-  }
-  return `${trimZero((tokens / 1_000_000).toFixed(tokens >= 10_000_000 ? 0 : 1))}M`;
-}
-
 function lastCompactionIndex(turns: readonly ContextTurn[]): number {
   for (let i = turns.length - 1; i >= 0; i--) {
     if (turns[i].afterCompaction) {
@@ -137,10 +125,6 @@ function lastCompactionIndex(turns: readonly ContextTurn[]): number {
     }
   }
   return 0;
-}
-
-function trimZero(value: string): string {
-  return value.endsWith(".0") ? value.slice(0, -2) : value;
 }
 
 function toCall(raw: unknown): ContextCall | null {

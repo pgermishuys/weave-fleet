@@ -1,3 +1,4 @@
+import { formatBytes, formatCount } from "@/lib/format";
 /** What a big paste does: "ask" shows the bar, "attach" makes a file, "text" pastes as usual. */
 export const LARGE_PASTES_PREFERENCE_KEY = "LargePastes";
 export type LargePastes = "ask" | "attach" | "text";
@@ -19,11 +20,9 @@ export interface AttachedFileRef {
   details: string;
 }
 
-/** `B` under 1 KB, whole `KB` under 1 MB, then `MB` with one decimal. */
+/** A file's size, as formatBytes writes it. */
 export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return formatBytes(bytes);
 }
 
 /** The label a chip shows in its box: LOG, PDF, FILE when the name has no extension. */
@@ -34,7 +33,7 @@ export function fileExtensionLabel(name: string): string {
 
 function describe(file: AttachedFile): string {
   const size = formatFileSize(file.size);
-  if (file.lines !== null) return `${file.lines.toLocaleString("en-US")} ${file.lines === 1 ? "line" : "lines"}, ${size}`;
+  if (file.lines !== null) return `${formatCount(file.lines)} ${file.lines === 1 ? "line" : "lines"}, ${size}`;
   const dot = file.name.lastIndexOf(".");
   const type = dot > 0 && dot < file.name.length - 1 ? file.name.slice(dot + 1).toUpperCase() : "File";
   return `${type}, ${size}`;
@@ -88,8 +87,8 @@ export function isBigPaste(text: string): boolean {
 export function describePaste(text: string): string {
   const lines = countLines(text);
   return lines >= 2
-    ? `${lines.toLocaleString("en-US")} lines pasted`
-    : `${text.length.toLocaleString("en-US")} characters pasted`;
+    ? `${formatCount(lines)} lines pasted`
+    : `${formatCount(text.length)} characters pasted`;
 }
 
 /** `pasted-text.txt`, then `pasted-text-2.txt`, the first name the draft doesn't have. */
@@ -122,7 +121,7 @@ export async function readLineCount(file: File): Promise<number | undefined> {
 /** "2,031 lines · 186 KB", or just the size when the lines aren't known. */
 export function describeDraftFile(size: number, lines?: number): string {
   if (lines === undefined) return formatFileSize(size);
-  return `${lines.toLocaleString("en-US")} ${lines === 1 ? "line" : "lines"} · ${formatFileSize(size)}`;
+  return `${formatCount(lines)} ${lines === 1 ? "line" : "lines"} · ${formatFileSize(size)}`;
 }
 
 /** A small file as a fenced block headed by its name, the fence longer than any backtick run inside. */

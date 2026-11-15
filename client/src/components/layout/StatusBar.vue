@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount } from "@/lib/format";
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useLocation, useRouter } from "@tanstack/vue-router";
@@ -90,7 +91,7 @@ const tokenCount = computed(() => {
   if (!tokens) {
     return "0 tokens";
   }
-  return `${tokens.toLocaleString()} tokens`;
+  return `${formatCount(tokens)} tokens`;
 });
 </script>
 

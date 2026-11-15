@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount } from "@/lib/format";
 import { computed, useTemplateRef } from "vue";
 import { FilePenLine, FilePlus2, FileX2 } from "lucide-vue-next";
 import type { Component } from "vue";
@@ -289,13 +290,13 @@ function normalizeLineCount(value: number | null | undefined): number {
             <span
               class="files-changed-file-list__stat files-changed-file-list__stat--add"
               :class="[`${classPrefix}__stat`, `${classPrefix}__stat--add`]"
-              :aria-label="`${file.additions.toLocaleString()} additions`"
-            >+{{ file.additions.toLocaleString() }}</span>
+              :aria-label="`${formatCount(file.additions)} additions`"
+            >+{{ formatCount(file.additions) }}</span>
             <span
               class="files-changed-file-list__stat files-changed-file-list__stat--remove"
               :class="[`${classPrefix}__stat`, `${classPrefix}__stat--remove`]"
-              :aria-label="`${file.deletions.toLocaleString()} deletions`"
-            >-{{ file.deletions.toLocaleString() }}</span>
+              :aria-label="`${formatCount(file.deletions)} deletions`"
+            >-{{ formatCount(file.deletions) }}</span>
           </span>
         </button>
       </li>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTokens } from "@/lib/format";
 import { formatDateTime } from "@/lib/format";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
@@ -11,7 +12,6 @@ import {
   DREAM_POLL_MS,
   dreamKindLabel,
   dreamListLabel,
-  formatTokens,
   groupDreamChanges,
   isDreamBusy,
   listDreams,

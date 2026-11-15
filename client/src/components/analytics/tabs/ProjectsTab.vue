@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { formatCount, formatMoney } from "@/lib/format";
 import { computed } from "vue";
 import { Card, CardContent } from "@/components/ui/card";
 import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters";
-import { formatAnalyticsCost } from "@/lib/format-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
@@ -27,7 +27,6 @@ const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
 });
 
-const integerFormatter = new Intl.NumberFormat("en-US");
 
 const maxCost = computed(() => {
   return props.topProjects.reduce((highest, project) => Math.max(highest, project.cost), 0);
@@ -39,8 +38,8 @@ const projectCards = computed<ProjectCard[]>(() => {
     .map((project) => ({
       ...project,
       relativeCostWidth: getRelativeCostWidth(project.cost, maxCost.value),
-      formattedTokens: integerFormatter.format(project.tokens),
-      formattedCost: formatAnalyticsCost(project.cost),
+      formattedTokens: formatCount(project.tokens),
+      formattedCost: formatMoney(project.cost),
     }));
 });
 

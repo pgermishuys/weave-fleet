@@ -79,7 +79,7 @@ describe("ContextRing", () => {
     expect(ring.attributes("data-tone")).toBe("ok");
     expect(ring.text()).toBe("38%");
     expect(ring.classes()).not.toContain("context-ring--amber");
-    expect(ring.attributes("title")).toBe("Context: 38% of 200K tokens");
+    expect(ring.attributes("title")).toBe("Context: 38% of 200k tokens");
     wrapper.unmount();
   });
 

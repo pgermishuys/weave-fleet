@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatMoney } from "@/lib/format"
 import { computed } from "vue"
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
@@ -30,13 +31,6 @@ const props = withDefaults(defineProps<{
   isLoading: false,
 })
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-
 const rankedItems = computed<RankedHorizontalCostBarItem[]>(() => {
   return [...props.items]
     .sort((left, right) => right.cost - left.cost || left.name.localeCompare(right.name))
@@ -58,11 +52,7 @@ function getRelativeWidth(cost: number, maxCost: number): number {
 }
 
 function formatCurrency(amount: number): string {
-  if (!Number.isFinite(amount)) {
-    return currencyFormatter.format(0)
-  }
-
-  return currencyFormatter.format(amount)
+  return formatMoney(Number.isFinite(amount) ? amount : 0)
 }
 </script>
 

@@ -269,7 +269,7 @@ function withSelectedProject(
         Analytics
       </h1>
       <p class="analytics-page__subtitle">
-        Tokens and spend across your sessions, by project and model.
+        Tokens and spend across your sessions, by project and model. Costs are estimates at list prices, not a bill.
       </p>
     </header>
 

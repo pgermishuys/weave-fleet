@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { formatCount, formatMoney, formatTokens } from "@/lib/format";
 import { computed, shallowRef } from "vue";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSessionContext } from "@/composables/use-session-context";
 import {
   contextPercent,
   contextTone,
-  formatTokens,
   turnsBeforeCompaction,
   type ContextTurn,
 } from "@/lib/context-usage";
@@ -53,7 +53,7 @@ const amber = computed(() => percent.value !== null && percent.value > 80);
 const ringTitle = computed(() => {
   const value = context.value;
   if (!value || percent.value === null || value.limit === null) return `${summary.value} · details`;
-  return `Context: ${percent.value}% of ${formatTokens(value.limit).toUpperCase()} tokens`;
+  return `Context: ${percent.value}% of ${formatTokens(value.limit)} tokens`;
 });
 const compacting = computed(() => context.value?.compacting === true || isRequesting.value);
 
@@ -100,11 +100,11 @@ const sizeLine = computed(() => {
   if (!value) return "";
   const model = value.modelId ? ` · ${value.modelId}` : "";
   if (value.used === null) {
-    return value.limit === null ? `Window unknown${model}` : `${value.limit.toLocaleString()} token window${model}`;
+    return value.limit === null ? `Window unknown${model}` : `${formatCount(value.limit)} token window${model}`;
   }
   return value.limit === null
-    ? `${value.used.toLocaleString()} tokens${model}`
-    : `${value.used.toLocaleString()} of ${value.limit.toLocaleString()} tokens${model}`;
+    ? `${formatCount(value.used)} tokens${model}`
+    : `${formatCount(value.used)} of ${formatCount(value.limit)} tokens${model}`;
 });
 
 /** Where the harness compacts, as a share of the window, for the tick on the bar. */
@@ -146,7 +146,7 @@ const splitCall = computed(() => (context.value?.lastCall?.totalOnly ? null : (c
 
 const cost = computed(() => {
   const total = session.value?.totalCost;
-  return typeof total === "number" && total > 0 ? `$${total.toFixed(2)}` : null;
+  return typeof total === "number" && total > 0 ? formatMoney(total) : null;
 });
 
 const canCompact = computed(() => session.value?.capabilities?.canCompact !== false && !compacting.value);
@@ -298,13 +298,13 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
         >
           <template v-if="splitCall">
             <dt>Read from cache</dt>
-            <dd>{{ splitCall.cacheRead.toLocaleString() }}</dd>
+            <dd>{{ formatCount(splitCall.cacheRead) }}</dd>
             <dt>New input</dt>
-            <dd>{{ (splitCall.input + splitCall.cacheWrite).toLocaleString() }}</dd>
+            <dd>{{ formatCount(splitCall.input + splitCall.cacheWrite) }}</dd>
             <dt>Output</dt>
             <dd>
-              {{ splitCall.output.toLocaleString() }}
-              <span v-if="splitCall.reasoning">· {{ splitCall.reasoning.toLocaleString() }} reasoning</span>
+              {{ formatCount(splitCall.output) }}
+              <span v-if="splitCall.reasoning">· {{ formatCount(splitCall.reasoning) }} reasoning</span>
             </dd>
           </template>
           <template v-if="turnsLeft !== null">
@@ -318,7 +318,7 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
             </dd>
           </template>
           <template v-if="cost">
-            <dt>Spent this session</dt>
+            <dt>Estimated spend</dt>
             <dd>{{ cost }}</dd>
           </template>
         </dl>

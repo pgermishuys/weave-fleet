@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatTime } from "@/lib/format";
+import { formatCount, formatMoney, formatTime } from "@/lib/format";
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { Gauge } from "lucide-vue-next";
 import { createReusableTemplate } from "@vueuse/core";
@@ -102,20 +102,17 @@ function tickPercent(window: UsageLimitWindow): number | null {
   return share === null ? null : Math.round(share * 100);
 }
 
-const aiCredits = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
-
 /** GitHub's AI credits used this month; null for any other credits. */
 const aiCreditsLine = (provider: ProviderUsage) => {
   const c = provider.credits;
-  return c?.unit === "ai_credits" && c.used !== null ? `AI credits used this month: ${aiCredits.format(c.used)}` : null;
+  return c?.unit === "ai_credits" && c.used !== null ? `AI credits used this month: ${formatCount(c.used, { fractionDigits: 2 })}` : null;
 };
 
 const credits = (provider: ProviderUsage) => {
   const c = provider.credits;
   if (!c || c.unit === "ai_credits") return null;
-  const dollars = (value: number) => `$${value.toFixed(2)}`;
-  if (c.remaining !== null) return `${dollars(c.remaining)} left${c.limit !== null ? ` of ${dollars(c.limit)}` : ""}`;
-  return c.used !== null ? `${dollars(c.used)} used` : null;
+  if (c.remaining !== null) return `${formatMoney(c.remaining)} left${c.limit !== null ? ` of ${formatMoney(c.limit)}` : ""}`;
+  return c.used !== null ? `${formatMoney(c.used)} used` : null;
 };
 
 const allowing = shallowRef<string | null>(null);
