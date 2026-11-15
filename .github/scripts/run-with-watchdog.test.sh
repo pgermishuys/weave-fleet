@@ -43,19 +43,24 @@ grep -q '::error::' "$log" || fail "nothing said why the command was ended"
 [ -z "$(left)" ] || { fail "left running: $(left | tr '\n' ' ')"; pkill -KILL -f -- "$marker"; }
 
 # Cancelled (the runner's step timeout sends SIGINT, then SIGTERM): it ends the command too.
+# It waits for the command's child itself: the watchdog's own command line holds the marker too, so waiting for any
+# match sent the TERM as soon as the watchdog started.
 "$dog" 60 bash -c "bash -c 'sleep 600; : $marker cancelled' & sleep 600; : $marker" > "$log" 2>&1 &
 dog_pid=$!
-for _ in $(seq 1 50); do [ -n "$(left)" ] && break; sleep 0.1; done
+child() { pgrep -f -- "^bash -c sleep 600; : $marker cancelled\$" || true; }
+for _ in $(seq 1 50); do [ -n "$(child)" ] && break; sleep 0.1; done
+[ -n "$(child)" ] || fail "the command to cancel didn't start its child within 5 s"
 kill -TERM "$dog_pid"
 wait "$dog_pid"; status=$?
 [ $status -eq 130 ] || fail "a cancelled watchdog exited $status, not 130"
 [ -z "$(left)" ] || { fail "left running after cancel: $(left | tr '\n' ' ')"; pkill -KILL -f -- "$marker"; }
 
 # The heartbeat: written into the check run while the command runs, and once more with how it ended. A stand-in for
-# GitHub's API records the title of each PATCH it's sent.
+# GitHub's API records the title of each PATCH it's sent. It's a plain TCPServer: http.server.HTTPServer looks up
+# getfqdn("127.0.0.1") as it binds, and on a GitHub Mac that reverse lookup took 35 s, past the 5 s this waits.
 api_dir="$(mktemp -d)"
 python3 -c '
-import http.server, json, os, sys
+import http.server, json, os, socketserver, sys
 out = sys.argv[1]
 class H(http.server.BaseHTTPRequestHandler):
     def do_PATCH(self):
@@ -64,7 +69,7 @@ class H(http.server.BaseHTTPRequestHandler):
             f.write(self.path + " " + body["output"]["title"] + "\n")
         self.send_response(200); self.end_headers(); self.wfile.write(b"{}")
     def log_message(self, *a): pass
-s = http.server.HTTPServer(("127.0.0.1", 0), H)
+s = socketserver.TCPServer(("127.0.0.1", 0), H)
 open(os.path.join(out, "port.tmp"), "w").write(str(s.server_address[1]))
 os.rename(os.path.join(out, "port.tmp"), os.path.join(out, "port"))
 s.serve_forever()
