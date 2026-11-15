@@ -56,10 +56,11 @@ wait "$dog_pid"; status=$?
 [ -z "$(left)" ] || { fail "left running after cancel: $(left | tr '\n' ' ')"; pkill -KILL -f -- "$marker"; }
 
 # The heartbeat: written into the check run while the command runs, and once more with how it ended. A stand-in for
-# GitHub's API records the title of each PATCH it's sent.
+# GitHub's API records the title of each PATCH it's sent. It's a plain TCPServer: http.server.HTTPServer looks up
+# getfqdn("127.0.0.1") as it binds, and on a GitHub Mac that reverse lookup took 35 s, past the 5 s this waits.
 api_dir="$(mktemp -d)"
 python3 -c '
-import http.server, json, os, sys
+import http.server, json, os, socketserver, sys
 out = sys.argv[1]
 class H(http.server.BaseHTTPRequestHandler):
     def do_PATCH(self):
@@ -68,7 +69,7 @@ class H(http.server.BaseHTTPRequestHandler):
             f.write(self.path + " " + body["output"]["title"] + "\n")
         self.send_response(200); self.end_headers(); self.wfile.write(b"{}")
     def log_message(self, *a): pass
-s = http.server.HTTPServer(("127.0.0.1", 0), H)
+s = socketserver.TCPServer(("127.0.0.1", 0), H)
 open(os.path.join(out, "port.tmp"), "w").write(str(s.server_address[1]))
 os.rename(os.path.join(out, "port.tmp"), os.path.join(out, "port"))
 s.serve_forever()
