@@ -6,6 +6,8 @@
 #   overflow at 390 px. A red night opens (or comments on) the issue "Nightly UI crawl failed"; a green night closes it.
 # - A ratchet: each axe WCAG 2 A/AA rule's count against scripts/ui-crawl/axe-baseline.json. A rise is red (the
 #   summary names the screens that grew); a fall asks for the baseline to be lowered.
+# - Then every other theme (weave-classic, black, nord, dracula, solarized dark and light, monokai, github-dark) on the
+#   desktop from the same build, with axe's colour rules only, against scripts/ui-crawl/axe-baseline-themes.json.
 # - Report only: unnamed controls, the screenshots. The run summary compares the counts with the previous run on the
 #   same branch.
 # - Every night on main, on a pull request that changes the crawl, and by hand (tick "nightly" to report like the night).
@@ -83,6 +85,9 @@ jobs:
             if gh run download "$id" -n ui-crawl-summary -D "$RUNNER_TEMP/previous" 2>/dev/null; then
               echo "UI_CRAWL_PREVIOUS=$RUNNER_TEMP/previous/summary.json" >> "$GITHUB_ENV"
               echo "UI_CRAWL_PREVIOUS_LABEL=[the $event run of $day]($url) at $sha" >> "$GITHUB_ENV"
+              # The theme pass's own summary, from the same run when it had one.
+              gh run download "$id" -n ui-crawl-themes-summary -D "$RUNNER_TEMP/previous-themes" 2>/dev/null \
+                && echo "UI_CRAWL_PREVIOUS_THEMES=$RUNNER_TEMP/previous-themes/summary.json" >> "$GITHUB_ENV"
               echo "Comparing with run $id ($event, $day, $sha)"
               exit 0
             fi
@@ -91,10 +96,21 @@ jobs:
 
       - name: Crawl
         run: UI_CRAWL_OUT="$RUNNER_TEMP/ui-crawl" bash scripts/ui-crawl/run.sh --workers=3
+      # Serves the build the crawl made: it runs when the crawl failed a gate, and skips when there's no build.
+      - name: Crawl every other theme
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f "$RUNNER_TEMP/ui-crawl/dist/index.html" ] || { echo "No build to crawl: the client build failed"; exit 1; }
+          UI_CRAWL_SKIP_BUILD=1 UI_CRAWL_DIST="$RUNNER_TEMP/ui-crawl/dist" UI_CRAWL_OUT="$RUNNER_TEMP/ui-crawl-themes" \
+            UI_CRAWL_PREVIOUS="${UI_CRAWL_PREVIOUS_THEMES:-}" bash scripts/ui-crawl/run.sh --set=themes --workers=3
 
       - name: Summary
         if: always()
-        run: cat "$RUNNER_TEMP/ui-crawl/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "The crawl wrote no summary" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          cat "$RUNNER_TEMP/ui-crawl/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "The crawl wrote no summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$RUNNER_TEMP/ui-crawl-themes/summary.md" ]; then
+            { echo; echo "# Every other theme"; echo; cat "$RUNNER_TEMP/ui-crawl-themes/summary.md"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -107,12 +123,31 @@ jobs:
             ${{ runner.temp }}/ui-crawl/shots
           retention-days: 14
           if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-crawl-themes-report
+          path: |
+            ${{ runner.temp }}/ui-crawl-themes/report.html
+            ${{ runner.temp }}/ui-crawl-themes/summary.md
+            ${{ runner.temp }}/ui-crawl-themes/crawl.json
+            ${{ runner.temp }}/ui-crawl-themes/preview.log
+            ${{ runner.temp }}/ui-crawl-themes/shots
+          retention-days: 14
+          if-no-files-found: ignore
       # Small and kept longer: what the next run compares with.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ui-crawl-summary
           path: ${{ runner.temp }}/ui-crawl/summary.json
+          retention-days: 90
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-crawl-themes-summary
+          path: ${{ runner.temp }}/ui-crawl-themes/summary.json
           retention-days: 90
           if-no-files-found: ignore
 

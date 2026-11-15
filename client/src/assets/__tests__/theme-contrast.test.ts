@@ -22,7 +22,9 @@
 // - Code colours: every code scheme's colours, as the theme store writes them (readablePalette), 4.5:1 on the code
 //   block and the editor under every theme the scheme can be used with. One Light's functions were 3.74:1, Solarized's
 //   comments 1.68:1; a colour that already reads keeps its scheme's own value.
-// - Muted words: --muted, 4.5:1 on every surface (solarized's own was 4.11:1 and 3.64:1).
+// - Muted words: --muted, 4.5:1 on every surface (solarized's own was 4.11:1 and 3.64:1) and on the tints over it: a
+//   picked card or a hunk header on --accent-dim, a file header or a pressed toggle on 3-6% --text. Monokai's was 3.67:1
+//   on its hunk headers, solarized-dark's 3.72:1. --error-text holds 4.5:1 on those text tints too (a diff's removed count).
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -290,13 +292,28 @@ describe("accent words", () => {
   });
 });
 
+/**
+ * The tinted grounds words rest on over `surface`: a picked card or a hunk header on --accent-dim, and a file header, a
+ * pressed toggle or a summary card on 3% to 6% of --text.
+ */
+function tints(vars: Vars, surface: string): Record<string, Rgba> {
+  const bg = rgba(vars, vars[surface]);
+  const out: Record<string, Rgba> = { [`--${surface}`]: bg, [`--accent-dim over --${surface}`]: paint(rgba(vars, vars["accent-dim"]), 1, bg) };
+  for (const percent of [3, 4, 5, 6]) out[`${percent}% --text over --${surface}`] = paint(rgba(vars, vars.text), percent / 100, bg);
+  return out;
+}
+
 describe("muted text", () => {
-  it.each(Object.entries(themes()))("reaches 4.5:1 on every surface in the %s theme", (_name, vars) => {
-    const muted = resolveVar(vars, vars.muted);
+  it.each(Object.entries(themes()))("reaches 4.5:1 on every surface and the tints over it in the %s theme", (_name, vars) => {
+    const muted = rgba(vars, vars.muted);
+    const failures: string[] = [];
     for (const surface of ["main-bg", "panel-bg", "card-bg"]) {
-      const bg = resolveVar(vars, vars[surface]);
-      expect(contrast(muted, bg), `--muted ${muted} on --${surface} ${bg}`).toBeGreaterThanOrEqual(4.5);
+      for (const [ground, bg] of Object.entries(tints(vars, surface))) {
+        const ratio = contrast(hex(muted), hex(bg));
+        if (ratio < 4.5) failures.push(`--muted ${hex(muted)} on ${ground} ${hex(bg)}: ${ratio.toFixed(2)}`);
+      }
     }
+    expect(failures).toEqual([]);
   });
 });
 
@@ -308,6 +325,20 @@ describe("error words", () => {
       const tint = over(error, 10, resolveVar(vars, vars[surface]));
       expect(contrast(text, tint), `${text} on 10% ${error} over --${surface} = ${tint}`).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  // A diff's removed-lines count sits in its file header, 4% of --text.
+  it.each(Object.entries(themes()))("reach 4.5:1 on the text tints a header draws in the %s theme", (_name, vars) => {
+    const word = rgba(vars, vars["error-text"]);
+    const failures: string[] = [];
+    for (const surface of ["main-bg", "panel-bg", "card-bg"]) {
+      for (const [ground, bg] of Object.entries(tints(vars, surface))) {
+        if (ground.startsWith("--accent-dim")) continue;
+        const ratio = contrast(hex(word), hex(bg));
+        if (ratio < 4.5) failures.push(`--error-text ${hex(word)} on ${ground} ${hex(bg)}: ${ratio.toFixed(2)}`);
+      }
+    }
+    expect(failures).toEqual([]);
   });
 });
 

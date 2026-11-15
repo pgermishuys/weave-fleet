@@ -4,7 +4,7 @@
 //   <out>/report.html   every screen: its findings and screenshot (open it beside shots/)
 // Exits 1 when a gate fails (with --gate), so the workflow's run goes red.
 //
-//   node report.mjs [--out=out] [--previous=<an earlier summary.json>] [--gate]
+//   node report.mjs [--out=out] [--set=nightly|themes] [--previous=<an earlier summary.json>] [--gate]
 //
 // Gates (a red night): page errors (and screens the crawl couldn't reach), console errors, failed requests, sideways
 // overflow at 390 px, and the axe ratchet: each axe WCAG 2 A/AA rule's count against axe-baseline.json, over the
@@ -12,11 +12,15 @@
 // you to lower the baseline, so the counts only go down. Report only: icon-only controls with no name, overflow at
 // 1440 px, console warnings, and mock gaps (/api routes mock mode answers with 501).
 //
-//   node report.mjs --out=<out> --update-baseline   write this run's axe counts as axe-baseline.json (a full crawl only)
+// --set names the crawl's variant set (screens.mjs): "nightly" (the default, baseline axe-baseline.json) or "themes"
+// (the other eight themes on the desktop, baseline axe-baseline-themes.json).
+//
+//   node report.mjs --out=<out> [--set=…] --update-baseline   write this run's axe counts as the set's baseline (a full
+//   crawl of the set only)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCREENS, VARIANTS } from "./screens.mjs";
+import { SCREENS, variantsOf } from "./screens.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -64,15 +68,24 @@ for (const r of crawl) {
   }
 }
 // --- the axe ratchet
-const BASELINE = join(here, "axe-baseline.json");
+const SET = arg("set") ?? "nightly";
+const BASELINE_NAME = SET === "nightly" ? "axe-baseline.json" : `axe-baseline-${SET}.json`;
+const BASELINE = join(here, BASELINE_NAME);
+const setFlag = SET === "nightly" ? "" : ` --set=${SET}`;
+const lowerIt = `UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh${setFlag}`;
 const UPDATE = argv.includes("--update-baseline");
 const perScreen = {};
 for (const r of crawl) for (const v of r.axe ?? []) (perScreen[v.id] ??= {})[key(r)] = v.count;
 const visited = new Set(crawl.map(key));
-const fullCrawl = crawl.length === SCREENS.length * Object.values(VARIANTS).filter((v) => !v.onRequest).length;
+const setVariants = new Set(variantsOf(SET));
+if (!setVariants.size) {
+  console.error(`unknown variant set ${SET}`);
+  process.exit(2);
+}
+const fullCrawl = crawl.length === SCREENS.length * setVariants.size && crawl.every((r) => setVariants.has(r.variant));
 if (UPDATE) {
   if (!fullCrawl) {
-    console.error(`--update-baseline needs a full crawl (every screen in every nightly variant); this one has ${crawl.length} screens`);
+    console.error(`--update-baseline needs a full crawl (every screen in every ${SET} variant); this one has ${crawl.length} screens`);
     process.exit(2);
   }
   const rules = Object.fromEntries(
@@ -138,7 +151,7 @@ for (const [id, g] of Object.entries(gates)) {
   for (const s of g.failing.slice(0, 30)) md.push(`- \`${s.screen}\`: ${s.items.slice(0, 3).map((x) => x.replaceAll("|", "\\|")).join("; ")}`);
   if (g.failing.length > 30) md.push(`- … and ${g.failing.length - 30} more screens (report.html)`);
 }
-md.push("", "### Axe ratchet (scripts/ui-crawl/axe-baseline.json)", "");
+md.push("", `### Axe ratchet (scripts/ui-crawl/${BASELINE_NAME})`, "");
 if (!ratchet.rose.length && !ratchet.fell.length) md.push("Every rule is at its baseline.");
 for (const r of ratchet.rose) {
   md.push(`- ✗ \`${r.id}\`: ${r.now}, baseline ${r.was} (+${r.now - r.was}). Screens that grew:`);
@@ -146,7 +159,7 @@ for (const r of ratchet.rose) {
 }
 for (const r of ratchet.fell) md.push(`- ↓ \`${r.id}\`: ${r.now}, baseline ${r.was} (−${r.was - r.now}).`);
 if (ratchet.fell.length) {
-  md.push("", "Lower the baseline so it stays down: `UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh` (or `node scripts/ui-crawl/report.mjs --out=<out> --update-baseline` on a crawl's output), and commit axe-baseline.json.");
+  md.push("", `Lower the baseline so it stays down: \`${lowerIt}\` (or \`node scripts/ui-crawl/report.mjs --out=<out>${setFlag} --update-baseline\` on a crawl's output), and commit ${BASELINE_NAME}.`);
 }
 md.push("", "### Axe rules", "", "| Rule (axe WCAG 2 A/AA) | Impact | Elements | Screens |", "|---|---|---:|---:|");
 const axeIds = [...new Set([...Object.keys(axe), ...Object.keys(previous?.axe ?? {})])].sort(
@@ -209,7 +222,7 @@ ${rows}
 
 console.log(md.slice(0, 8).join("\n"));
 for (const r of ratchet.rose) console.error(`✗ axe ${r.id}: ${r.now}, baseline ${r.was}. Screens that grew: ${r.grew.slice(0, 10).join("; ")}`);
-for (const r of ratchet.fell) console.log(`↓ axe ${r.id}: ${r.now}, baseline ${r.was}. Lower the baseline: UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh`);
+for (const r of ratchet.fell) console.log(`↓ axe ${r.id}: ${r.now}, baseline ${r.was}. Lower the baseline: ${lowerIt}`);
 if (argv.includes("--gate") && red) {
   console.error("UI crawl gates failed: see summary.md / report.html");
   process.exit(1);

@@ -119,7 +119,7 @@
   --sheet-shadow: 0 1px 2px rgba(26, 25, 24, 0.04), 0 12px 32px -18px rgba(26, 25, 24, 0.18);
   --menu-shadow: 0 16px 40px -12px rgba(26, 25, 24, 0.22), 0 2px 6px rgba(26, 25, 24, 0.06);
   --text: #1A1918;
-  --muted: #6E6A65;
+  --muted: #67645F;
   --row-dim-1: 77%;
   --row-dim-2: 62%;
   --row-meta: 63%;
@@ -175,7 +175,7 @@
   --idle: #f59e0b;
   --complete: #3b82f6;
   --error: #ef4444;
-  --error-text: #F17171;
+  --error-text: #F27A7A;
   --coral-text: #E3836B;
   --queued: #8b5cf6;
   --running-text: var(--running);
@@ -250,7 +250,7 @@
   --idle: #EBCB8B;
   --complete: #81A1C1;
   --error: #C7767D;
-  --error-text: #D9B1B8;
+  --error-text: #DAB3B9;
   --coral: #DD6B4E;
   --coral-text: #F0BDB0;
   --queued: #B48EAD;
@@ -288,7 +288,7 @@
   --idle: #F1FA8C;
   --complete: #8BE9FD;
   --error: #FF5555;
-  --error-text: #FD8D8B;
+  --error-text: #FD9290;
   --coral-text: #EAA695;
   --queued: #FF79C6;
   --running-text: var(--running);
@@ -307,8 +307,8 @@
   --main-bg: #002B36;
   --border: rgba(253, 246, 227, 0.1);
   --text: #FDF6E3;
-  /* Solarized's #839496 lifted to 4.5:1 on its surfaces. */
-  --muted: #8C9B9D;
+  /* Solarized's #839496 lifted to 4.5:1 on its surfaces and the tints muted words sit on (--accent-dim, 3–6% --text). */
+  --muted: #9EABAD;
   --row-dim-1: 69%;
   --row-dim-2: 54%;
   --row-meta: 60%;
@@ -327,7 +327,7 @@
   --idle: #B58900;
   --complete: #268BD2;
   --error: #DE3E3B;
-  --error-text: #E97F76;
+  --error-text: #EB8D85;
   --coral-text: #E6947F;
   --queued: #6D72C5;
   --running-text: #A0AF38;
@@ -347,8 +347,8 @@
   --border: #D6CDB7;
   --menu-shadow: 0 16px 40px -12px rgba(7, 54, 66, 0.25), 0 2px 6px rgba(7, 54, 66, 0.08);
   --text: #073642;
-  /* Solarized's #657B83 lifted to 4.5:1 on its surfaces. */
-  --muted: #586B72;
+  /* Solarized's #657B83 lifted to 4.5:1 on its surfaces and the tints muted words sit on (--accent-dim, 3–6% --text). */
+  --muted: #516269;
   --row-dim-1: 82%;
   --row-dim-2: 67%;
   --row-meta: 70%;
@@ -386,7 +386,7 @@
   --main-bg: #272822;
   --border: rgba(248, 248, 242, 0.1);
   --text: #F8F8F2;
-  --muted: #B3B3A6;
+  --muted: #C6C6BC;
   --row-dim-1: 73%;
   --row-dim-2: 58%;
   --row-meta: 70%;
@@ -404,7 +404,7 @@
   --idle: #E6DB74;
   --complete: #66D9EF;
   --error: #F9337A;
-  --error-text: #F98FB3;
+  --error-text: #FA99BA;
   --coral: #DB6142;
   --coral-text: #EFBAAC;
   --queued: #AE81FF;
@@ -424,7 +424,7 @@
   --main-bg: #0D1117;
   --border: rgba(240, 246, 252, 0.1);
   --text: #E6EDF3;
-  --muted: #8B949E;
+  --muted: #8E97A1;
   --row-dim-1: 66%;
   --row-dim-2: 51%;
   --row-meta: 55%;

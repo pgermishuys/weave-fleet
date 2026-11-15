@@ -2,12 +2,16 @@
 # The UI crawl in one command: builds the client in mock mode (no API, no database), serves the build with
 # `vite preview`, visits every screen in screens.mjs in every variant, and writes the report.
 #
-#   scripts/ui-crawl/run.sh [--only=<screen id substring>] [--variants=dark-phone,…] [--workers=3]
+#   scripts/ui-crawl/run.sh [--set=nightly|themes] [--only=<screen id substring>] [--variants=dark-phone,…] [--workers=3]
+#
+# --set=themes crawls the other eight themes on the desktop instead of the five nightly variants, against its own
+# baseline, axe-baseline-themes.json.
 #
 # Output in scripts/ui-crawl/out/ (or $UI_CRAWL_OUT): crawl.json, summary.json, summary.md, report.html, shots/.
 # Exits 1 when a gate fails (page errors, console errors, failed requests, sideways overflow at 390 px, or an axe rule
-# above its count in axe-baseline.json). UI_CRAWL_UPDATE_BASELINE=1 writes this run's axe counts as the baseline.
-# Environment: UI_CRAWL_PORT (4173), UI_CRAWL_SKIP_BUILD=1 to serve the last build again, UI_CRAWL_PREVIOUS=<an
+# above its count in the set's baseline). UI_CRAWL_UPDATE_BASELINE=1 writes this run's axe counts as the baseline.
+# Environment: UI_CRAWL_PORT (4173), UI_CRAWL_SKIP_BUILD=1 to serve the last build again (UI_CRAWL_DIST=<a crawl's
+# out/dist> to serve another crawl's build), UI_CRAWL_PREVIOUS=<an
 # earlier summary.json> to compare with. Needs client/node_modules (bun install in client/) and Playwright's
 # Chromium (bunx playwright install chromium, from this folder).
 set -euo pipefail
@@ -18,7 +22,9 @@ out="${UI_CRAWL_OUT:-$here/out}"
 port="${UI_CRAWL_PORT:-4173}"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
-dist="$out/dist"
+dist="${UI_CRAWL_DIST:-$out/dist}"
+set_flag=--set=nightly
+for a in "$@"; do case "$a" in --set=*) set_flag="$a" ;; esac; done
 
 [ -d "$client/node_modules" ] || { echo "client/node_modules is missing: run bun install in client/ first" >&2; exit 2; }
 if [ ! -d "$here/node_modules" ]; then
@@ -48,5 +54,5 @@ done
 
 rm -rf "$out/shots"
 node "$here/crawl.mjs" --base="http://127.0.0.1:$port" --out="$out" "$@"
-node "$here/report.mjs" --out="$out" ${UI_CRAWL_PREVIOUS:+--previous="$UI_CRAWL_PREVIOUS"} \
+node "$here/report.mjs" --out="$out" "$set_flag" ${UI_CRAWL_PREVIOUS:+--previous="$UI_CRAWL_PREVIOUS"} \
   ${UI_CRAWL_PREVIOUS_LABEL:+--previous-label="$UI_CRAWL_PREVIOUS_LABEL"} ${UI_CRAWL_UPDATE_BASELINE:+--update-baseline} --gate
