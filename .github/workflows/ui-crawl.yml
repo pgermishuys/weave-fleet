@@ -4,8 +4,10 @@
 #
 # - Gates (a red run): page errors and screens the crawl couldn't reach, console errors, failed requests, and sideways
 #   overflow at 390 px. A red night opens (or comments on) the issue "Nightly UI crawl failed"; a green night closes it.
-# - Report only, until the counts come down (then a ratchet): axe WCAG 2 A/AA, unnamed controls, the screenshots. The
-#   run summary compares the counts with the previous run on the same branch.
+# - A ratchet: each axe WCAG 2 A/AA rule's count against scripts/ui-crawl/axe-baseline.json. A rise is red (the
+#   summary names the screens that grew); a fall asks for the baseline to be lowered.
+# - Report only: unnamed controls, the screenshots. The run summary compares the counts with the previous run on the
+#   same branch.
 # - Every night on main, on a pull request that changes the crawl, and by hand (tick "nightly" to report like the night).
 name: UI crawl
 

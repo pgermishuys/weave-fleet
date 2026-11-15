@@ -1,0 +1,79 @@
+{
+  "rules": {
+    "aria-input-field-name": {
+      "total": 5,
+      "screens": {
+        "palette--dark-desk": 1,
+        "palette--dark-desk-labsoff": 1,
+        "palette--dark-phone": 1,
+        "palette--light-desk": 1,
+        "palette--light-phone": 1
+      }
+    },
+    "aria-prohibited-attr": {
+      "total": 4,
+      "screens": {
+        "board--dark-desk": 2,
+        "board--light-desk": 2
+      }
+    },
+    "aria-required-children": {
+      "total": 2,
+      "screens": {
+        "board--dark-desk": 1,
+        "board--light-desk": 1
+      }
+    },
+    "aria-valid-attr-value": {
+      "total": 2,
+      "screens": {
+        "board--dark-desk": 1,
+        "board--light-desk": 1
+      }
+    },
+    "button-name": {
+      "total": 5,
+      "screens": {
+        "settings-folders--dark-desk": 1,
+        "settings-folders--dark-desk-labsoff": 1,
+        "settings-folders--dark-phone": 1,
+        "settings-folders--light-desk": 1,
+        "settings-folders--light-phone": 1
+      }
+    },
+    "nested-interactive": {
+      "total": 14,
+      "screens": {
+        "palette-shortcuts--dark-desk-labsoff": 7,
+        "sessions-home--dark-desk-labsoff": 7
+      }
+    },
+    "role-img-alt": {
+      "total": 5,
+      "screens": {
+        "analytics-overview--dark-desk": 1,
+        "analytics-overview--dark-desk-labsoff": 1,
+        "analytics-overview--dark-phone": 1,
+        "analytics-overview--light-desk": 1,
+        "analytics-overview--light-phone": 1
+      }
+    },
+    "scrollable-region-focusable": {
+      "total": 18,
+      "screens": {
+        "analytics-daily--dark-phone": 1,
+        "analytics-daily--light-phone": 1,
+        "analytics-models--dark-phone": 1,
+        "analytics-models--light-phone": 1,
+        "palette--dark-desk": 1,
+        "palette--dark-desk-labsoff": 1,
+        "palette--dark-phone": 1,
+        "palette--light-desk": 1,
+        "palette--light-phone": 1,
+        "session-conversation--dark-desk": 3,
+        "session-conversation--dark-desk-labsoff": 3,
+        "session-conversation--light-desk": 3
+      }
+    }
+  }
+}
