@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Common;
@@ -391,7 +392,7 @@ internal sealed partial class HarnessUpdateService(
         catch (OperationCanceledException)
         {
             timedOut = true;
-            try { process.Kill(entireProcessTree: true); }
+            try { ProcessTree.Kill(process); }
             catch (InvalidOperationException) { } // already exited
         }
 

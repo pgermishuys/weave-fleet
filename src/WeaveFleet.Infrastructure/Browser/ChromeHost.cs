@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Browser;
@@ -354,7 +355,7 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
             try
             {
                 if (!browser.WaitForExit(2000))
-                    browser.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(browser);
             }
             catch (Exception error) when (error is InvalidOperationException or NotSupportedException or SystemException)
             {

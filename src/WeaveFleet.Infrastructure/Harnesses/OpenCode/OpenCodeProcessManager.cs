@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
@@ -278,7 +279,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         catch (TimeoutException)
         {
             LogForceKilled(_logger, null);
-            _process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(_process);
         }
         catch (Exception)
         {

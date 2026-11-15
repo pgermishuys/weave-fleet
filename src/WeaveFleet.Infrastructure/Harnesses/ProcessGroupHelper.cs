@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32.SafeHandles;
+using WeaveFleet.Application.Processes;
 
 namespace WeaveFleet.Infrastructure.Harnesses;
 
@@ -142,7 +143,7 @@ internal static class ProcessGroupHelper
                 if (identity.IsSameProcess(ProcessIdentity.Read(pid)))
                 {
                     using var process = Process.GetProcessById(pid);
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
                 }
             }
             catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception
@@ -336,7 +337,7 @@ internal static class ProcessGroupHelper
     {
         try
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             if (logger is not null)
                 LogKillTreeDone(logger, process.Id, null);
         }

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Enumeration;
+using WeaveFleet.Application.Processes;
 
 namespace WeaveFleet.Application.Workspaces;
 
@@ -213,7 +214,7 @@ public static class WorkspaceFileSearch
 
     private static void Kill(Process process)
     {
-        try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+        try { ProcessTree.Kill(process); } catch (InvalidOperationException) { }
     }
 
     /// <summary>The files plus every folder above them.</summary>

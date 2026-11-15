@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Mods.Host;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.IO;
 
@@ -96,7 +97,7 @@ internal sealed class ModHostProcess : IDisposable
         {
             ProcessGroupHelper.KillProcessGroup(_process, _logger);
             if (!_process.HasExited)
-                _process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(_process);
         }
         catch (Exception e)
         {

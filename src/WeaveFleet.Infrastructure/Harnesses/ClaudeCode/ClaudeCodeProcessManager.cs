@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Application.Terminals;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -435,7 +436,7 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         catch (TimeoutException)
         {
             LogForceKilled(_logger, null);
-            _process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(_process);
         }
         catch (Exception)
         {
