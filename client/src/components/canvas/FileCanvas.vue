@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBytes } from "@/lib/format";
 import { computed, inject, nextTick, onActivated, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { ChevronRight, WrapText } from "lucide-vue-next";
 import { Transaction, type EditorState, type Text } from "@codemirror/state";
@@ -222,9 +223,7 @@ const imageNote = computed(() => image.error.value ?? (imageBroken.value ? "This
 const imageMeta = computed(() => {
   const bytes = image.bytes.value;
   if (bytes === null || !image.src.value) return null;
-  const size = bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB`
-    : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB`
-    : `${bytes} B`;
+  const size = formatBytes(bytes);
   // An SVG without a width and height has no pixel size of its own.
   return imageDims.value ? `${imageDims.value.width} × ${imageDims.value.height} · ${size}` : size;
 });

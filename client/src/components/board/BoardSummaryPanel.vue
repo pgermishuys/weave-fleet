@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useFleetSummary } from "@/composables/use-fleet-summary";
-import { formatAnalyticsCost, formatLargeNumber } from "@/lib/format-utils";
+import { formatMoney, formatTokens } from "@/lib/format";
 import { boardStatusOptions, useBoardStore } from "@/stores/board";
 
 interface AgentSummary {
@@ -170,7 +170,7 @@ const liveFleetSummaryLabel = computed(() => {
           :key="agent.agent"
           class="stacked-segment"
           :style="{ width: agent.width }"
-          :title="`${agent.agent}: ${formatAnalyticsCost(agent.cost)}`"
+          :title="`${agent.agent}: ${formatMoney(agent.cost)}`"
         />
       </div>
 
@@ -187,11 +187,11 @@ const liveFleetSummaryLabel = computed(() => {
         >
           <div class="agent-copy">
             <span class="agent-name">{{ agent.agent }}</span>
-            <span class="agent-detail">{{ formatLargeNumber(agent.tokens) }} tokens</span>
+            <span class="agent-detail">{{ formatTokens(agent.tokens) }} tokens</span>
           </div>
           <div class="agent-stats">
             <span class="agent-count">{{ agent.sessions }} sessions</span>
-            <span class="agent-cost">{{ formatAnalyticsCost(agent.cost) }}</span>
+            <span class="agent-cost">{{ formatMoney(agent.cost) }}</span>
           </div>
         </div>
       </div>
@@ -204,15 +204,15 @@ const liveFleetSummaryLabel = computed(() => {
 
       <div class="metric-row">
         <span class="metric-label">Visible session cost</span>
-        <span class="metric-value">{{ formatAnalyticsCost(visibleCostTotal) }}</span>
+        <span class="metric-value">{{ formatMoney(visibleCostTotal) }}</span>
       </div>
       <div class="metric-row">
         <span class="metric-label">Average per visible session</span>
-        <span class="metric-value">{{ formatAnalyticsCost(averageVisibleCost) }}</span>
+        <span class="metric-value">{{ formatMoney(averageVisibleCost) }}</span>
       </div>
       <div class="metric-row">
         <span class="metric-label">Visible session tokens</span>
-        <span class="metric-value">{{ formatLargeNumber(visibleTokensTotal) }}</span>
+        <span class="metric-value">{{ formatTokens(visibleTokensTotal) }}</span>
       </div>
       <div
         v-if="queuedTasksCount !== undefined"

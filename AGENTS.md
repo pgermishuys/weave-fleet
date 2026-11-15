@@ -101,6 +101,9 @@ No gutter between the rail and the context area.
   the user's locale (`formatTime`, `formatDate`, `formatDateTime`, `formatTimestamp`, `formatWhen`) and leave the year
   out this year. Durations are `formatDuration(ms)`: "45 s", "3 min 20 s", "1 h 05 min"; `formatCountdown` for
   "in 3 min".
+- **Counts and money:** `@/lib/format` too. `formatCount` ("12,500", the locale's grouping), `formatTokens` ("950",
+  "17.1k", "3.4M"), `formatBytes` ("3.4 MB"), `formatMoney` (two decimals in the data's currency, "<$0.01" for a
+  sliver). Money is a list-price estimate and says so; it appears only where Fleet already shows cost, never anywhere new.
 - **Colours:** theme tokens only (`--text`, `--muted`, `--accent`, `--border`, `--main-bg`, `--panel-bg`, `--card-bg`, …,
   and the Tailwind classes built on them such as `text-muted`, `bg-card-bg`).
   - Every theme in `client/src/assets/main.css` defines them.

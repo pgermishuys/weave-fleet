@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   contextPercent,
   contextTone,
-  formatTokens,
   toContextUsage,
   turnsBeforeCompaction,
   type SessionContextUsage,
 } from "@/lib/context-usage";
+import { formatTokens } from "@/lib/format";
 
 function context(overrides: Partial<SessionContextUsage> = {}): SessionContextUsage {
   return {

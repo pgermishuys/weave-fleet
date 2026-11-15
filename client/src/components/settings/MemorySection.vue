@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatDate } from "@/lib/format";
+import { formatCount, formatDate } from "@/lib/format";
 import { computed, onMounted, ref, shallowRef, watch } from "vue";
 import { Cable, ChevronRight, Coins, Eye, FileText, FolderGit2, Hourglass, Pencil, Pin, Plus, Search, Server, TriangleAlert, X } from "lucide-vue-next";
 import {
@@ -89,7 +89,7 @@ function sectionsOf(list: MemoryListName, items: MemoryNote[], emptyText: string
     {
       key: "always",
       title: "Every session reads",
-      meta: `${always.length}/${alwaysMax} · about ${tokens.toLocaleString()} tokens`,
+      meta: `${always.length}/${alwaysMax} · about ${formatCount(tokens)} tokens`,
       items: items.filter((note) => !note.inSearch),
       empty: "Nothing is read by every session. A new note goes here first.",
     },
@@ -378,7 +378,7 @@ onMounted(load);
           <span
             class="text-xs text-muted"
             data-testid="memory-count"
-          >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }}{{ searchOn ? ` · ${readCount} read by every session` : "" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
+          >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }}{{ searchOn ? ` · ${readCount} read by every session` : "" }} · about {{ formatCount(notes.tokens) }} tokens per request</span>
         </div>
 
         <DreamNightly

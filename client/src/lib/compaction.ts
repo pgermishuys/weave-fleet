@@ -5,7 +5,7 @@
  */
 
 import type { AccumulatedMessage } from "@/lib/client-types";
-import { formatTokens } from "@/lib/context-usage";
+import { formatTokens } from "@/lib/format";
 
 export interface CompactionView {
   /** "auto" or "manual", when the harness says. */

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, formatMoney } from "@/lib/format";
 import { computed } from "vue";
 import { Archive, ArchiveRestore, ChartNoAxesColumn, Copy, Ellipsis, FileDown, GitFork, OctagonX, Pencil, SquareTerminal, Trash2 } from "lucide-vue-next";
 import { useIsMobileNav } from "@/composables/use-media-query";
@@ -67,8 +68,8 @@ const showTerminalItem = computed(() => phone.value && Boolean(props.sessionId) 
 const terminalOpen = computed(() => Boolean(props.sessionId) && terminals.isOpen(props.sessionId as string));
 const usage = computed(() => {
   const parts: string[] = [];
-  if (props.totalTokens != null) parts.push(`${props.totalTokens.toLocaleString()} tokens`);
-  if (props.totalCost != null) parts.push(new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(props.totalCost));
+  if (props.totalTokens != null) parts.push(`${formatCount(props.totalTokens)} tokens`);
+  if (props.totalCost != null) parts.push(`${formatMoney(props.totalCost)} estimated`);
   return parts.join(" · ");
 });
 

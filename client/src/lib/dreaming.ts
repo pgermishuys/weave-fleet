@@ -82,12 +82,6 @@ export interface NightlyDreamingChange {
 export const DREAM_BUDGETS = [100_000, 300_000, 500_000, 1_000_000] as const;
 export const NIGHTLY_HARNESSES = ["opencode2", "claude-code"] as const;
 
-/** 186000 reads "186k", 1000000 reads "1M". */
-export function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) return `${+(tokens / 1_000_000).toFixed(1)}M`;
-  return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens);
-}
-
 /** Changes a dream made that are still in place. */
 export const appliedDreamChanges = (dream: DreamView): DreamChangeView[] =>
   groupDreamChanges(dream.changes).applied.filter((change) => !change.undone);

@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { formatCount, formatMoney } from "@/lib/format"
 import { computed } from "vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
 import type { ModelAnalytics } from "@/api/client"
-import { formatAnalyticsCost } from "@/lib/format-utils"
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
 
@@ -36,7 +36,6 @@ const props = withDefaults(defineProps<Props>(), {
   tableEmptyMessage: "No model analytics available for the selected filters.",
 })
 
-const integerFormatter = new Intl.NumberFormat("en-US")
 
 const hasModels = computed(() => props.models.length > 0)
 
@@ -58,7 +57,7 @@ const chartItems = computed<CostBarItem[]>(() => {
     name: model.modelId,
     cost: model.cost,
     maxCost: maxCost.value,
-    detail: `${model.providerId} · ${integerFormatter.format(model.messageCount)} messages · Est. ${formatAnalyticsCost(model.estimatedCost)}`,
+    detail: `${model.providerId} · ${formatCount(model.messageCount)} messages · Est. ${formatMoney(model.estimatedCost)}`,
   }))
 })
 
@@ -66,11 +65,11 @@ const tableRows = computed<ModelTableRow[]>(() => {
   return sortedModels.value.map((model) => ({
     ...model,
     key: `${model.providerId}:${model.modelId}`,
-    formattedTokens: integerFormatter.format(model.tokens),
-    formattedCost: formatAnalyticsCost(model.cost),
-    formattedEstimatedCost: formatAnalyticsCost(model.estimatedCost),
-    formattedMessageCount: integerFormatter.format(model.messageCount),
-    formattedAverageCostPerMessage: formatAnalyticsCost(model.avgCostPerMessage),
+    formattedTokens: formatCount(model.tokens),
+    formattedCost: formatMoney(model.cost),
+    formattedEstimatedCost: formatMoney(model.estimatedCost),
+    formattedMessageCount: formatCount(model.messageCount),
+    formattedAverageCostPerMessage: formatMoney(model.avgCostPerMessage),
   }))
 })
 

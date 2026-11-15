@@ -8,8 +8,7 @@ import { useModels } from "@/composables/use-models";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { runSessionCommand } from "@/lib/session-commands";
-import { formatCost, formatTokens } from "@/lib/format-utils";
-import { formatDuration } from "@/lib/format";
+import { formatCount, formatDuration, formatMoney, formatTokens } from "@/lib/format";
 import { deriveTurns, fileEditsOf, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
@@ -114,11 +113,11 @@ function showInChat(turn: SessionTurn): void {
         <span
           v-if="totals.additions > 0"
           class="turns-canvas__adds"
-        >+{{ totals.additions.toLocaleString() }}</span>
+        >+{{ formatCount(totals.additions) }}</span>
         <span
           v-if="totals.deletions > 0"
           class="turns-canvas__dels"
-        >−{{ totals.deletions.toLocaleString() }}</span>
+        >−{{ formatCount(totals.deletions) }}</span>
       </span>
     </div>
 
@@ -214,7 +213,7 @@ function showInChat(turn: SessionTurn): void {
             <span v-if="turn.tokensInput > 0 || turn.tokensOutput > 0">
               Tokens <b>{{ formatTokens(turn.tokensInput) }} in · {{ formatTokens(turn.tokensOutput) }} out</b>
             </span>
-            <span v-if="turn.cost > 0">Cost <b>{{ formatCost(turn.cost) }}</b></span>
+            <span v-if="turn.cost > 0">Est. cost <b>{{ formatMoney(turn.cost) }}</b></span>
           </div>
 
           <div v-if="turn.files.length > 0">

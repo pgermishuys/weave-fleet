@@ -4,7 +4,7 @@ import { useRouter } from "@tanstack/vue-router";
 import { ArrowUpRight, CircleStop } from "lucide-vue-next";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { readWorkOutput, stopWork } from "@/composables/use-running-work";
-import { formatTokens } from "@/lib/format-utils";
+import { formatTokens } from "@/lib/format";
 import { useMachineTarget } from "@/lib/machine-target";
 import { isWorkRunning, workResult } from "@/lib/running-work";
 import { latestOutputLine, summarizeAgentActivity, type AgentRow } from "@/lib/session-lineage";

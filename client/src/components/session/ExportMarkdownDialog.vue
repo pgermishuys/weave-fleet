@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBytes } from "@/lib/format";
 import { computed, ref, watch } from "vue";
 import { Check, Copy, Download, Share2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -97,7 +98,7 @@ const built = computed(() => {
 
 const markdown = computed(() => built.value?.markdown ?? "");
 const lines = computed(() => markdown.value.split("\n").map((text) => ({ text, key: looksLikeKey(text) })));
-const sizeLabel = computed(() => `${(new Blob([markdown.value]).size / 1024).toFixed(1)} KB`);
+const sizeLabel = computed(() => formatBytes(new Blob([markdown.value]).size));
 const fileName = computed(() => exportFileName(props.title, props.sessionId));
 
 const toolChoices: { value: ExportToolMode; label: string; hint: string }[] = [

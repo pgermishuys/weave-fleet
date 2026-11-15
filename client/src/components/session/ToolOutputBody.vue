@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount } from "@/lib/format";
 import { computed, nextTick, onBeforeUnmount, shallowRef, useTemplateRef } from "vue";
 import { Check, ChevronDown, ChevronUp, Copy } from "lucide-vue-next";
 import { linesToHtml, parseToolOutputCached } from "@/lib/tool-output";
@@ -58,7 +59,7 @@ async function copy(): Promise<void> {
 onBeforeUnmount(() => clearTimeout(copiedTimer));
 
 function count(n: number, noun: string): string {
-  return `${n.toLocaleString("en-US")} ${noun}${n === 1 ? "" : "s"}`;
+  return `${formatCount(n)} ${noun}${n === 1 ? "" : "s"}`;
 }
 </script>
 
@@ -105,7 +106,7 @@ function count(n: number, noun: string): string {
       class="tool-output-note"
       data-testid="tool-card-output-capped"
     >
-      Showing the last {{ count(shownCount, "line") }} of {{ total.toLocaleString("en-US") }}. Copy takes all of them.
+      Showing the last {{ count(shownCount, "line") }} of {{ formatCount(total) }}. Copy takes all of them.
     </p>
     <pre
       ref="box"

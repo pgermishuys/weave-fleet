@@ -2,10 +2,9 @@
 import { computed, shallowRef, watch } from "vue";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-vue-next";
 import type { SessionAnalytics } from "@/api/client";
-import { formatAnalyticsCost } from "@/lib/format-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RelativeTime } from "@/components/ui/relative-time";
-import { formatDuration } from "@/lib/format";
+import { formatCount, formatDuration, formatMoney } from "@/lib/format";
 import { ErrorNote } from "@/components/ui/error-note";
 
 export type SessionsTabSortBy =
@@ -55,7 +54,6 @@ const SESSIONS_TAB_COLUMNS: readonly SessionsTabColumn[] = [
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-const integerFormatter = new Intl.NumberFormat("en-US");
 
 const activeSortBy = shallowRef<SessionsTabSortBy>(props.sortBy ?? "createdAt");
 const activeSortDir = shallowRef<SessionsTabSortDir>(props.sortDir ?? "desc");
@@ -175,7 +173,7 @@ function resolveModelsLabel(models: readonly string[]): string {
 }
 
 function formatTokenCount(tokens: number): string {
-  return integerFormatter.format(tokens);
+  return formatCount(tokens);
 }
 
 function formatSessionDuration(durationSeconds: number | null): string {
@@ -290,10 +288,10 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
               {{ formatTokenCount(session.tokens) }}
             </td>
             <td class="sessions-tab__cell sessions-tab__cell--right">
-              {{ formatAnalyticsCost(session.cost) }}
+              {{ formatMoney(session.cost) }}
             </td>
             <td class="sessions-tab__cell sessions-tab__cell--right">
-              {{ formatAnalyticsCost(session.estimatedCost) }}
+              {{ formatMoney(session.estimatedCost) }}
             </td>
             <td class="sessions-tab__cell sessions-tab__cell--right">
               {{ formatSessionDuration(session.durationSeconds) }}

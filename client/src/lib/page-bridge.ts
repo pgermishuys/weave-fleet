@@ -1,3 +1,4 @@
+import { formatCount } from "@/lib/format";
 /**
  * What a page tab (`fleet_page_show`) can say to Fleet. The page runs sandboxed with an opaque origin and no storage,
  * so it can't reach Fleet's API; postMessage to the canvas is its one way out, and the canvas reads only these
@@ -75,7 +76,7 @@ function refused(reason: string): PageMessage {
 }
 
 function count(n: number): string {
-  return n.toLocaleString("en-US");
+  return formatCount(n);
 }
 
 /** A page with many questions sums up every answer: past the limit, the summary ends in an ellipsis. */
