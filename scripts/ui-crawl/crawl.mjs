@@ -4,7 +4,9 @@
 //
 // Usually run through run.sh, which builds the client and serves it. On its own:
 //   node crawl.mjs --base=http://127.0.0.1:4173 [--out=out] [--set=nightly|themes] [--only=<id substring>]
-//     [--variants=a,b] [--workers=3]
+//     [--variants=a,b] [--workers=3] [--self-test]
+//
+// --self-test visits SELF_TEST_SCREENS instead (screens that must turn the crawl red; self-test.mjs checks they do).
 //
 // The SignalR hub is faked (negotiate + WebSocket) so a session's conversation renders without an API.
 import { chromium } from "playwright";
@@ -12,7 +14,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LABS_ON, SCREENS, VARIANTS, sessionSnapshot, variantsOf } from "./screens.mjs";
+import { LABS_ON, SCREENS, SELF_TEST_SCREENS, VARIANTS, sessionSnapshot, variantsOf } from "./screens.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (name, fallback) => {
@@ -22,6 +24,7 @@ const arg = (name, fallback) => {
 const BASE = arg("base", process.env.FLEET_UI_BASE ?? "http://127.0.0.1:4173");
 const OUT = arg("out", join(here, "out"));
 const ONLY = arg("only");
+const SELF_TEST = process.argv.includes("--self-test");
 const WORKERS = Math.max(1, Number(arg("workers", "3")));
 const variantNames = arg("variants")?.split(",") ?? variantsOf(arg("set", "nightly"));
 for (const n of variantNames) if (!VARIANTS[n]) throw new Error(`unknown variant ${n}`);
@@ -96,6 +99,7 @@ async function visit(browser, vName, screen) {
     path: screen.path,
     console: [],
     pageErrors: [],
+    errorPages: [],
     failed: [],
     mockGaps: [],
     overflow: null,
@@ -158,6 +162,13 @@ async function visit(browser, vName, screen) {
           };
           setTimeout(tick, 100);
         }),
+    );
+    // An error boundary's fallback: Fleet's route error page (data-fleet-error-fallback), or the router's own when
+    // nothing nearer caught it. A boundary swallows the error, so it raises no pageerror.
+    rec.errorPages = await page.evaluate(() =>
+      [...document.querySelectorAll("[data-fleet-error-fallback], div.error:has(> h1 + p + button)")].map((el) =>
+        (el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 300),
+      ),
     );
     rec.finalUrl = strip(page.url());
     rec.title = await page.title();
@@ -227,7 +238,7 @@ async function visit(browser, vName, screen) {
 
 const jobs = [];
 for (const vName of variantNames) {
-  for (const screen of SCREENS) if (!ONLY || screen.id.includes(ONLY)) jobs.push({ vName, screen });
+  for (const screen of SELF_TEST ? SELF_TEST_SCREENS : SCREENS) if (!ONLY || screen.id.includes(ONLY)) jobs.push({ vName, screen });
 }
 const browser = await chromium.launch({ args: ["--disable-dev-shm-usage"] });
 const results = new Array(jobs.length);
@@ -242,7 +253,7 @@ await Promise.all(
       const errors = rec.console.filter((c) => c.type === "error" && !c.mockGap).length;
       const axe = rec.axe?.reduce((n, x) => n + x.count, 0) ?? "?";
       console.log(
-        `${vName.padEnd(18)} ${screen.id.padEnd(24)} console=${errors} page=${rec.pageErrors.length} failed=${rec.failed.length} ` +
+        `${vName.padEnd(18)} ${screen.id.padEnd(24)} console=${errors} page=${rec.pageErrors.length} errorPage=${rec.errorPages.length} failed=${rec.failed.length} ` +
           `overflow=${rec.overflow?.offenderCount ?? "?"} axe=${axe} gaps=${rec.mockGaps.length} ${rec.ms}ms`,
       );
     }

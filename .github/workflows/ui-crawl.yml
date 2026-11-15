@@ -2,8 +2,8 @@
 # screen in scripts/ui-crawl/screens.mjs in 5 variants (dark and light, 1440 and 390 px, Labs on and off), recording a
 # screenshot, console, requests, overflow and an axe-core pass for each.
 #
-# - Gates (a red run): page errors and screens the crawl couldn't reach, console errors, failed requests, and sideways
-#   overflow at 390 px. A red night opens (or comments on) the issue "Nightly UI crawl failed"; a green night closes it.
+# - Gates (a red run): page errors and screens the crawl couldn't reach, a screen showing an error page (an error
+#   boundary's fallback), console errors, failed requests, and sideways overflow at 390 px. A red night opens (or comments on) the issue "Nightly UI crawl failed"; a green night closes it.
 # - A ratchet: each axe WCAG 2 A/AA rule's count against scripts/ui-crawl/axe-baseline.json. A rise is red (the
 #   summary names the screens that grew); a fall asks for the baseline to be lowered.
 # - Then every other theme (weave-classic, black, nord, dracula, solarized dark and light, monokai, github-dark) on the
@@ -96,6 +96,13 @@ jobs:
 
       - name: Crawl
         run: UI_CRAWL_OUT="$RUNNER_TEMP/ui-crawl" bash scripts/ui-crawl/run.sh --workers=3
+      # The gates themselves: a mock-only route that throws while it renders must fail them (self-test.mjs).
+      - name: Crawl self-test
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f "$RUNNER_TEMP/ui-crawl/dist/index.html" ] || { echo "No build to crawl: the client build failed"; exit 1; }
+          UI_CRAWL_SKIP_BUILD=1 UI_CRAWL_DIST="$RUNNER_TEMP/ui-crawl/dist" UI_CRAWL_OUT="$RUNNER_TEMP/ui-crawl-self-test" \
+            bash scripts/ui-crawl/run.sh --self-test --workers=3
       # Serves the build the crawl made: it runs when the crawl failed a gate, and skips when there's no build.
       - name: Crawl every other theme
         if: ${{ !cancelled() }}

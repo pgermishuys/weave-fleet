@@ -186,14 +186,16 @@ Skip rebuild on iteration: `dotnet test tests/WeaveFleet.E2E -p:SkipFrontendBuil
 ### The UI crawl (every screen, every night)
 
 `scripts/ui-crawl/run.sh` builds the client in mock mode and visits every screen in `scripts/ui-crawl/screens.mjs` in
-5 variants (dark/light, 1440/390 px, Labs on/off): page and console errors, failed requests and sideways overflow at
+5 variants (dark/light, 1440/390 px, Labs on/off): page and console errors, a screen showing an error page (Fleet's
+route error page carries `data-fleet-error-fallback` and logs what it caught), failed requests and sideways overflow at
 390 px fail it; screenshots are a report (`out/report.html`). Axe (WCAG 2 A/AA) is a ratchet: each rule's count is
 compared with `scripts/ui-crawl/axe-baseline.json`, and a rise fails the crawl, naming the screens that grew. When a
 count falls, lower the baseline in the same PR: `UI_CRAWL_UPDATE_BASELINE=1 scripts/ui-crawl/run.sh` (a full crawl),
 or `node scripts/ui-crawl/report.mjs --out=<out> --update-baseline` on a CI run's `ui-crawl-report` artifact. The
 baseline holds CI's counts. A second pass, `run.sh --set=themes`, visits every screen in the other eight themes on the
 desktop with axe's colour rules only, against `axe-baseline-themes.json` (lower it the same way, with `--set=themes`).
-`ui-crawl.yml` runs both every night on main and on a PR that changes the crawl, and keeps one issue open while it's
+`run.sh --self-test` crawls a mock-only route that throws while it renders and fails unless the gates catch it.
+`ui-crawl.yml` runs all three every night on main and on a PR that changes the crawl, and keeps one issue open while it's
 red. Add a screen there when you add a route.
 
 ### Decision Tree: Where to Start
