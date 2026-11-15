@@ -193,7 +193,7 @@ internal sealed class CopilotInstaller(IHttpClientFactory httpClientFactory, str
         {
             Architecture.X64 => "x64",
             Architecture.Arm64 => "arm64",
-            var other => throw new HarnessInstallException($"Fleet can't install GitHub Copilot on a {other} computer."),
+            var other => throw new HarnessInstallException($"Fleet can't install GitHub Copilot on a {other} machine."),
         };
         return (os, arch);
     }

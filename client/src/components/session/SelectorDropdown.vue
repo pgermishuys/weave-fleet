@@ -89,7 +89,7 @@ const selectedItem = computed(() => {
 });
 
 const normalizedLabel = computed(() => props.label.toLowerCase().replace(/ selector$/, ""));
-const filterPlaceholder = computed(() => `Filter ${normalizedLabel.value}...`);
+const filterPlaceholder = computed(() => `Filter ${normalizedLabel.value}…`);
 const filterAriaLabel = computed(() => `Filter ${props.label.toLowerCase()}`);
 
 const filteredItems = computed(() => {

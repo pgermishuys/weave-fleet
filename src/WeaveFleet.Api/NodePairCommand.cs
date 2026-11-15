@@ -42,8 +42,8 @@ public static class NodePairCommand
             using var response = await http.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                await error.WriteLineAsync($"The node on port {port} answered {(int)response.StatusCode}. "
-                    + "Run fleet node pair with the same --port, --data-dir and --profile the node was started with.");
+                await error.WriteLineAsync($"Fleet on port {port} answered {(int)response.StatusCode}. "
+                    + "Run fleet node pair with the same --port, --data-dir and --profile you started fleet node with.");
                 return 1;
             }
 

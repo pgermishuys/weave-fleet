@@ -315,6 +315,38 @@ jobs:
           sha: ${{ github.event.pull_request.head.sha || github.sha }}
           token: ${{ github.token }}
 
+  # ── Words check ─────────────────────────────────────────────────────────
+  # The words lint (client/scripts/lint-words.ts) reads the client, the phone app and the server's messages. Client
+  # checks runs it inside `npm run lint`, but a PR that only changes mobile/ or src/ skips that job, so it runs here for
+  # all three. It needs no packages: Node runs the script as it is.
+  words:
+    needs: changes
+    if: needs.changes.outputs.client == 'true' || needs.changes.outputs.phone == 'true' || needs.changes.outputs.dotnet == 'true'
+    name: Words check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /client/package.json
+            /client/scripts/
+            /client/src/
+            /mobile/src/
+            /src/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Words lint
+        run: node --experimental-strip-types scripts/lint-words.ts
+        working-directory: client
+
   # ── Frontend checks (lint, typecheck) ───────────────────────────────────
   client-checks:
     needs: changes
@@ -1013,7 +1045,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, unit, live, client-checks, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, phone, e2e, aot]
+    needs: [changes, unit, live, client-checks, words, client, mods-host, launchers, windows-processes, mods-file-safety, desktop, phone, e2e, aot]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 

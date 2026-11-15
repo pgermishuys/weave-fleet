@@ -32,8 +32,8 @@ const router = useRouter();
 
 const wizardSteps: readonly WizardStep[] = ["welcome", "credentials", "ready"] as const;
 const providerPresets: readonly ProviderPreset[] = [
-  { label: "Anthropic", namespace: "anthropic", kind: "api-key", placeholder: "sk-ant-..." },
-  { label: "OpenAI", namespace: "openai", kind: "api-key", placeholder: "sk-proj-..." },
+  { label: "Anthropic", namespace: "anthropic", kind: "api-key", placeholder: "sk-ant-…" },
+  { label: "OpenAI", namespace: "openai", kind: "api-key", placeholder: "sk-proj-…" },
 ] as const;
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";

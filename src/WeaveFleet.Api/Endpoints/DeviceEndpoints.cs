@@ -54,7 +54,7 @@ public static class DeviceEndpoints
             // home machine instead (device grants).
             if (!fleetOptions.ServeUi)
                 return Results.Conflict(new ErrorResponse(
-                    "Pairing a phone needs a Fleet with the web app. Pair the phone with that Fleet, and add this node to it."));
+                    "Pairing a phone needs a Fleet with the web app. Pair the phone with that Fleet, and add this machine to it."));
 
             var baseUrl = request.BaseUrl is null ? null : MachineEndpoints.NormalizeBaseUrl(request.BaseUrl.Trim());
             if (baseUrl is null)

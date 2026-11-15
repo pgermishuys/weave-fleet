@@ -98,7 +98,7 @@ public sealed partial class TerminalService(
 
         // In cloud mode a shell would run on the server, not on the user's computer.
         if (options.Cloud.Enabled)
-            return TerminalResult.Fail<TerminalContext>(TerminalErrorKind.NotFound, "Harnesses can only be set up from Fleet when it runs on your own computer.");
+            return TerminalResult.Fail<TerminalContext>(TerminalErrorKind.NotFound, "Harnesses can only be set up from Fleet when it runs on your own machine.");
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return TerminalResult.Ok(new TerminalContext(SetupSessionId(user.UserId), user.UserId, home));

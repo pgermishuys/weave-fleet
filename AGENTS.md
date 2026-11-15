@@ -118,6 +118,12 @@ No gutter between the rail and the context area.
 - **Radius:** the tokens `rounded-btn` (8px), `rounded-card` (10px) and `rounded-panel` (12px); `rounded-full` for circles.
 - **Motion:** `var(--transition)` (150ms ease-out) for hover, focus and press.
 - **Keyboard focus:** the global 2px ring in `--focus-ring`. Never remove an outline without drawing another.
+- **Words:** "machine" for a machine, never "computer", "node" or "Fleets" ("computer" only for the desk as against
+  the phone, "Open on my computer"; `fleet node` is the command). "…", not "...". "Try again", not "Retry" (a status
+  like "Retry 2/3" is fine). Sentence case for buttons, menu items, tabs, headings and labels ("New project"); names
+  keep their capitals (Settings, Labs, GitHub, a theme). `bun run lint` runs the words lint
+  (`client/scripts/lint-words.ts`) over the client, the phone app (`mobile/src`) and the server's sentences (`src/`).
+  It's a gate: any hit fails; a use that's right goes on its allow-lists, with the reason. `--list` prints every hit.
 - **Ratchet:** `bun run lint` includes the design lint (`client/scripts/lint-design-system.ts`).
   - In a `.vue` file outside `components/ui/`, it fails a new raw `<button>`, a border-radius that isn't 0, 50% or a
     token, a duration that isn't `var(--transition…)`, and an element with its own empty-state class (`x__empty`,

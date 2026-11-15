@@ -551,7 +551,7 @@ public sealed class TerminalServiceTests
         var created = await NewService(new FleetOptions { Cloud = { Enabled = true } }).CreateSetupAsync(80, 24);
 
         created.Error!.Kind.ShouldBe(TerminalErrorKind.NotFound);
-        created.Error.Message.ShouldBe("Harnesses can only be set up from Fleet when it runs on your own computer.");
+        created.Error.Message.ShouldBe("Harnesses can only be set up from Fleet when it runs on your own machine.");
     }
 
     [Theory]
