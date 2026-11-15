@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { Play, RotateCw, X } from "lucide-vue-next";
-import { formatRetryClock, formatRetryIn, type ScheduledRetry } from "@/lib/turn-retry";
+import type { ScheduledRetry } from "@/lib/turn-retry";
+import { formatCountdown, formatWhen, toTimestamp } from "@/lib/format";
 
 /**
  * On the failure card of a turn a model provider's limit stopped: when Fleet tries again, ticking down, with Try now
@@ -37,8 +38,8 @@ onBeforeUnmount(() => {
 });
 
 const when = computed(() => {
-  const left = formatRetryIn(props.retry.dueAt, now.value);
-  return left === "now" ? "Fleet is trying again now" : `Fleet tries again at ${formatRetryClock(props.retry.dueAt, now.value)} · ${left}`;
+  const left = formatCountdown(toTimestamp(props.retry.dueAt) - now.value) || "now";
+  return left === "now" ? "Fleet is trying again now" : `Fleet tries again at ${formatWhen(props.retry.dueAt, { now: now.value })} · ${left}`;
 });
 
 const why = computed(() => {

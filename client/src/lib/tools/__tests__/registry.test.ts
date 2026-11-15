@@ -332,14 +332,14 @@ describe("parseToolInput", () => {
 describe("HydraFusion passes", () => {
   it("reads as role, model and time once the pass has finished", () => {
     expect(getToolLabel("hydrafusion_pass", { role: "solver", model: "model-a" })).toBe("Solver · model-a");
-    expect(getToolLabel("hydrafusion_pass", { role: "draft", model: "model-a", durationMs: 18400 })).toBe("Draft · model-a · 18.4 s");
+    expect(getToolLabel("hydrafusion_pass", { role: "draft", model: "model-a", durationMs: 18400 })).toBe("Draft · model-a · 18 s");
     expect(getToolLabel("hydrafusion_pass", null)).toBe("hydrafusion_pass");
     expect(getTool("hydrafusion_pass").heading).toBe("HydraFusion pass");
   });
 
   it("adds a judge's or critic's verdict, the credits it cost and why a failed pass failed", () => {
     expect(getToolLabel("hydrafusion_pass", { role: "critic", model: "model-b", durationMs: 43042, verdict: "needs repair", credits: 0.2 }))
-      .toBe("Critic · model-b · needs repair · 43.0 s · 0.20 credits");
+      .toBe("Critic · model-b · needs repair · 43 s · 0.20 credits");
     expect(getToolLabel("hydrafusion_pass", { role: "judge", model: "model-b", verdict: "approved" })).toBe("Judge · model-b · approved");
     expect(getToolLabel("hydrafusion_pass", { role: "critic", model: "model-b", reason: "The critic timed out" })).toBe("Critic · model-b · The critic timed out");
   });

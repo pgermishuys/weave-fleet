@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import { rowGlyph, rowMeta, rowPlace, type InboxItem } from "@/lib/phone/inbox";
-import { duration, short } from "@/lib/phone/time";
+import { formatElapsedSince, formatRelative } from "@/lib/format";
 
 /**
  * A session as a row, as the desktop's session list draws it: its status glyph, the title, where it is and its
@@ -14,7 +14,7 @@ const emit = defineEmits<{ (event: "open", item: InboxItem): void }>();
 
 const glyph = computed(() => rowGlyph(props.item));
 const place = computed(() => rowPlace(props.item, props.by));
-const meta = computed(() => rowMeta(props.item, { duration: duration(props.item.updatedAt, props.now), short: short(props.item.updatedAt, props.now) }));
+const meta = computed(() => rowMeta(props.item, { duration: formatElapsedSince(props.item.updatedAt, props.now), short: formatRelative(props.item.updatedAt, { now: props.now, compact: true }) }));
 </script>
 
 <template>

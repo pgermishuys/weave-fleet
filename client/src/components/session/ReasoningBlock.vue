@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from "@/lib/format";
 import { computed, shallowRef, useId } from "vue";
 import { Brain, ChevronRight } from "lucide-vue-next";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
@@ -18,10 +19,7 @@ const themeStore = useThemeStore();
 const bodyId = useId();
 const isOpen = shallowRef(false);
 
-const absoluteTime = computed(() => {
-  if (!props.createdAt) return "";
-  return new Date(props.createdAt).toLocaleString();
-});
+const absoluteTime = computed(() => formatDateTime(props.createdAt, { seconds: true }));
 
 const summaryHtml = computed(() => props.summary ? markdownRenderer.renderInline(props.summary) : "");
 const textHtml = computed(() => markdownRenderer.render(props.text));

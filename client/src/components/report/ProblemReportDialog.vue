@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from "@/lib/format";
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
@@ -239,8 +240,8 @@ function removeScreenshot(): void {
   reviewFile.value = "report";
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+function formatTakenAt(date: Date): string {
+  return formatTime(date, { seconds: true });
 }
 </script>
 
@@ -366,7 +367,7 @@ function formatTime(date: Date): string {
                 </div>
                 <div class="report__shot-meta">
                   <template v-if="screenshot">
-                    <span>Taken {{ formatTime(screenshot.takenAt) }} · {{ screenshot.width }}×{{ screenshot.height }}</span>
+                    <span>Taken {{ formatTakenAt(screenshot.takenAt) }} · {{ screenshot.width }}×{{ screenshot.height }}</span>
                     <span>Shows your screen as it is. You can look at it and remove it on the next step.</span>
                   </template>
                   <span v-else>Couldn't take a screenshot. The report works without one.</span>

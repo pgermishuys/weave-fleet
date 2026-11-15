@@ -103,8 +103,8 @@ describe("smart-links", () => {
   it("formats how long ago GitHub was checked", () => {
     const now = Date.parse("2026-09-12T12:00:00Z");
     expect(formatCheckedAgo("2026-09-12T11:59:58Z", now)).toBe("just now");
-    expect(formatCheckedAgo("2026-09-12T11:59:48Z", now)).toBe("12s ago");
-    expect(formatCheckedAgo("2026-09-12T11:56:00Z", now)).toBe("4m ago");
+    expect(formatCheckedAgo("2026-09-12T11:59:48Z", now)).toBe("just now");
+    expect(formatCheckedAgo("2026-09-12T11:56:00Z", now)).toBe("4 minutes ago");
     expect(formatCheckedAgo(null, now)).toBeNull();
   });
 });

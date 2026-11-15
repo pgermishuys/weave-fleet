@@ -3,7 +3,7 @@
  * (`update` in `GET /api/machine`, or the desktop app's bridge) to the row the page draws, so every state has one test.
  */
 import type { DesktopUpdateState } from "@/lib/desktop";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { formatRelative, formatTime } from "@/lib/format";
 
 /** Settings → Labs: shows each machine's version, update rule and Restart in Settings → Updates & about. Off until turned on. */
 
@@ -365,7 +365,7 @@ export function describeUpdatedNotice(
   if (!last || !runningVersion || last.to.replace(/^v/, "") !== runningVersion.replace(/^v/, "")) return null;
   const at = new Date(last.at);
   if (Number.isNaN(at.getTime()) || now.getTime() - at.getTime() > UPDATED_NOTICE_DAYS * 86_400_000) return null;
-  const clock = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const clock = formatTime(at);
   return {
     id: `fleet-updated:${machineKey}:${last.to}`,
     title: `${name} updated to ${last.to}`,
@@ -495,7 +495,7 @@ export function describeReleaseLine(
   const { latest, waiting, downloaded } = summary;
   if (!latest) return { kind: "none", lead: "", text: "Fleet hasn't found a release yet." };
   if (waiting === 0) {
-    const checked = checkedAt ? ` Checked ${formatRelativeTime(checkedAt, now)}.` : "";
+    const checked = checkedAt ? ` Checked ${formatRelative(checkedAt, { now })}.` : "";
     return { kind: "current", lead: "", text: `Every machine that can be reached is on Fleet ${latest}.${checked}` };
   }
   const lead = `Fleet ${latest} is out.`;

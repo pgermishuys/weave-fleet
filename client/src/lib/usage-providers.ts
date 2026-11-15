@@ -10,6 +10,7 @@ import {
   windowLabel,
   windowShortLabel,
 } from "@/lib/usage-limits";
+import { formatDuration, formatWhen } from "@/lib/format";
 
 export const USAGE_LIMITS_EVENT = "usage.limits";
 /** Preference: "false" hides the status bar chip (the feature stays on). */
@@ -173,17 +174,6 @@ export function expectedShare(window: UsageLimitWindow, now: number): number | n
 const MIN_AHEAD_SECONDS = 15 * 60;
 const MIN_ELAPSED_SHARE = 0.05;
 
-/** "45 min", "2 h", "1 d 3 h". */
-export function formatDuration(seconds: number): string {
-  const minutes = Math.max(1, Math.round(seconds / 60));
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h`;
-  const days = Math.floor(hours / 24);
-  const rest = hours % 24;
-  return rest ? `${days} d ${rest} h` : `${days} d`;
-}
-
 export interface PaceNote {
   aheadBySeconds: number;
   text: string;
@@ -204,7 +194,7 @@ export function paceNote(window: UsageLimitWindow, now: number): PaceNote | null
   if (aheadBySeconds < MIN_AHEAD_SECONDS) return null;
   return {
     aheadBySeconds,
-    text: `Ahead of pace: at this rate it runs out about ${formatDuration(aheadBySeconds)} before it resets`,
+    text: `Ahead of pace: at this rate it runs out about ${formatDuration(aheadBySeconds * 1000, { precision: "minutes" })} before it resets`,
   };
 }
 
@@ -252,7 +242,7 @@ export function modelProviderUsage(
   const resetsAt = found.window.resetsAt;
   const clock = resetsAt === null
     ? null
-    : new Date(resetsAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+    : formatWhen(resetsAt, { now });
   return { percent, tone: usageTone(found.window), dimmed, resetText: dimmed && clock ? `resets ${clock}` : null };
 }
 

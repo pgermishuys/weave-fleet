@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatTime } from "@/lib/format";
 
 type BoardActivityTone = "running" | "complete" | "error" | "queued" | "muted";
 
@@ -107,14 +108,6 @@ function createFallbackSession(
   };
 }
 
-function formatTimestamp(value: number): string {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(value);
-}
-
 function createEntry(seed: MockActivitySeed, occurredAt: number): BoardActivityEntry {
   const session = sessionIndex.value.get(seed.sessionId);
 
@@ -125,7 +118,7 @@ function createEntry(seed: MockActivitySeed, occurredAt: number): BoardActivityE
     projectName: session?.projectName ?? null,
     action: seed.action,
     occurredAt,
-    timestampLabel: formatTimestamp(occurredAt),
+    timestampLabel: formatTime(occurredAt, { seconds: true }),
     tone: seed.tone,
   };
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef } from "vue";
 import { useSessionRetry } from "@/composables/use-session-retry";
-import { formatRetryClock, formatRetryIn } from "@/lib/turn-retry";
+import { formatCountdown, formatWhen, toTimestamp } from "@/lib/format";
 
 /** Under a turn a model provider's limit stopped: when Fleet tries again, with Try now and Don't retry. */
 const props = defineProps<{ sessionId: string }>();
@@ -16,8 +16,8 @@ onBeforeUnmount(() => clearInterval(timer));
 
 const when = computed(() => {
   if (!retry.value) return "";
-  const left = formatRetryIn(retry.value.dueAt, now.value);
-  return left === "now" ? "Fleet is trying again now" : `Fleet tries again at ${formatRetryClock(retry.value.dueAt, now.value)} · ${left}`;
+  const left = formatCountdown(toTimestamp(retry.value.dueAt) - now.value) || "now";
+  return left === "now" ? "Fleet is trying again now" : `Fleet tries again at ${formatWhen(retry.value.dueAt, { now: now.value })} · ${left}`;
 });
 </script>
 

@@ -16,19 +16,19 @@ describe("WorkingIndicator", () => {
     vi.setSystemTime(new Date("2026-09-19T10:00:14Z"));
     const wrapper = mount(WorkingIndicator, { props: { since: Date.parse("2026-09-19T10:00:00Z") } });
 
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 14s");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 14 s");
 
     await vi.advanceTimersByTimeAsync(46_000);
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 1m");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 1 min");
 
     // After the first minute only the minutes change, once a minute.
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 1m");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 1 min");
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 2m");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 2 min");
 
     await wrapper.setProps({ since: Date.parse("2026-09-19T08:30:00Z") });
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 1h 32m");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 1 h 32 min");
     wrapper.unmount();
     vi.useRealTimers();
   });
@@ -46,7 +46,7 @@ describe("WorkingIndicator", () => {
   it("never shows a negative time when clocks disagree", () => {
     const wrapper = mount(WorkingIndicator, { props: { since: Date.now() + 5000 } });
 
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 0s");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 0 s");
   });
 
   // Claude Code's api_retry and OpenCode 2's retry.scheduled: still in the turn, waiting out a failed model call.
@@ -95,8 +95,8 @@ describe("WorkingIndicator names the running call", () => {
     const wrapper = mount(WorkingIndicator, {
       props: { since: now - 12 * 60_000, work: { name: "Bash", since, more: 0, held: false } },
     });
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 12m");
-    expect(wrapper.get("[data-testid='working-tool']").text()).toBe("· Bash running 10m");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 12 min");
+    expect(wrapper.get("[data-testid='working-tool']").text()).toBe("· Bash running 10 min");
     wrapper.unmount();
     vi.useRealTimers();
   });

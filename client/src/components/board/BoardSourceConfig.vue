@@ -5,6 +5,7 @@ import { createBoardSource, deleteBoardSource, listBoardSources } from "@/lib/bo
 import { getBoardSources } from "@/plugins/slots";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatDateTime } from "@/lib/format";
 
 interface Props {
   boardId: string | null;
@@ -26,11 +27,6 @@ interface SourceViewModel {
 }
 
 const props = defineProps<Props>();
-
-const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 
 const sources = ref<BoardSource[]>([]);
 const isLoadingSources = shallowRef(false);
@@ -199,12 +195,7 @@ function formatLastSync(value: string | null): string {
     return "Not synced yet";
   }
 
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Unknown sync time";
-  }
-
-  return dateTimeFormatter.format(parsed);
+  return formatDateTime(value) || "Unknown sync time";
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {

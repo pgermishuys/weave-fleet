@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useGitHubSessions } from "@/composables/use-github-sessions";
 import { useSendToAgent } from "@/composables/use-send-to-agent";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { RelativeTime } from "@/components/ui/relative-time";
 import {
   checkCounts,
   fetchGitHubItem,
@@ -213,8 +213,6 @@ function timelineTone(entry: GitHubTimelineEntry): string {
   return "plain";
 }
 
-const ago = (value: string | null | undefined) => (value ? formatRelativeTime(value) : "");
-const fullDate = (value: string | null | undefined) => (value ? new Date(value).toLocaleString() : "");
 </script>
 
 <template>
@@ -397,7 +395,7 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
             <span class="gh-branch">{{ summary.headRef }}</span> → <span class="gh-branch">{{ summary.baseRef }}</span>
           </span>
           <span v-else><strong>{{ summary.author }}</strong> opened this</span>
-          <span :title="fullDate(summary.createdAt)">· {{ ago(summary.createdAt) }}</span>
+          <span>· <RelativeTime :at="summary.createdAt" /></span>
           <template v-if="isPull && summary.additions !== null && summary.deletions !== null">
             <span aria-hidden="true">·</span>
             <DiffStat
@@ -465,10 +463,7 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
                   />
                   #{{ entry.reference.number }} {{ entry.body }}
                 </a>
-                <span
-                  class="gh-timeline__when"
-                  :title="fullDate(entry.createdAt)"
-                >· {{ ago(entry.createdAt) }}</span>
+                <span class="gh-timeline__when">· <RelativeTime :at="entry.createdAt" /></span>
               </div>
               <MarkdownRenderer
                 v-if="entry.kind !== 'referenced' && visibleBody(entry.body)"

@@ -176,8 +176,8 @@ describe("ToolCard quiet rows", () => {
 
   it("a shell row shows how long it took, and its open body has one header and one copy icon", () => {
     const w = card({ kind: "bash", title: "bun test", input: { command: "bun test" }, exit: 0, durationMs: 100, output: "ok\n1 pass" });
-    expect(header(w).get("[data-testid='tool-card-took']").text()).toBe("0.1s");
-    expect(w.get("[data-testid='tool-card-output-header']").text()).toBe("bun test · exit 0 · 0.1s");
+    expect(header(w).get("[data-testid='tool-card-took']").text()).toBe("0.1 s");
+    expect(w.get("[data-testid='tool-card-output-header']").text()).toBe("bun test · exit 0 · 0.1 s");
     expect(w.findAll("[data-testid='tool-card-output-copy']")).toHaveLength(1);
     expect(w.text()).not.toContain("lines)");
   });

@@ -53,7 +53,7 @@ describe("ModelSelector usage bars", () => {
   it("dims a nearly used-up provider's models with its reset time, and they stay pickable", async () => {
     usage.providers = [claude(0.97)];
     const wrapper = await open();
-    expect(wrapper.get("[data-testid=model-provider-resets]").text()).toMatch(/^resets \d{2}:\d{2}$/);
+    expect(wrapper.get("[data-testid=model-provider-resets]").text()).toMatch(/^resets \d{1,2}:\d{2}( [AP]M)?$/);
     const dimmed = wrapper.findAll(".selector-dropdown__row--dim");
     expect(dimmed).toHaveLength(5);
     const pick = dimmed[0]!.get("button");

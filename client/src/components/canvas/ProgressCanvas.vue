@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from "@/lib/format";
 import { computed, shallowRef } from "vue";
 import { Check, ChevronDown, ChevronRight, ListChecks } from "lucide-vue-next";
 import ProgressSubagentCard from "@/components/canvas/ProgressSubagentCard.vue";
@@ -62,9 +63,7 @@ function isCurrent(step: SessionPlanStep): boolean {
 }
 
 function clock(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatTime(iso);
 }
 
 /** Read after the step's title by screen readers, which don't see the glyph or the time column. */

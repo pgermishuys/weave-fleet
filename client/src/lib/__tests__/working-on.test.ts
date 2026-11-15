@@ -24,20 +24,20 @@ describe("workingOn", () => {
   it("names the one running tool and how long it has run", () => {
     const result = workingOn([user("u1", false), tool("a", "bash", "running", 10)], "next-step");
     expect(result).toEqual({ name: "Bash", since: NOW - 600_000, more: 0, held: false });
-    expect(workingOnText(result!, NOW)).toBe("Bash running 10m");
+    expect(workingOnText(result!, NOW)).toBe("Bash running 10 min");
   });
 
   it("names the longest-running one and counts the rest", () => {
     const result = workingOn([tool("a", "bash", "running", 2), tool("b", "webfetch", "running", 8), tool("c", "grep", "running", 1)], undefined);
     expect(result).toMatchObject({ name: "Web Fetch", more: 2 });
-    expect(workingOnText(result!, NOW)).toBe("Web Fetch running 8m +2 more");
+    expect(workingOnText(result!, NOW)).toBe("Web Fetch running 8 min +2 more");
   });
 
   it("says the steered message waits when it sits below the running call on a next-step harness", () => {
     const messages = [user("u1", false), tool("a", "bash", "running", 10), user("u2", true)];
     const result = workingOn(messages, "next-step");
     expect(result?.held).toBe(true);
-    expect(workingOnText(result!, NOW)).toBe("Bash running 10m. Your message goes to the agent when it finishes.");
+    expect(workingOnText(result!, NOW)).toBe("Bash running 10 min. Your message goes to the agent when it finishes.");
   });
 
   it("says nothing extra on a harness that reads a steer at once, or one that doesn't say", () => {

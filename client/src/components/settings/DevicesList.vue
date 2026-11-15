@@ -2,7 +2,7 @@
 import { shallowRef } from "vue";
 import { Button } from "@/components/ui/button";
 import { removeDevice, type PairedDevice } from "@/lib/devices-api";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
 import { ErrorNote } from "@/components/ui/error-note";
 import { confirmAction } from "@/components/ui/confirm";
 
@@ -22,15 +22,13 @@ const busy = shallowRef<string | null>(null);
 const error = shallowRef<string | null>(null);
 
 function added(device: PairedDevice): string {
-  const date = new Date(device.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const date = formatDate(device.createdAt);
   if (device.kind === "machine") return `Machine, paired ${date}`;
   return device.pairedVia ? `Added ${date} from another machine` : `Added ${date}`;
 }
 
 function lastSeen(device: PairedDevice): string {
-  const days = Math.floor((Date.now() - Date.parse(device.lastUsedAt)) / 86_400_000);
-  if (days < 1) return formatRelativeTime(device.lastUsedAt).replace(/m ago$/, " min ago");
-  return days === 1 ? "yesterday" : `${days} days ago`;
+  return formatRelative(device.lastUsedAt);
 }
 
 async function remove(device: PairedDevice): Promise<void> {
@@ -82,7 +80,10 @@ async function remove(device: PairedDevice): Promise<void> {
           <div class="truncate text-sm text-text">
             {{ device.name }}
           </div>
-          <div class="text-xs text-muted">
+          <div
+            class="text-xs text-muted"
+            :title="`Added ${formatDateTime(device.createdAt)}, last seen ${formatDateTime(device.lastUsedAt)}`"
+          >
             {{ added(device) }} · last seen {{ lastSeen(device) }}
           </div>
         </div>

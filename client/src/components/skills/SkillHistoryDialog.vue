@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import SkillDiff from "@/components/skills/SkillDiff.vue";
-import { formatAbsoluteTimestamp, formatRelativeTime } from "@/lib/format-utils";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import {
   getSkill,
   readSkillVersion,
@@ -77,11 +77,11 @@ async function compare(version: number): Promise<void> {
 }
 
 function when(createdAt: string): string {
-  return formatRelativeTime(createdAt);
+  return formatRelative(createdAt);
 }
 
 function exactly(createdAt: string): string {
-  return formatAbsoluteTimestamp(Date.parse(createdAt));
+  return formatDateTime(createdAt);
 }
 </script>
 

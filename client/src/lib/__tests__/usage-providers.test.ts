@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedShare, groupUsageByMachine, modelProviderUsage, usageProviderForModelProvider, type ProviderUsage, formatDuration, paceNote, providerWindowLabel, tightestWindow, toUsageLimits, usageTone, windowPercent } from "@/lib/usage-providers";
+import { expectedShare, groupUsageByMachine, modelProviderUsage, usageProviderForModelProvider, type ProviderUsage, paceNote, providerWindowLabel, tightestWindow, toUsageLimits, usageTone, windowPercent } from "@/lib/usage-providers";
 
 const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
 
@@ -113,13 +113,6 @@ describe("pace", () => {
     // 5 h gone, 51% used: projected 4.8 h, 5 h left => 0.2 h early.
     expect(paceNote(win(0.51, 5), now)).toBeNull();
   });
-
-  it("formats durations", () => {
-    expect(formatDuration(45 * 60)).toBe("45 min");
-    expect(formatDuration(2 * 3600)).toBe("2 h");
-    expect(formatDuration(27 * 3600)).toBe("1 d 3 h");
-    expect(formatDuration(48 * 3600)).toBe("2 d");
-  });
 });
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
@@ -160,7 +153,7 @@ describe("modelProviderUsage", () => {
   it("dims from 95% and when rejected, with the reset time", () => {
     const at95 = modelProviderUsage([usage({ windows: [window(0.95)] })], "anthropic", NOW);
     expect(at95?.dimmed).toBe(true);
-    expect(at95?.resetText).toMatch(/^resets \d{2}:\d{2}$/);
+    expect(at95?.resetText).toMatch(/^resets \d{1,2}:\d{2}( [AP]M)?$/);
     expect(modelProviderUsage([usage({ windows: [window(0.2, "rejected")] })], "claude-code", NOW)).toMatchObject({ percent: 100, tone: "used", dimmed: true });
   });
 

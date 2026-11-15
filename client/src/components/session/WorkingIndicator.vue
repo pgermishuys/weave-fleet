@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import { elapsedTickMs, formatElapsed } from "@/lib/running-work";
+import { elapsedTickMs } from "@/lib/running-work";
+import { formatDuration } from "@/lib/format";
 import { workingOnText, type WorkingOn } from "@/lib/working-on";
 import { describeRetry, type RetryStatus } from "@/lib/retry-status";
 
@@ -35,7 +36,7 @@ watch(() => [props.since, props.retry, props.work?.since], () => {
 });
 onBeforeUnmount(() => clearTimeout(timer));
 
-const elapsed = computed(() => (props.since ? formatElapsed(now.value - props.since) : null));
+const elapsed = computed(() => (props.since ? formatDuration(now.value - props.since, { precision: "minutes" }) : null));
 const workText = computed(() => (props.work ? workingOnText(props.work, now.value) : null));
 const retrying = computed(() => (props.retry ? describeRetry(props.retry, now.value) : null));
 </script>

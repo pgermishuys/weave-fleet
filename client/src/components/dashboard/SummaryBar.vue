@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDate } from "@/lib/format";
 import { computed, onMounted, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { ChevronRight } from "lucide-vue-next";
@@ -39,7 +40,6 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const dayFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 const metrics = computed<SummaryMetric[]>(() => {
   const current = summary.value;
@@ -72,7 +72,7 @@ const days = computed(() => {
     const date = new Date(since);
     date.setDate(since.getDate() + index);
     const key = isoDay(date);
-    return { key, label: dayFormatter.format(date), cost: byDate.get(key)?.cost ?? 0 };
+    return { key, label: formatDate(date), cost: byDate.get(key)?.cost ?? 0 };
   });
 });
 

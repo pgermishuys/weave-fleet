@@ -21,6 +21,7 @@ import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters
 import { useThemeStore } from "@/stores/theme"
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { formatDate } from "@/lib/format";
 
 ChartJS.register(CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip)
 
@@ -258,7 +259,7 @@ const dailyChartLabel = computed(() => {
 })
 
 const dailyTrendData = computed<ChartData<"line">>(() => ({
-  labels: props.daily.map((point) => formatShortDate(point.date)),
+  labels: props.daily.map((point) => formatDate(point.date)),
   datasets: [
     {
       label: "Tokens",
@@ -401,13 +402,6 @@ function formatCurrency(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
-}
-
-function formatShortDate(date: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${date}T00:00:00`))
 }
 
 function getMaxCost(costs: readonly number[]): number {

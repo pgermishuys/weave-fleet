@@ -10,6 +10,7 @@ import {
 import { tildePath, type PlanPart } from "@/lib/new-session-plan";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import type { Automation, AutomationRun } from "@/stores/automations";
+import { localTimeZone } from "@/lib/format";
 
 /** What each event an automation can wait for means, in the words the form and page use. */
 const EVENT_LABELS: Record<string, string> = {
@@ -41,7 +42,7 @@ export function eventTypeOf(triggerConfig: string): string {
 /** The browser's IANA time zone, which new and edited schedules are saved in. */
 export function browserTimeZone(): string | null {
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+    return localTimeZone();
   } catch {
     return null;
   }

@@ -5,6 +5,7 @@
  */
 
 import { checksFromCounts, parseReviewers, reviewDecision, type PrFacts, type Reviewer } from "@/lib/pr-state"
+import { formatRelative } from "@/lib/format"
 
 /** How a link relates to its session. */
 export type SmartLinkRelationship = "origin" | "own" | "pinned" | "mentioned"
@@ -336,15 +337,7 @@ export function formatFixPrompt(link: SmartLink, runs: CheckRun[], threads: Revi
   ].join("\n\n---\n\n")
 }
 
-/** "just now", "12s ago", "4m ago", "2h ago". */
+/** "just now", "4 minutes ago", "2 hours ago"; null when it was never checked. */
 export function formatCheckedAgo(iso: string | null, now: number = Date.now()): string | null {
-  if (!iso) return null
-  const then = Date.parse(iso)
-  if (Number.isNaN(then)) return null
-  const seconds = Math.max(0, Math.round((now - then) / 1000))
-  if (seconds < 5) return "just now"
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  return `${Math.round(minutes / 60)}h ago`
+  return formatRelative(iso, { now }) || null
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDate } from "@/lib/format";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { ChevronRight, ExternalLink } from "lucide-vue-next";
 import { useReleaseNotes } from "@/composables/use-release-notes";
@@ -48,13 +49,11 @@ function internalLine(count: number): string {
   return count === 1 ? "And 1 behind-the-scenes change." : `And ${count} behind-the-scenes changes.`;
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+function formatDay(iso: string | null): string {
+  return formatDate(iso, { year: true });
 }
 
-const savedOn = computed(() => formatDate(fetchedAt.value));
+const savedOn = computed(() => formatDay(fetchedAt.value));
 
 // The notes' links (pull requests, docs) open in the browser; Fleet's own window stays put.
 function openLink(event: MouseEvent): void {
@@ -176,7 +175,7 @@ onMounted(async () => {
               class="whats-new__badge"
               :class="{ 'whats-new__badge--accent': badge(release)?.tone === 'accent' }"
             >{{ badge(release)?.label }}</span>
-            <span class="ml-auto font-mono text-xs text-muted">{{ formatDate(release.publishedAt) }}</span>
+            <span class="ml-auto font-mono text-xs text-muted">{{ formatDay(release.publishedAt) }}</span>
           </summary>
           <!-- eslint-disable vue/no-v-html -- release notes rendered by Fleet's Markdown renderer and sanitized -->
           <div

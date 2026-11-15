@@ -15,12 +15,12 @@ const base: HeaderStatusInput = {
 
 describe("headerStatus", () => {
   it("says working and for how long", () => {
-    expect(headerStatus(base)).toEqual({ tone: "working", state: "Working", detail: "1m 12s" });
+    expect(headerStatus(base)).toEqual({ tone: "working", state: "Working", detail: "1 min 12 s" });
     expect(headerStatus({ ...base, streamStatus: "retry" }).state).toBe("Retrying");
   });
 
   it("says needs you, in amber", () => {
-    expect(headerStatus({ ...base, streamStatus: "waiting_input" })).toEqual({ tone: "needs-you", state: "Needs you", detail: "2m 0s" });
+    expect(headerStatus({ ...base, streamStatus: "waiting_input" })).toEqual({ tone: "needs-you", state: "Needs you", detail: "2 min" });
     expect(headerStatus({ ...base, streamStatus: "idle", sessionStatus: "waiting_input" }).tone).toBe("needs-you");
   });
 

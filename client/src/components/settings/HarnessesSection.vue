@@ -27,7 +27,7 @@ import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo, HarnessSetting } from "@/api/client";
 import { DEFAULT_HARNESS_PREFERENCE_KEY, resolveDefaultHarness } from "@/composables/use-enabled-harnesses";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import {
   harnessDisplay,
   harnessLocation,
@@ -83,7 +83,7 @@ onMounted(async () => {
   await prefsStore.refresh();
 });
 
-/** When Fleet last checked, e.g. "Checked 2m ago". Missing from a Fleet that checks on every request. */
+/** When Fleet last checked, e.g. "Checked 2 minutes ago". Missing from a Fleet that checks on every request. */
 const now = shallowRef(Date.now());
 const clock = setInterval(() => {
   now.value = Date.now();
@@ -91,8 +91,9 @@ const clock = setInterval(() => {
 const checkedLabel = computed(() => {
   const checkedAt = registeredHarnesses.value[0]?.checkedAt;
   if (!checkedAt) return null;
-  return `Checked ${formatRelativeTime(checkedAt, now.value)}`;
+  return `Checked ${formatRelative(checkedAt, { now: now.value })}`;
 });
+const checkedTitle = computed(() => formatDateTime(registeredHarnesses.value[0]?.checkedAt, { now: now.value }) || undefined);
 
 const defaultHarnessId = computed(() =>
   resolveDefaultHarness(prefsStore.get(DEFAULT_HARNESS_PREFERENCE_KEY, ""), registeredHarnesses.value));
@@ -272,6 +273,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
             v-if="checkedLabel"
             class="mt-0.5 text-xs text-muted"
             data-testid="harnesses-checked-at"
+            :title="checkedTitle"
           >
             {{ isCheckingHarnesses ? "Checking…" : checkedLabel }}
           </p>

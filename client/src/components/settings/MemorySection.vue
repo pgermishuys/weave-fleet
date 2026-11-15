@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDate } from "@/lib/format";
 import { computed, onMounted, ref, shallowRef, watch } from "vue";
 import { Cable, ChevronRight, Coins, Eye, FileText, FolderGit2, Hourglass, Pencil, Pin, Plus, Search, Server, TriangleAlert, X } from "lucide-vue-next";
 import {
@@ -109,10 +110,8 @@ function move(note: MemoryNote, group: "search" | "always"): Promise<void> {
   });
 }
 
-const savedDate = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
-
 function origin(note: MemoryNote): string {
-  const date = savedDate.format(new Date(note.updated));
+  const date = formatDate(note.updated);
   if (note.kind === "added") return `Added by you on ${date}`;
   return note.sessionTitle ? `Saved ${date} by “${note.sessionTitle}”` : `Saved ${date}`;
 }

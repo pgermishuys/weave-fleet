@@ -8,7 +8,7 @@ import GitHubItemIcon from "@/components/github/GitHubItemIcon.vue";
 import GitHubLabel from "@/components/github/GitHubLabel.vue";
 import GitHubSessionChip from "@/plugins/builtin/github/components/GitHubSessionChip.vue";
 import ReviewerAvatar from "@/components/github/ReviewerAvatar.vue";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { itemPrFacts, type GitHubItemSummary } from "@/lib/github-items";
 import { prState, prWords } from "@/lib/pr-state";
 
@@ -59,7 +59,6 @@ const description = computed(() => {
   if (props.item.comments) parts.push(`${props.item.comments} comment${props.item.comments === 1 ? "" : "s"}`);
   return parts.join(" · ");
 });
-const updated = computed(() => formatRelativeTime(props.item.updatedAt));
 
 function handleKeydown(event: KeyboardEvent): void {
   if (event.target !== event.currentTarget) return;
@@ -112,7 +111,10 @@ function handleKeydown(event: KeyboardEvent): void {
         <span>{{ item.author }}</span>
       </template>
       <span aria-hidden="true">·</span>
-      <span>{{ updated }}</span>
+      <RelativeTime
+        :at="item.updatedAt"
+        compact
+      />
       <template v-if="item.headRef">
         <span aria-hidden="true">·</span>
         <span class="gh-row__branch">{{ item.headRef }}</span>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { CheckCircle2, ChevronDown, Copy, ExternalLink, Github, PlugZap, RefreshCw, Unplug } from "lucide-vue-next";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { formatRelative } from "@/lib/format";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { useGitHubRepos } from "./composables/use-github-repos";
 import { ErrorNote } from "@/components/ui/error-note";
@@ -91,7 +91,7 @@ const repoCacheSummary = computed(() => {
   }
 
   if (lastUpdated.value !== null) {
-    return `${repos.value.length} repos loaded · Updated ${formatRelativeTime(lastUpdated.value)}`;
+    return `${repos.value.length} repos loaded · updated ${formatRelative(lastUpdated.value)}`;
   }
 
   return `${repos.value.length} repos loaded`;

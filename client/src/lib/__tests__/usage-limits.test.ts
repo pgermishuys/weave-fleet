@@ -7,6 +7,7 @@ import {
   windowLabel,
   windowToFlag,
 } from "@/lib/usage-limits";
+import { formatWhen } from "@/lib/format";
 
 const now = Date.parse("2026-10-07T10:00:00Z");
 const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
@@ -38,11 +39,12 @@ describe("usage limits", () => {
     expect(windowLabel("five_hour")).toBe("5-hour limit");
     expect(windowLabel("seven_day")).toBe("Weekly limit");
     expect(windowLabel("seven_day_opus")).toBe("Weekly Opus limit");
-    // In the viewer's time zone: within a day the time, within a week the day, after that the date.
-    const local = (hours: number, options: Intl.DateTimeFormatOptions) => new Date(at(hours)).toLocaleString("en-GB", options);
-    expect(resetLabel(Date.parse(at(2)), now, "en-GB")).toBe(`resets ${local(2, { hour: "2-digit", minute: "2-digit" })}`);
-    expect(resetLabel(Date.parse(at(48)), now, "en-GB")).toBe(`resets ${local(48, { weekday: "short" })}`);
-    expect(resetLabel(Date.parse(at(24 * 9)), now, "en-GB")).toBe(`resets ${local(24 * 9, { day: "numeric", month: "short" })}`);
+    // In the viewer's time zone, as formatWhen says a time near now: the clock today, the weekday this week, else the date.
+    const local = (hours: number) => formatWhen(at(hours), { now, locale: "en-GB" });
+    expect(resetLabel(Date.parse(at(2)), now, "en-GB")).toBe(`resets ${local(2)}`);
+    expect(resetLabel(Date.parse(at(48)), now, "en-GB")).toBe(`resets ${local(48)}`);
+    expect(resetLabel(Date.parse(at(48)), now, "en-GB")).toMatch(/^resets [A-Z][a-z]{2} \d{2}:\d{2}$/);
+    expect(resetLabel(Date.parse(at(24 * 9)), now, "en-GB")).toBe(`resets ${local(24 * 9)}`);
     expect(resetLabel(null, now)).toBeNull();
   });
 

@@ -11,7 +11,7 @@ import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import type { FileReferenceEnv } from "@/lib/file-references";
-import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import { rememberFoldClick, sharedMarkdownRenderer, type FoldEnv } from "@/lib/markdown-renderer";
 import { withSessionReferenceChips, type SessionReference } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillNamesIn, withSkillChips } from "@/lib/skill-mentions";
@@ -63,8 +63,8 @@ const lightboxUrl = ref<string | null>(null);
 const copied = ref(false);
 
 const now = useRelativeTime();
-const relativeTime = computed(() => props.createdAt ? formatRelativeTime(props.createdAt, now.value) : "");
-const absoluteTime = computed(() => formatAbsoluteTimestamp(props.createdAt));
+const relativeTime = computed(() => formatRelative(props.createdAt, { now: now.value }));
+const absoluteTime = computed(() => formatDateTime(props.createdAt, { now: now.value }));
 // Only the agent's replies say which model wrote them; yours are yours.
 /** The pill hangs 20px below the message, but the messages of one cluster sit 6px apart: on an agent message that
  *  another follows closely it would land on that message's first line, so only the one ending the group carries it. */

@@ -9,7 +9,7 @@ import { isStreamWorking } from "@fleet/lib/domain-event-reducer";
 import { chooseDock, pendingQuestion } from "@fleet/lib/phone/dock-state";
 import { foldMessages, groupTools, stepDetail, stepRow, type FoldedStep, type PhoneItem } from "@fleet/lib/phone/fold-steps";
 import { headerStatus, type HeaderTone } from "@fleet/lib/phone/session-status";
-import { duration, short } from "@fleet/lib/phone/time";
+import { formatElapsedSince, formatRelative, formatTimestamp } from "@fleet/lib/format";
 import { dontAskAgainWording, permissionHeading } from "@fleet/lib/tools/permission-wording";
 import { manager, useFleet, useSessionActivity, useSessionInterruption, useSessionPages, useSessionStream } from "~/fleet/hooks";
 import { conversationPages, waitingPage, type SessionPage } from "~/fleet/pages";
@@ -191,7 +191,7 @@ export default function Session() {
         ) : working && dock.kind === "composer" && !pick ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 14 }}>
             <StatusGlyph status="working" size={10} />
-            <Text tone="muted" size={13}>Working · {duration(lastUser?.createdAt ?? null, now)}</Text>
+            <Text tone="muted" size={13}>Working · {formatElapsedSince(lastUser?.createdAt ?? null, now)}</Text>
           </View>
         ) : undefined}
         ListFooterComponent={state ? undefined : <Text tone="muted">Loading…</Text>}
@@ -225,7 +225,7 @@ export default function Session() {
             title={permissionHeading(dock.ask)}
             session={title}
             machine={machines.length > 1 ? machineName : undefined}
-            age={short(Date.parse(dock.ask.askedAt), now)}
+            age={formatRelative(dock.ask.askedAt, { now, compact: true })}
             command={dock.ask.title ?? undefined}
             alwaysLabel={(({ lead, code }) => (code ? `${lead} ${code}` : lead))(dontAskAgainWording(dock.ask))}
             onAllow={() => void act(() => api?.replyPermission(id, dock.ask.id, "once"))}
@@ -304,12 +304,9 @@ function toolRow(step: FoldedStep) {
   );
 }
 
-/** "10:31", or "Mon 10:31" for an earlier day. */
+/** "10:31", or "12 Oct, 10:31" for an earlier day. */
 function clock(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return at.toDateString() === new Date().toDateString() ? time : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
+  return formatTimestamp(iso);
 }
 
 function pageDetail(page: SessionPage, waiting: boolean): string {

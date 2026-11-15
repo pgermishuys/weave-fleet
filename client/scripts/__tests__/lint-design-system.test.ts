@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkNativeDialogs, compare, countsOf, lintFile, type Baseline } from "../lint-design-system";
+import { checkAdHocFormat, checkNativeDialogs, compare, countsOf, lintFile, type Baseline } from "../lint-design-system";
 
 const sfc = `<script setup lang="ts">
 const a = 1
@@ -153,6 +153,30 @@ describe("the browser's own dialogs", () => {
   it("counts them in a .vue file too", () => {
     const sfc = "<script setup lang=\"ts\">\nfunction drop() { if (window.confirm('Drop?')) go(); }\n</script>\n";
     expect(lintFile("src/components/Example.vue", sfc).filter((v) => v.rule === "NATIVE_DIALOG").map((v) => v.line)).toEqual([2]);
+  });
+});
+
+describe("formatting by hand", () => {
+  const code = [
+    "const day = new Intl.DateTimeFormat(\"en-US\", { month: \"short\" });",
+    "const n = new Intl.NumberFormat(undefined).format(count);",
+    "const words = new Intl.RelativeTimeFormat(\"en\").format(-2, \"day\");",
+    "label = date.toLocaleDateString(undefined, { weekday: \"short\" }) + at.toLocaleTimeString();",
+    "total.toLocaleString(\"en-US\")",
+    "const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;",
+    "// Never date.toLocaleString(): use @/lib/format.",
+    "formatRelative(at, { compact: true });",
+  ].join("\n");
+
+  it("counts Intl formatters and toLocale* calls, not the time zone lookup or a comment", () => {
+    expect(checkAdHocFormat("src/lib/example.ts", code).map((v) => [v.line, v.detail])).toEqual([
+      [1, "Intl.DateTimeFormat; use @/lib/format"],
+      [2, "Intl.NumberFormat; use @/lib/format"],
+      [3, "Intl.RelativeTimeFormat; use @/lib/format"],
+      [4, "toLocaleDateString(); use @/lib/format"],
+      [4, "toLocaleTimeString(); use @/lib/format"],
+      [5, "toLocaleString(); use @/lib/format"],
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { apiFetchOn } from "@/lib/api-client";
 import { liveTarget, type MachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
+import { formatDate } from "@/lib/format";
 
 /**
  * Agent memory: notes agents keep about a repository and about this machine, so new sessions start out knowing what
@@ -154,7 +155,7 @@ export function memoryFoundLabel(note: Pick<MemoryNote, "found" | "lastFound">):
   if (!note.found) return null;
   const times = `found ${note.found} ${note.found === 1 ? "time" : "times"}`;
   if (!note.lastFound) return times;
-  const date = new Date(note.lastFound).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const date = formatDate(note.lastFound);
   return `${times} · last ${date}`;
 }
 

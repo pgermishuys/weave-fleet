@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localTimeZone } from "@/lib/format";
 import { computed, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
 import ModelSelector from "@/components/session/ModelSelector.vue";
@@ -70,7 +71,7 @@ async function save(change: NightlyDreamingChange): Promise<void> {
   }
 }
 
-const zone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const zone = (): string => localTimeZone() ?? "";
 const toggle = (): Promise<void> => save({ enabled: !nightly.value?.enabled, timeZone: zone() });
 const pickTime = (time: string): Promise<void> => (time ? save({ time, timeZone: zone() }) : Promise.resolve());
 // A model belongs to its harness, so changing the harness clears it.

@@ -105,7 +105,7 @@ describe("BackgroundStrip", () => {
     const [shellRow, agentRow] = rows(wrapper);
     expect(shellRow!.text()).toContain("Shell");
     expect(shellRow!.get("code").text()).toBe("bun run test:e2e");
-    expect(shellRow!.text()).toContain("3m");
+    expect(shellRow!.text()).toContain("3 min");
     expect(shellRow!.find("[data-testid='background-work-output']").exists()).toBe(true);
     expect(shellRow!.get("[data-testid='background-work-stop']").attributes("aria-label")).toBe("Stop bun run test:e2e");
     // A shell runs in no session of its own.
@@ -114,7 +114,7 @@ describe("BackgroundStrip", () => {
     expect(agentRow!.text()).toContain("Subagent");
     expect(agentRow!.text()).toContain("code-reviewer · Review the diff");
     expect(agentRow!.get("[data-testid='background-work-model']").text()).toContain("Sonnet 5.5");
-    expect(agentRow!.text()).toContain("1m");
+    expect(agentRow!.text()).toContain("1 min");
     expect(agentRow!.get("[data-testid='background-work-open']").attributes("href")).toBe("/sessions/child-1?instanceId=i-child&parentSessionId=s1");
     expect(agentRow!.get("[data-testid='background-work-stop']").attributes("aria-label")).toBe("Stop Review the diff");
     expect(agentRow!.find("[data-testid='background-work-output']").exists()).toBe(false);
@@ -122,10 +122,10 @@ describe("BackgroundStrip", () => {
     // Past their first minute, times change once a minute, not every second.
     vi.advanceTimersByTime(2_000);
     await flushPromises();
-    expect(shellRow!.text()).toContain("3m");
+    expect(shellRow!.text()).toContain("3 min");
     vi.advanceTimersByTime(58_000);
     await flushPromises();
-    expect(shellRow!.text()).toContain("4m");
+    expect(shellRow!.text()).toContain("4 min");
   });
 
   it("offers no Output when the output can't be read, and no Stop when it can't be stopped on its own", async () => {

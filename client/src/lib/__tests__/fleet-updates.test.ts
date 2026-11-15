@@ -234,7 +234,7 @@ describe("a Fleet that updated itself", () => {
 
     expect(news?.title).toBe("falcon updated to 0.59.1");
     expect(news?.id).toBe("fleet-updated:falcon-id:0.59.1");
-    expect(news?.body).toMatch(/^At \d{2}:\d{2}, when nothing was working\.$/);
+    expect(news?.body).toMatch(/^At \d{1,2}:\d{2}( [AP]M)?, when nothing was working\.$/);
   });
 
   it("stays quiet when it runs another version, has no record, or updated days ago", () => {
@@ -318,7 +318,7 @@ describe("the release line", () => {
   it("is one quiet line when there is nothing to do, or no release", () => {
     const now = Date.parse("2026-10-20T12:00:00Z");
     expect(describeReleaseLine({ latest: "0.59.1", waiting: 0, downloaded: 0 }, "2026-10-20T11:56:00Z", now))
-      .toEqual({ kind: "current", lead: "", text: "Every machine that can be reached is on Fleet 0.59.1. Checked 4m ago." });
+      .toEqual({ kind: "current", lead: "", text: "Every machine that can be reached is on Fleet 0.59.1. Checked 4 minutes ago." });
     expect(describeReleaseLine({ latest: null, waiting: 0, downloaded: 0 }, null)).toMatchObject({ kind: "none", text: "Fleet hasn't found a release yet." });
   });
 

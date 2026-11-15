@@ -3,6 +3,7 @@
  * 5-hour and weekly windows. Harnesses on an API key or a gateway report none, and nothing shows. The server keeps the
  * latest of each window (`GET /api/harnesses/usage`) and pushes changes as `harness.usage` on the sessions topic.
  */
+import { formatWhen } from "@/lib/format";
 
 export const HARNESS_USAGE_EVENT = "harness.usage";
 
@@ -99,14 +100,10 @@ export function windowShortLabel(window: string): string {
   }
 }
 
-/** "resets 14:05" within a day, "resets Mon" within a week, else "resets 12 Oct". */
+/** "resets 14:05" today, "resets Mon 09:00" within the week, else "resets 12 Oct, 09:00". */
 export function resetLabel(resetsAt: number | null, now: number, locale?: string): string | null {
   if (resetsAt === null) return null;
-  const at = new Date(resetsAt);
-  const hours = (resetsAt - now) / 3_600_000;
-  if (hours < 24) return `resets ${at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`;
-  if (hours < 24 * 6) return `resets ${at.toLocaleDateString(locale, { weekday: "short" })}`;
-  return `resets ${at.toLocaleDateString(locale, { day: "numeric", month: "short" })}`;
+  return `resets ${formatWhen(resetsAt, { now, locale })}`;
 }
 
 /** "82%", or null when the harness didn't say. */

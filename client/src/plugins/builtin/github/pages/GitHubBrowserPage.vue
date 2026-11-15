@@ -8,7 +8,7 @@ import GitHubItemRow from "@/plugins/builtin/github/components/GitHubItemRow.vue
 import { useGitHubSessions } from "@/composables/use-github-sessions";
 import { useGitHubWork } from "@/composables/use-github-work";
 import { useRelativeTime } from "@/composables/use-relative-time";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { RelativeTime } from "@/components/ui/relative-time";
 import {
   itemResourceId,
   itemRoute,
@@ -214,7 +214,10 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
           </h1>
           <p class="gh-home__sub">
             {{ scope }}<template v-if="loadedAt">
-              · updated {{ formatRelativeTime(loadedAt, now) }}
+              · updated <RelativeTime
+                :at="loadedAt"
+                :now="now"
+              />
             </template>
           </p>
         </div>

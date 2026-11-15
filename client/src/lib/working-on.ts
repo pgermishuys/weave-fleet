@@ -5,7 +5,7 @@
  */
 import type { AccumulatedMessage } from "@/lib/client-types";
 import { toolStatus } from "@/components/session/activity-stream-tool-card";
-import { formatElapsed } from "@/lib/running-work";
+import { formatDuration } from "@/lib/format";
 import { getTool } from "@/lib/tools";
 
 export interface WorkingOn {
@@ -43,9 +43,9 @@ export function workingOn(messages: readonly AccumulatedMessage[], steerDelivery
   return { name: first.name, since: first.since, more: running.length - 1, held };
 }
 
-/** "Bash running 10m", "Bash running 10m +2 more", and the held sentence after it. */
+/** "Bash running 10 min", "Bash running 10 min +2 more", and the held sentence after it. */
 export function workingOnText(work: WorkingOn, now: number): string {
-  const time = work.since === null ? "" : ` ${formatElapsed(now - work.since)}`;
+  const time = work.since === null ? "" : ` ${formatDuration(now - work.since, { precision: "minutes" })}`;
   const line = `${work.name} running${time}${work.more > 0 ? ` +${work.more} more` : ""}`;
   return work.held ? `${line}. Your message goes to the agent when it finishes.` : line;
 }

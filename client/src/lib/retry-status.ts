@@ -3,6 +3,7 @@
  * line all say it the same way. It comes with the `activity_status` push (`attempt`, `maxAttempts`, `message`, `next`);
  * every field but the status itself is optional, since harnesses say different amounts (OpenCode 2 gives no maximum).
  */
+import { formatCountdown } from "@/lib/format";
 
 export interface RetryStatus {
   attempt?: number | null;
@@ -23,10 +24,7 @@ export function retryAttemptLabel(retry: RetryStatus | null | undefined): string
 export function retryCountdown(retry: RetryStatus | null | undefined, now: number): string | null {
   const next = retry?.next ? Date.parse(retry.next) : Number.NaN;
   if (!Number.isFinite(next)) return null;
-  const seconds = Math.ceil((next - now) / 1000);
-  if (seconds <= 0) return "now";
-  if (seconds < 60) return `in ${seconds} s`;
-  return `in ${Math.ceil(seconds / 60)} min`;
+  return formatCountdown(next - now);
 }
 
 /** The short form for a session row: "Retry 3/10", "Retry 3" or "Retrying". */

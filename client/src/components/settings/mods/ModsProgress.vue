@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Check, Circle } from "lucide-vue-next";
-import { elapsedText, megabytes, progressTitle, type ModsRuntimeJob, type ModsRuntimeRelease } from "@/lib/mods-runtime";
+import { formatRelative } from "@/lib/format";
+import { megabytes, progressTitle, type ModsRuntimeJob, type ModsRuntimeRelease } from "@/lib/mods-runtime";
 import { SECONDARY_BUTTON } from "./classes";
 
 /**
@@ -32,7 +33,7 @@ const steps = computed(() => {
 });
 
 const footer = computed(() => {
-  if (props.cameBack) return `Started ${elapsedText(props.job.startedAt, Date.now())} ago. It kept going while you were away.`;
+  if (props.cameBack) return `Started ${formatRelative(props.job.startedAt) || "a moment ago"}. It kept going while you were away.`;
   return "This keeps going if you leave Settings. Mods start as soon as it's done.";
 });
 </script>

@@ -158,7 +158,7 @@ describe("AgentsCanvas", () => {
     expect(running.map((row) => row.attributes("data-kind"))).toEqual(["subagent", "fork"]);
     expect(running[0]!.text()).toContain("code-reviewer");
     expect(running[0]!.text()).toContain("Review the diff");
-    expect(running[0]!.text()).toContain("1m");
+    expect(running[0]!.text()).toContain("1 min");
     expect(running[1]!.text()).toContain("needs you");
     expect(running[1]!.get(".agent-row__runs-on").text()).toBe("OpenCode 2 · GPT-5.5");
     expect(running[1]!.get(".agent-row__note").text()).toBe("· asked a question");
@@ -175,7 +175,7 @@ describe("AgentsCanvas", () => {
     const earlier = rows(wrapper, "earlier");
     expect(earlier).toHaveLength(1);
     expect(earlier[0]!.attributes("data-state")).toBe("done");
-    expect(earlier[0]!.text()).toContain("38s");
+    expect(earlier[0]!.text()).toContain("38 s");
   });
 
   it("opens the first running agent's detail: what it was asked, tools, tokens, latest output, Open session and Stop", async () => {

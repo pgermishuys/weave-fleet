@@ -11,7 +11,7 @@ const turn: FoldedTurn = {
 describe("TurnFoldRow", () => {
   it("says what the turn did on one line and toggles on click", async () => {
     const w = mount(TurnFoldRow, { props: { turn, open: false } });
-    expect(w.text()).toContain("Worked for 34s");
+    expect(w.text()).toContain("Worked for 34 s");
     expect(w.text()).toContain("read 4 files · edited 2 · ran 2 commands");
     expect(w.attributes("aria-expanded")).toBe("false");
     await w.trigger("click");

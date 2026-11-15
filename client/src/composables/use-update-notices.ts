@@ -7,6 +7,7 @@ import { useWhatsNew } from "@/composables/use-whats-new";
 import { getDesktopBridge, releaseNotesUrl, type DesktopUpdateState } from "@/lib/desktop";
 import { changeSummary, compareVersions, parseReleaseNotes, whatsNewSummary, type WhatsNewSummary } from "@/lib/release-notes";
 import { useNoticesStore, type Notice } from "@/stores/notices";
+import { formatDate } from "@/lib/format";
 
 /** How long "Updated to …" stays in the status bar after Fleet restarts into a new version, when there are no notes. */
 export const UPDATED_CHIP_MS = 12_000;
@@ -72,9 +73,7 @@ function versionList(versions: string[]): string {
 }
 
 function formatDay(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return formatDate(iso);
 }
 
 /** What the What's new card says: its title, the line under it, and what it leaves out. */

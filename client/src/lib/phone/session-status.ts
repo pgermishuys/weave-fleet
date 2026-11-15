@@ -2,7 +2,7 @@
  * What the phone session header says: "Working · 1m 12s", "Needs you · 2m", "Finished · 14:44", "Stopped with an
  * error", or "last heard 14:29" when the machine isn't answering. No Vue.
  */
-import { clock, duration } from "@/lib/phone/time";
+import { formatElapsedSince, formatTime } from "@/lib/format";
 
 export type HeaderTone = "working" | "needs-you" | "finished" | "error" | "unreachable" | "idle";
 
@@ -33,11 +33,11 @@ export interface HeaderStatus {
 
 export function headerStatus(input: HeaderStatusInput): HeaderStatus {
   if (input.unreachableSince !== null) {
-    return { tone: "unreachable", state: "last heard", detail: input.unreachableSince ? clock(input.unreachableSince) : "never" };
+    return { tone: "unreachable", state: "last heard", detail: input.unreachableSince ? formatTime(input.unreachableSince) : "never" };
   }
 
   const waiting = input.streamStatus === "waiting_input" || input.sessionStatus === "waiting_input";
-  if (waiting) return { tone: "needs-you", state: "Needs you", detail: duration(input.updatedAt, input.now) };
+  if (waiting) return { tone: "needs-you", state: "Needs you", detail: formatElapsedSince(input.updatedAt, input.now) };
 
   if (input.sessionStatus === "error") return { tone: "error", state: "Stopped with an error", detail: "" };
 
@@ -45,13 +45,13 @@ export function headerStatus(input: HeaderStatusInput): HeaderStatus {
     || (input.streamStatus === null && input.sessionStatus === "active");
   if (working) {
     const what = input.streamStatus === "retry" ? "Retrying" : input.streamStatus === "delegating" ? "Delegating" : "Working";
-    return { tone: "working", state: what, detail: duration(input.turnStartedAt, input.now) };
+    return { tone: "working", state: what, detail: formatElapsedSince(input.turnStartedAt, input.now) };
   }
 
   if (input.failed) return { tone: "error", state: "Stopped with an error", detail: "" };
 
   if (input.hasMessages) {
-    return { tone: "finished", state: "Finished", detail: input.lastMessageAt ? clock(input.lastMessageAt) : "" };
+    return { tone: "finished", state: "Finished", detail: input.lastMessageAt ? formatTime(input.lastMessageAt) : "" };
   }
   return { tone: "idle", state: "Idle", detail: "" };
 }

@@ -5,9 +5,10 @@
  * session was last active.
  */
 import type { SessionListItem } from "@/api/client";
-import { formatRetryClock, formatRetryIn, limitName } from "@/lib/turn-retry";
+import { limitName } from "@/lib/turn-retry";
 import { interruptionRowLabel } from "@/lib/session-interruption";
 import { describeRetry, retryShortLabel, type RetryStatus } from "@/lib/retry-status";
+import { formatCountdown, formatDateTime, formatRelative, formatWhen, toTimestamp } from "@/lib/format";
 
 export type SessionRowTone = "attention" | "working" | "retry" | "error" | "quiet";
 
@@ -17,6 +18,8 @@ export interface SessionRowStatus {
   tone: SessionRowTone;
   /** The state in words, for the glyph's tooltip and screen readers. */
   description: string;
+  /** The label's tooltip: when it's a time, the exact one. */
+  title?: string;
 }
 
 /**
@@ -29,28 +32,6 @@ const DAY_MS = 24 * 60 * 60_000;
 
 /** Statuses where something is going on. Only these get a glyph on the row. */
 const LIVE_STATUSES = new Set(["active", "waiting_input", "error"]);
-
-function toTimestamp(timestamp: number | string): number {
-  return typeof timestamp === "number" ? timestamp : Number(timestamp) || Date.parse(timestamp);
-}
-
-/** Compact age for list rows: "now", "4m", "2h", "3d", "5w". */
-export function formatCompactAge(timestamp: number | string, now: number): string {
-  const ts = toTimestamp(timestamp);
-  if (!Number.isFinite(ts)) return "";
-
-  const minutes = Math.floor(Math.max(0, now - ts) / 60_000);
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-
-  return `${Math.floor(days / 7)}w`;
-}
 
 export function isSessionLive(item: SessionListItem): boolean {
   return LIVE_STATUSES.has(item.sessionStatus);
@@ -108,11 +89,11 @@ export function sessionRowStatus(item: SessionListItem, now: number, machineAnsw
       // A limit stopped its last turn and Fleet tries again by itself.
       const retry = item.scheduledRetry;
       if (retry) {
-        const clock = formatRetryClock(retry.dueAt, now);
+        const clock = formatWhen(retry.dueAt, { now });
         return {
           label: `Retry ${clock}`,
           tone: "retry",
-          description: `Stopped by ${limitName(retry.kind)}. Fleet tries again at ${clock} (${formatRetryIn(retry.dueAt, now)})`,
+          description: `Stopped by ${limitName(retry.kind)}. Fleet tries again at ${clock} (${formatCountdown(toTimestamp(retry.dueAt) - now) || "now"})`,
         };
       }
       // The last turn stopped on an error and nobody has carried on: not the same as a quiet idle.
@@ -122,10 +103,12 @@ export function sessionRowStatus(item: SessionListItem, now: number, machineAnsw
         return { label: "Failed", tone: "error", description };
       }
       const time = item.session.time;
+      const at = time?.updated ?? time?.created;
       return {
-        label: formatCompactAge(time?.updated ?? time?.created ?? "", now),
+        label: formatRelative(at, { now, compact: true }),
         tone: "quiet",
         description: "Idle",
+        title: formatDateTime(at, { now }) || undefined,
       };
     }
   }
