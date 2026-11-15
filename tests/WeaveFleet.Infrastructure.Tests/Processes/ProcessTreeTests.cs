@@ -48,7 +48,7 @@ public sealed partial class ProcessTreeTests : IDisposable
 
         foreach (var pid in pids)
             (await GoneAsync(pid)).ShouldBeTrue($"process {pid} of the tree is still running");
-        root.HasExited.ShouldBeTrue();
+        root.WaitForExit(10_000).ShouldBeTrue("the root wasn't killed"); // .NET reaps it a moment after it dies
     }
 
     [Fact]
