@@ -1236,6 +1236,27 @@ describe("a sub-agent waiting on a question", () => {
     expect(updated.sessionStatus).toBe("waiting_input")
   })
 
+  it("keeps a finished delegation as it was when an update that changes nothing arrives without its details", () => {
+    const finished = createDelegation({ status: "completed" })
+    const state = createState({ delegations: [finished] })
+
+    const updated = applyDomainEvent(state, {
+      type: "delegation.updated",
+      payload: { delegationId: "delegation-1", parentSessionId: "session-1" },
+    } as unknown as DomainEvent)
+
+    expect(updated.delegations).toEqual([finished])
+  })
+
+  it("creates a delegation from an update only when it doesn't exist yet", () => {
+    const updated = applyDomainEvent(createState(), {
+      type: "delegation.updated",
+      payload: { delegationId: "delegation-9", parentSessionId: "session-1", title: "New", status: "running", createdAt: "2026-01-01T00:00:00Z" },
+    } as unknown as DomainEvent)
+
+    expect(updated.delegations.map((d) => d.delegationId)).toEqual(["delegation-9"])
+  })
+
   it("leaves the state alone for a session that isn't one of its sub-agents", () => {
     const state = createState({ delegations: [createDelegation()], sessionStatus: "delegating" })
 

@@ -349,22 +349,23 @@ function mapSnapshotDelegation(delegation: SessionSnapshotDelegation): Delegatio
   }
 }
 
-function mapDelegationEvent(event: DelegationCreated | DelegationUpdated | DelegationCompleted): DelegationDto {
+function mapDelegationEvent(event: DelegationCreated | DelegationUpdated | DelegationCompleted): Partial<DelegationDto> & Pick<DelegationDto, "delegationId"> {
   return {
     delegationId: event.payload.delegationId,
     parentToolCallId: event.payload.parentToolCallId,
     childSessionId: event.payload.childSessionId,
     title: event.payload.title,
-    status: toDelegationStatus(event.payload.status),
+    // A missing status stays missing, so an update that leaves it out keeps the delegation's own.
+    status: event.payload.status == null ? undefined : toDelegationStatus(event.payload.status),
     createdAt: event.payload.createdAt,
     ...(event.payload.background ? { background: true } : {}),
   }
 }
 
-function upsertDelegation(delegations: DelegationDto[], delegation: DelegationDto): DelegationDto[] {
-  const updated = applyDelegationUpdated(delegations, delegation)
-  if (updated !== delegations) {
-    return updated
+function upsertDelegation(delegations: DelegationDto[], delegation: ReturnType<typeof mapDelegationEvent>): DelegationDto[] {
+  // An existing delegation is only ever updated: an update that changes nothing must not re-create it from the event's bare fields.
+  if (delegations.some((item) => item.delegationId === delegation.delegationId)) {
+    return applyDelegationUpdated(delegations, delegation)
   }
 
   return applyDelegationCreated(delegations, delegation)
