@@ -530,7 +530,7 @@ function openSession(sessionId: string): void {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   cursor: pointer;
 }
@@ -571,7 +571,7 @@ function openSession(sessionId: string): void {
   margin-left: auto;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font: inherit;
   white-space: nowrap;

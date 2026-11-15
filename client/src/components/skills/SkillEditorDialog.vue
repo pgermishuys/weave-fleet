@@ -124,7 +124,7 @@ async function save(): Promise<void> {
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <button
             type="button"
-            class="text-accent hover:underline disabled:opacity-50"
+            class="text-accent-text hover:underline disabled:opacity-50"
             :disabled="!changed"
             data-testid="skill-editor-show-changes"
             @click="showChanges = !showChanges"
@@ -134,7 +134,7 @@ async function save(): Promise<void> {
           <button
             v-if="detail.yourContent !== null && draft !== detail.fleetContent"
             type="button"
-            class="text-accent hover:underline"
+            class="text-accent-text hover:underline"
             @click="startFromFleets"
           >
             Start from Fleet's version

@@ -648,7 +648,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
       >
         <Spinner
           size="sm"
-          class="text-accent"
+          class="text-accent-text"
         />
         Loading older messages…
       </div>
@@ -1100,7 +1100,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
 }
 
 .turn-failure__message :deep(a) {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -1168,7 +1168,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
 
 .turn-failure__retry:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .turn-failure__retry:disabled {

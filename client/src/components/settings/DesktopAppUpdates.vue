@@ -116,7 +116,7 @@ const actionLabel = computed(() => {
       <Download
         v-else-if="state?.status === 'ready' || state?.status === 'available'"
         :size="15"
-        class="text-accent"
+        class="text-accent-text"
         aria-hidden="true"
       />
       <AlertCircle
@@ -127,7 +127,7 @@ const actionLabel = computed(() => {
       />
       <p
         class="text-sm"
-        :class="state?.status === 'error' ? 'text-error-text' : state?.status === 'ready' || state?.status === 'available' ? 'text-accent' : 'text-text'"
+        :class="state?.status === 'error' ? 'text-error-text' : state?.status === 'ready' || state?.status === 'available' ? 'text-accent-text' : 'text-text'"
         data-testid="desktop-app-update-status"
       >
         {{ statusLabel }}

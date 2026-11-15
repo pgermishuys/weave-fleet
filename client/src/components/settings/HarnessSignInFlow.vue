@@ -566,7 +566,7 @@ onBeforeUnmount(() => {
 .sign-in-flow__method[aria-selected="true"] {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sign-in-flow__form,
@@ -651,12 +651,12 @@ onBeforeUnmount(() => {
 .sign-in-flow__btn--primary {
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .sign-in-flow__text-btn {
   justify-self: start;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   cursor: pointer;
 }
@@ -715,7 +715,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   justify-self: start;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 500;
   overflow-wrap: anywhere;
 }

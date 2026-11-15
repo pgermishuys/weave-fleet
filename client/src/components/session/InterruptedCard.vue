@@ -165,7 +165,7 @@ const clock = computed(() => formatRetryClock(props.interruption.at));
 
 .interrupted__button:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .interrupted__button--primary {

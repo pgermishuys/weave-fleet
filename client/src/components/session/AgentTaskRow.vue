@@ -162,7 +162,7 @@ function handleClick(event: MouseEvent): void {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 500;
   opacity: 0;

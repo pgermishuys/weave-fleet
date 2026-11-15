@@ -142,7 +142,7 @@ async function finishOnboarding(): Promise<void> {
           v-if="step === 'welcome'"
           class="flex flex-1 flex-col items-center justify-center gap-6 py-4 text-center"
         >
-          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 text-accent">
+          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10 text-accent-text">
             <Sparkles
               :size="32"
               aria-hidden="true"
@@ -194,7 +194,7 @@ async function finishOnboarding(): Promise<void> {
                 type="button"
                 class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
                 :class="provider.namespace === selectedNamespace
-                  ? 'border-accent bg-accent/10 text-accent'
+                  ? 'border-accent bg-accent/10 text-accent-text'
                   : 'border-border text-text hover:border-accent/50'"
                 @click="selectProvider(provider.namespace)"
               >

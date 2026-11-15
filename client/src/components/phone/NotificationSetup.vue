@@ -328,7 +328,7 @@ watch(() => push.subscribed.value, () => {
   height: 15px;
   margin: 0 2px;
   vertical-align: -2px;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .setup__note {

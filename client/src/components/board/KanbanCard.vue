@@ -436,7 +436,7 @@ function handleDragEnd(): void {
 
 .k-card--manual .k-card__source-pill {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .k-card--synced .k-card__source-pill {

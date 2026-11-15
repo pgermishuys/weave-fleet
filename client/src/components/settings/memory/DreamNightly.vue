@@ -157,7 +157,7 @@ watch(() => nightly.value?.enabled && harnessType.value, (type) => emit("harness
         <button
           v-if="nightly.automationId && target.isLive"
           type="button"
-          class="text-xs text-accent hover:underline"
+          class="text-xs text-accent-text hover:underline"
           data-testid="dream-automation"
           @click="openAutomation"
         >

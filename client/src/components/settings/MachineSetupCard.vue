@@ -239,7 +239,7 @@ function act(candidate: MachineCandidate): void {
           >
             <Spinner
               v-if="step.state === 'running'"
-              class="mt-0.5 text-accent"
+              class="mt-0.5 text-accent-text"
             />
             <Check
               v-else-if="step.state === 'done'"

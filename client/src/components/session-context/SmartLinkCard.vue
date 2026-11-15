@@ -749,7 +749,7 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
 
 .send-btn:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .send-btn:disabled {

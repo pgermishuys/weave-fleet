@@ -765,7 +765,7 @@ const activeProps = computed(() => {
 @keyframes canvas-tab-updated-icon {
   from,
   40% {
-    color: var(--accent);
+    color: var(--accent-text);
   }
 }
 

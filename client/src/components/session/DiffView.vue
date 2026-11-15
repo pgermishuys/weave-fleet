@@ -294,7 +294,7 @@ function getDiffMarker(type: DiffLine["type"]): "+" | "-" | "" {
   margin: 0;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font: inherit;
   padding: 3px 12px;

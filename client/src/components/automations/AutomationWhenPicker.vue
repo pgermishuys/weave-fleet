@@ -374,6 +374,6 @@ function applyCron(): void {
 
 /* A schedule read from the message is tinted like its highlight. */
 .automation-when--parsed .ns-chip__label {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 </style>

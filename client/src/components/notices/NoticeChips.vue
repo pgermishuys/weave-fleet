@@ -54,7 +54,7 @@ function onClick(notice: Notice): void {
   border: 0;
   border-radius: 999px;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   font-size: 11px;
   font-weight: 500;

@@ -350,7 +350,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 }
 
 .workflow-row__meta--with {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .workflow-row__meta--error {

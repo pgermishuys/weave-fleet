@@ -375,7 +375,7 @@ button.shortcut-hint:disabled,
 
 .terminal-owner {
   padding: 2px 5px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 500;
 }
 

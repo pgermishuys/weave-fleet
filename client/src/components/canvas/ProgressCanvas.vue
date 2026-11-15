@@ -602,7 +602,7 @@ function subagentsFor(step: SessionPlanStep): SessionSubagent[] {
 }
 
 .progress-step--current .progress-step__meta {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 500;
 }
 

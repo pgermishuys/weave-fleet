@@ -44,7 +44,7 @@ async function turnBackOn(): Promise<void> {
     data-testid="mods-safe-mode-banner"
   >
     <PowerOff
-      class="h-3.5 w-3.5 shrink-0 text-accent"
+      class="h-3.5 w-3.5 shrink-0 text-accent-text"
       aria-hidden="true"
     />
     <div

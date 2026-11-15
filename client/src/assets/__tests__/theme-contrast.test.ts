@@ -15,6 +15,9 @@
 //   4.5:1 on every surface and on the status's own 14% tint there (1.4.3); the status colour itself is for dots, icons
 //   and tints, 3:1 (1.4.11). Light's --running and --idle were 2.9:1 as words, solarized-light's 2.6:1, and status
 //   pills used raw Tailwind greens and ambers (text-green-300 was 1.28:1 on the light theme).
+// - Accent words (links, picked labels): --accent-text, 4.5:1 on every surface, on --accent-dim and on a 14% accent
+//   tint. The default --accent as words was 3.81:1 on a card, solarized-light's 3.00:1.
+// - Muted words: --muted, 4.5:1 on every surface (solarized's own was 4.11:1 and 3.64:1).
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -265,6 +268,22 @@ describe("session row text", () => {
   });
 });
 
+describe("accent words", () => {
+  it.each(Object.entries(themes()))("reach 4.5:1 on every surface, on --accent-dim and on an accent tint in the %s theme", (_name, vars) => {
+    const word = rgba(vars, vars["accent-text"]);
+    const failures: string[] = [];
+    for (const surface of ["main-bg", "panel-bg", "card-bg"]) {
+      const bg = rgba(vars, vars[surface]);
+      const grounds = { surface: bg, "--accent-dim": paint(rgba(vars, vars["accent-dim"]), 1, bg), "14% accent": paint(rgba(vars, vars.accent), 0.14, bg) };
+      for (const [what, ground] of Object.entries(grounds)) {
+        const ratio = contrast(hex(word), hex(ground));
+        if (ratio < 4.5) failures.push(`--accent-text on ${what} over --${surface}: ${ratio.toFixed(2)}`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+});
+
 describe("muted text", () => {
   it.each(Object.entries(themes()))("reaches 4.5:1 on every surface in the %s theme", (_name, vars) => {
     const muted = resolveVar(vars, vars.muted);
@@ -289,7 +308,7 @@ describe("error words", () => {
 const STATUSES = ["running", "idle", "complete", "queued"] as const;
 // A rule may colour with a status itself (not its -text word colour) only where it draws an icon, glyph or mark.
 const NON_TEXT = /svg|icon|glyph|star|__check\b|__mark|__shield|__marker|ring__fill/;
-const STATUS_TOKEN = /var\(--(running|idle|complete|queued|status-waiting|pr-open|pr-blocked|pr-merged|pr-closed|check-pass|diff-add|diff-del)\)/;
+const STATUS_TOKEN = /var\(--(running|idle|complete|queued|status-waiting|pr-open|pr-blocked|pr-merged|pr-closed|check-pass|diff-add|diff-del|accent|primary)\)/;
 // Components this file checks on their own terms: the session row's mixes and the GitHub state icons.
 const OWN_TERMS = new Set(["components/github/PrBadge.vue", "components/sessions/SessionItem.vue", "components/github/CheckIcon.vue", "components/github/GitHubItemIcon.vue", "components/sessions/StatusGlyph.vue"]);
 const PALETTE = /\b(?:text|bg|border|fill|stroke|ring)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
@@ -313,12 +332,12 @@ describe("status words", () => {
     expect(failures).toEqual([]);
   });
 
-  it("are written in the -text colours: a status colour itself colours only icons, glyphs and marks", () => {
+  it("are written in the -text colours: a status or the accent itself colours only icons, glyphs and marks", () => {
     const offenders: string[] = [];
     for (const { file, text } of sources()) {
       if (OWN_TERMS.has(file)) continue;
       // Tailwind: text-running and friends only on an icon (a PascalCase component or an <svg>).
-      if (/\btext-(?:running|idle|complete|queued)(?![-\w/])/.test(text)) for (const tag of text.matchAll(/<([A-Za-z][\w-]*)\b[^>]*?\btext-(?:running|idle|complete|queued)(?![-\w/])/g)) {
+      if (/\btext-(?:running|idle|complete|queued|accent)(?![-\w/])/.test(text)) for (const tag of text.matchAll(/<([A-Za-z][\w-]*)\b[^>]*?\btext-(?:running|idle|complete|queued|accent)(?![-\w/])/g)) {
         if (!/^(?:[A-Z]|svg$)/.test(tag[1])) offenders.push(`${file} <${tag[1]}> uses a status colour as a text class`);
       }
       if (!STATUS_TOKEN.test(text)) continue;

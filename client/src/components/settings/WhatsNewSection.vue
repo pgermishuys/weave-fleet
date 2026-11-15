@@ -254,7 +254,7 @@ onMounted(async () => {
 .whats-new__badge--accent {
   border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .whats-new__notes {
@@ -284,7 +284,7 @@ onMounted(async () => {
 }
 
 .whats-new__notes :deep(li > a[href*="/pull/"]:last-child:hover) {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* The part of Fleet a change is about ("Claude Code"): a quiet label before it. */

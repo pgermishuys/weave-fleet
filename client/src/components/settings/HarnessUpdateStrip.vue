@@ -126,7 +126,7 @@ async function copyCommand(): Promise<void> {
         <Spinner
           v-if="job?.phase === 'waiting' || job?.phase === 'running'"
           size="sm"
-          class="text-accent"
+          class="text-accent-text"
         />
         <button
           v-if="job?.phase === 'waiting'"

@@ -86,7 +86,7 @@ const open = ref(false);
   padding: 0 4px;
   border-radius: 0;
   background: var(--accent-muted, rgba(99, 102, 241, 0.2));
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 10px;
   font-weight: 600;
 }

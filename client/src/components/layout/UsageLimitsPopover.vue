@@ -470,7 +470,7 @@ async function onAllow(provider: string): Promise<void> {
   align-items: center;
   gap: 8px;
   padding: 3px 0;
-  color: var(--accent);
+  color: var(--accent-text);
   font-variant-numeric: tabular-nums;
 }
 

@@ -171,7 +171,7 @@ function sessionLabel(session: DreamSessionRef): string {
       <p class="flex items-center gap-2 text-sm font-medium text-text">
         <Moon
           :size="15"
-          class="text-accent"
+          class="text-accent-text"
           aria-hidden="true"
         />
         Dreaming
@@ -225,7 +225,7 @@ function sessionLabel(session: DreamSessionRef): string {
         <button
           v-if="dream.sessionId"
           type="button"
-          class="text-accent hover:underline"
+          class="text-accent-text hover:underline"
           @click="openSession(dream.sessionId)"
         >
           Open the dreaming session
@@ -259,7 +259,7 @@ function sessionLabel(session: DreamSessionRef): string {
               ·
               <button
                 type="button"
-                class="text-accent hover:underline"
+                class="text-accent-text hover:underline"
                 @click="openSession(dream.sessionId)"
               >
                 Open the dreaming session
@@ -323,7 +323,7 @@ function sessionLabel(session: DreamSessionRef): string {
                 >
                   <button
                     type="button"
-                    class="text-left text-accent hover:underline"
+                    class="text-left text-accent-text hover:underline"
                     @click="openSession(session.id)"
                   >
                     {{ sessionLabel(session) }}
@@ -392,7 +392,7 @@ function sessionLabel(session: DreamSessionRef): string {
             data-testid="dream-change"
           >
             <p class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-              <span :class="change.kind === 'left' ? 'text-idle-text' : 'text-accent'">{{ dreamKindLabel(change.kind) }}</span>
+              <span :class="change.kind === 'left' ? 'text-idle-text' : 'text-accent-text'">{{ dreamKindLabel(change.kind) }}</span>
               <template v-if="change.list">
                 · {{ dreamListLabel(change.list) }}
               </template>
@@ -501,7 +501,7 @@ function sessionLabel(session: DreamSessionRef): string {
                   >
                     <button
                       type="button"
-                      class="text-left text-accent hover:underline"
+                      class="text-left text-accent-text hover:underline"
                       @click="openSession(session.id)"
                     >
                       {{ sessionLabel(session) }}

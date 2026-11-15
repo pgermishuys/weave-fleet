@@ -245,7 +245,7 @@ function exactly(createdAt: string): string {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   cursor: pointer;
 }
@@ -263,7 +263,7 @@ function exactly(createdAt: string): string {
   padding: 0 7px;
   border-radius: 999px;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 11.5px;
   font-weight: 600;
 }

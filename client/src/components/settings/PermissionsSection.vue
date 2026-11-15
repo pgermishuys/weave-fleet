@@ -613,7 +613,7 @@ button.reach-chip:focus-visible {
 }
 
 .reach-link {
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

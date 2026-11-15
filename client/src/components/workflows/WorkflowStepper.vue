@@ -276,7 +276,7 @@ function open(step: WorkflowRunStep): void {
 .wf-stp__you {
   width: 12px;
   height: 12px;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .wf-check {

@@ -120,7 +120,7 @@ function nudge(tile: Tile, text: string, done: (outcome: AnswerOutcome & { queue
               :key="option.value"
               type="button"
               class="px-2.5 py-1 text-xs"
-              :class="mission.grouping.value === option.value ? 'bg-accent-dim font-medium text-accent' : 'text-muted hover:text-text'"
+              :class="mission.grouping.value === option.value ? 'bg-accent-dim font-medium text-accent-text' : 'text-muted hover:text-text'"
               :aria-pressed="mission.grouping.value === option.value"
               :data-testid="`group-${option.value}`"
               @click="mission.grouping.value = option.value"

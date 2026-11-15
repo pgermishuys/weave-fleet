@@ -298,7 +298,7 @@ watch(() => props.docked, trackKeyboard);
 }
 
 .find-bar__stop {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
 }
 

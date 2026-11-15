@@ -163,7 +163,7 @@ function usage(profile: HarnessProfile): string {
             No profile
             <span
               v-if="!hasDefault"
-              class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
+              class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent-text"
             >
               <Star
                 :size="10"
@@ -204,7 +204,7 @@ function usage(profile: HarnessProfile): string {
               {{ profile.name }}
               <span
                 v-if="profile.isDefault"
-                class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
+                class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent-text"
               >
                 <Star
                   :size="10"

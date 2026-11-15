@@ -368,7 +368,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
             </h2>
             <span
               v-if="defaultHarnessId === selected.id"
-              class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase text-accent"
+              class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase text-accent-text"
             >
               <Star
                 :size="11"
@@ -424,7 +424,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           Its version and updates are on
           <button
             type="button"
-            class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            class="text-accent-text hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             data-testid="harness-updates-link"
             @click="setActiveSection('updates', 'harnesses')"
           >
@@ -470,7 +470,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
         Edits, commands, the browser and messages are set in
         <button
           type="button"
-          class="text-accent underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          class="text-accent-text underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           data-testid="harness-may-do-link"
           @click="setActiveSection('permissions')"
         >What agents can do</button>.

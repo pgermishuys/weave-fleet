@@ -97,7 +97,7 @@ const summaryHtml = computed(() => (open.value && props.compaction.summary ? mar
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   cursor: pointer;
 }

@@ -560,7 +560,7 @@ function openRun(run: WorkflowRun): void {
 
 .wf-pill--accent {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono);
 }
 
@@ -776,7 +776,7 @@ function openRun(run: WorkflowRun): void {
 }
 
 .wf-runs__status--with {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .wf-runs__status--fail {

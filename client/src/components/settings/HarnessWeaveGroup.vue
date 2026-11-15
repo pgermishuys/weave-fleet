@@ -290,7 +290,7 @@ onBeforeUnmount(() => watcher?.disconnect());
         </template>
         <template #action>
           <a
-            class="text-sm text-accent hover:underline"
+            class="text-sm text-accent-text hover:underline"
             href="https://tryweave.io/docs/quickstart/"
             target="_blank"
             rel="noopener"

@@ -856,7 +856,7 @@ function addToMessage(): void {
 
 .file-canvas__wrap.is-on {
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .file-canvas__toast {

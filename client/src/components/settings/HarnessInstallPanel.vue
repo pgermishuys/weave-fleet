@@ -274,7 +274,7 @@ async function copy(command: string): Promise<void> {
   border-radius: 999px;
   padding: 1px 8px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 500;
 }
@@ -397,7 +397,7 @@ async function copy(command: string): Promise<void> {
   align-items: center;
   gap: 4px;
   justify-self: start;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 500;
 }
 </style>

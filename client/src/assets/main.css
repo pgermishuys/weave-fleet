@@ -38,6 +38,9 @@
   --indigo: #6366f1;
   /* #6366f1 nudged one step so white text on it reaches 4.5:1. */
   --accent: #6365f1;
+  /* Accent words (links, picked labels): --accent moved toward black or white until it reads at 4.5:1 on every
+     surface, on --accent-dim and on a 14% accent tint. --accent itself is for fills, borders, icons and the focus ring. */
+  --accent-text: #8284F4;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
   --accent-dim: rgba(99, 102, 241, 0.15);
@@ -123,6 +126,7 @@
   --row-running: 56%;
   --row-queued: 80%;
   --accent: #5B6EC7;
+  --accent-text: #4D5EA9;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
   --accent-dim: rgba(91, 110, 199, 0.12);
@@ -158,6 +162,7 @@
   --row-running: 80%;
   --row-queued: 56%;
   --accent: #A855F7;
+  --accent-text: #BF81F9;
   --primary: var(--accent);
   /* White on this purple is 3.96:1; the rail colour on it reaches 4.5:1, and the accent keeps its colour as link text. */
   --primary-foreground: #0B1120;
@@ -194,6 +199,7 @@
   --row-running: 100%;
   --row-queued: 80%;
   --accent: #A855F7;
+  --accent-text: #AB5AF7;
   --primary: var(--accent);
   /* White on this purple is 3.96:1; black on it reaches 4.5:1, and the accent keeps its colour as link text. */
   --primary-foreground: #000000;
@@ -230,6 +236,7 @@
   --row-running: 31%;
   --row-queued: 29%;
   --accent: #88C0D0;
+  --accent-text: #A3CEDB;
   --primary: var(--accent);
   --primary-foreground: #2E3440;
   --accent-dim: rgba(136, 192, 208, 0.15);
@@ -265,6 +272,7 @@
   --row-running: 100%;
   --row-queued: 53%;
   --accent: #BD93F9;
+  --accent-text: #CAA8FA;
   --primary: var(--accent);
   --primary-foreground: #282A36;
   --accent-dim: rgba(189, 147, 249, 0.15);
@@ -301,6 +309,7 @@
   --row-running: 57%;
   --row-queued: 50%;
   --accent: #268BD2;
+  --accent-text: #6BB0E0;
   --primary: var(--accent);
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
   --primary-foreground: #00222B;
@@ -339,6 +348,7 @@
   --row-running: 49%;
   --row-queued: 62%;
   --accent: #268BD2;
+  --accent-text: #1B6395;
   --primary: var(--accent);
   /* Solarized blue stays; dark text on it reaches 4.5:1 where base3 (#FDF6E3) gave 3.41. */
   --primary-foreground: #00222B;
@@ -375,6 +385,7 @@
   --row-running: 53%;
   --row-queued: 38%;
   --accent: #A6E22E;
+  --accent-text: var(--accent);
   --primary: var(--accent);
   --primary-foreground: #272822;
   --accent-dim: rgba(166, 226, 46, 0.15);
@@ -410,6 +421,7 @@
   --row-running: 91%;
   --row-queued: 91%;
   --accent: #58A6FF;
+  --accent-text: var(--accent);
   --primary: var(--accent);
   --primary-foreground: #0D1117;
   --accent-dim: rgba(88, 166, 255, 0.15);
@@ -443,6 +455,7 @@
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
   --color-accent-dim: var(--accent-dim);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);

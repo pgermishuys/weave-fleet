@@ -975,7 +975,7 @@ onUnmounted(() => {
   gap: 4px;
   max-width: 12rem;
   overflow: hidden;
-  color: var(--accent);
+  color: var(--accent-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -898,7 +898,7 @@ button.wf-radio__option {
   border: 0;
   border-radius: 4px;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text);
   font-family: var(--font-mono-stack);
   font-size: 10.5px;
   cursor: pointer;
@@ -961,7 +961,7 @@ button.wf-radio__option {
   padding: 2px 4px;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   font-size: 12px;
   cursor: pointer;

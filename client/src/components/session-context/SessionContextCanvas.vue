@@ -518,7 +518,7 @@ watch(
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

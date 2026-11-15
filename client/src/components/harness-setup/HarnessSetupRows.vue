@@ -525,7 +525,7 @@ defineExpose({ closeTerminal });
 
 .harness-setup-rows__default {
   margin-left: 6px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -652,7 +652,7 @@ defineExpose({ closeTerminal });
   border-radius: 999px;
   padding: 0 7px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 10.5px;
   font-weight: 500;
 }
