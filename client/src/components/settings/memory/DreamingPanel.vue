@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from "@/lib/format";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
 import { ChevronRight, Moon } from "lucide-vue-next";
@@ -59,7 +60,6 @@ const changedSummary = computed(
   () => `${changedCount.value} ${changedCount.value === 1 ? "note" : "notes"} changed${confirmedCount.value > 0 ? `, ${confirmedCount.value} confirmed` : ""}`,
 );
 
-const when = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const harnessLabel = (type: string | null) => enabledHarnesses.value.find((harness) => harness.type === type)?.displayName ?? type ?? "";
 
 function pickHarness(type: string): void {
@@ -253,7 +253,7 @@ function sessionLabel(session: DreamSessionRef): string {
               · {{ formatTokens(dream.tokens) }} tokens
             </template>
             <template v-if="dream.finished">
-              · {{ when.format(new Date(dream.finished)) }}
+              · {{ formatDateTime(dream.finished) }}
             </template>
             <template v-if="dream.sessionId">
               ·

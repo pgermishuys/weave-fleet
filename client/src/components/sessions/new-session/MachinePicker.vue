@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { Check, ChevronDown, Plus } from "lucide-vue-next";
 import { DropdownMenuItem, DropdownMenuSeparator } from "reka-ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
 
 /**
@@ -37,6 +37,8 @@ interface Row {
   entry: MachineEntry;
   reachable: boolean;
   detail: string;
+  /** When Fleet last reached it, exactly: the detail's tooltip. */
+  heardAt?: string;
 }
 
 const rows = computed<Row[]>(() => props.machines.map((entry) => {
@@ -51,13 +53,14 @@ const rows = computed<Row[]>(() => props.machines.map((entry) => {
   }
   const heard = props.others[entry.key];
   const reachable = !heard?.error;
-  const when = heard?.loadedAt ? formatRelativeTime(heard.loadedAt) : null;
+  const when = heard?.loadedAt ? formatRelative(heard.loadedAt) : null;
   return {
     entry,
     reachable,
     detail: reachable
       ? [os, when ? `reached ${when}` : null].filter(Boolean).join(" · ")
       : when ? `Unreachable · last seen ${when}` : "Unreachable",
+    heardAt: heard?.loadedAt ? formatDateTime(heard.loadedAt) : undefined,
   };
 }));
 
@@ -117,7 +120,10 @@ const selectedName = computed(() =>
         />
         <span class="ns-option__text">
           <span class="ns-option__title ns-machine__name">{{ row.entry.name }}</span>
-          <span class="ns-option__detail">{{ row.detail }}</span>
+          <span
+            class="ns-option__detail"
+            :title="row.heardAt"
+          >{{ row.detail }}</span>
         </span>
         <Check
           v-if="row.entry.key === selected"

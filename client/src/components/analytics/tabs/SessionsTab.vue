@@ -4,6 +4,8 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-vue-next";
 import type { SessionAnalytics } from "@/api/client";
 import { formatAnalyticsCost } from "@/lib/format-utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RelativeTime } from "@/components/ui/relative-time";
+import { formatDuration } from "@/lib/format";
 import { ErrorNote } from "@/components/ui/error-note";
 
 export type SessionsTabSortBy =
@@ -54,10 +56,6 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const integerFormatter = new Intl.NumberFormat("en-US");
-const createdAtFormatter = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 
 const activeSortBy = shallowRef<SessionsTabSortBy>(props.sortBy ?? "createdAt");
 const activeSortDir = shallowRef<SessionsTabSortDir>(props.sortDir ?? "desc");
@@ -180,28 +178,10 @@ function formatTokenCount(tokens: number): string {
   return integerFormatter.format(tokens);
 }
 
-function formatDuration(durationSeconds: number | null): string {
-  if (durationSeconds == null) {
-    return "—";
-  }
-
-  if (durationSeconds < 60) {
-    return `${Math.max(1, Math.round(durationSeconds))}s`;
-  }
-
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.round((durationSeconds % 3600) / 60);
-
-  if (hours === 0) {
-    return `${Math.max(1, minutes)}m`;
-  }
-
-  return `${hours}h ${String(Math.max(0, minutes)).padStart(2, "0")}m`;
+function formatSessionDuration(durationSeconds: number | null): string {
+  return durationSeconds == null ? "—" : formatDuration(durationSeconds * 1000, { precision: "minutes" });
 }
 
-function formatCreatedAt(createdAt: string): string {
-  return createdAtFormatter.format(new Date(createdAt));
-}
 
 function isActiveSort(sortBy: SessionsTabSortBy): boolean {
   return activeSortBy.value === sortBy;
@@ -316,7 +296,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
               {{ formatAnalyticsCost(session.estimatedCost) }}
             </td>
             <td class="sessions-tab__cell sessions-tab__cell--right">
-              {{ formatDuration(session.durationSeconds) }}
+              {{ formatSessionDuration(session.durationSeconds) }}
             </td>
             <td class="sessions-tab__cell">
               <div class="sessions-tab__models">
@@ -337,7 +317,10 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
             </td>
             <td class="sessions-tab__cell">
               <div class="sessions-tab__primary">
-                {{ formatCreatedAt(session.createdAt) }}
+                <RelativeTime
+                  :at="session.createdAt"
+                  compact
+                />
               </div>
             </td>
           </tr>

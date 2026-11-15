@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTimestamp } from "@/lib/format";
 import { computed, nextTick, onBeforeUnmount, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { AlertTriangle, Bot, CalendarClock, Check, Copy, Pencil, Repeat, Sparkles, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
@@ -143,11 +144,7 @@ const skills = computed(() => [...new Set(workflow.value?.steps.map((s) => s.ski
 const runs = computed(() => store.orderedRuns.filter((run) => run.workflowId === workflow.value?.id).slice(0, 6));
 
 function when(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  return date.toDateString() === today.toDateString()
-    ? `Today ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-    : date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+  return formatTimestamp(iso);
 }
 
 function runText(run: WorkflowRun): string {

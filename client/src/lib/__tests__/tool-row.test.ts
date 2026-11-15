@@ -3,11 +3,11 @@ import { formatCallDuration, groupReads, shellHeader } from "@/lib/tool-row";
 
 describe("formatCallDuration", () => {
   it("says tenths under a second, then seconds, then minutes", () => {
-    expect(formatCallDuration(40)).toBe("0.1s");
-    expect(formatCallDuration(140)).toBe("0.1s");
-    expect(formatCallDuration(900)).toBe("0.9s");
-    expect(formatCallDuration(34_000)).toBe("34s");
-    expect(formatCallDuration(125_000)).toBe("2m 5s");
+    expect(formatCallDuration(40)).toBe("0.1 s");
+    expect(formatCallDuration(140)).toBe("0.1 s");
+    expect(formatCallDuration(900)).toBe("0.9 s");
+    expect(formatCallDuration(34_000)).toBe("34 s");
+    expect(formatCallDuration(125_000)).toBe("2 min 05 s");
   });
   it("is empty when nothing was timed", () => {
     expect(formatCallDuration(undefined)).toBe("");
@@ -17,7 +17,7 @@ describe("formatCallDuration", () => {
 
 describe("shellHeader", () => {
   it("joins the command, exit code and time", () => {
-    expect(shellHeader({ command: "bun test" }, "x", 0, 100)).toBe("bun test · exit 0 · 0.1s");
+    expect(shellHeader({ command: "bun test" }, "x", 0, 100)).toBe("bun test · exit 0 · 0.1 s");
   });
   it("leaves out what the harness did not report", () => {
     expect(shellHeader({ command: "bun test\nmore" }, "x")).toBe("bun test");

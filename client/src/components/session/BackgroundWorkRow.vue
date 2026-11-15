@@ -21,9 +21,8 @@ import WorkOutput from "@/components/session/WorkOutput.vue";
 import { stopWork } from "@/composables/use-running-work";
 import { runSessionCommand } from "@/lib/session-commands";
 import { useMachineTarget } from "@/lib/machine-target";
+import { formatDateTime, formatDuration, formatRelative } from "@/lib/format";
 import {
-  formatAgo,
-  formatElapsed,
   isWorkRunning,
   workElapsedMs,
   workFailed,
@@ -76,15 +75,14 @@ const what = computed(() => {
   return label ?? title;
 });
 const time = computed(() => {
-  if (running.value) return formatElapsed(workElapsedMs(props.item, props.now));
-  const ended = props.item.endedAt ? Date.parse(props.item.endedAt) : Number.NaN;
-  return Number.isNaN(ended) ? "" : formatAgo(Math.max(0, props.now - ended));
+  if (running.value) return formatDuration(workElapsedMs(props.item, props.now), { precision: "minutes" });
+  return formatRelative(props.item.endedAt, { now: props.now });
 });
 const timeTitle = computed(() => {
-  const started = new Date(props.item.startedAt).toLocaleTimeString();
+  const started = formatDateTime(props.item.startedAt, { now: props.now, seconds: true });
   return running.value
-    ? `Started at ${started}`
-    : `Ran for ${formatElapsed(workElapsedMs(props.item, props.now))}, from ${started}`;
+    ? `Started ${started}`
+    : `Ran for ${formatDuration(workElapsedMs(props.item, props.now))}, from ${started}`;
 });
 const name = computed(() => props.item.label ?? props.item.title);
 /** What the harness says about it while it runs (a chain's step, its model); once it ended, that's its result. */

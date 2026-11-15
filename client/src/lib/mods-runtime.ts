@@ -56,17 +56,6 @@ export function megabytes(bytes: number | null | undefined): number {
   return Math.round((bytes ?? 0) / 1_000_000);
 }
 
-/** "40 seconds", "3 minutes", "2 hours": how long ago a job started. */
-export function elapsedText(startedAt: string | null | undefined, now: number): string {
-  const started = startedAt ? Date.parse(startedAt) : Number.NaN;
-  const seconds = Number.isNaN(started) ? 0 : Math.max(0, Math.round((now - started) / 1000));
-  if (seconds < 90) return `${seconds} ${seconds === 1 ? "second" : "seconds"}`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 90) return `${minutes} minutes`;
-  const hours = Math.round(minutes / 60);
-  return `${hours} ${hours === 1 ? "hour" : "hours"}`;
-}
-
 /** What a running install's heading says. */
 export function progressTitle(job: ModsRuntimeJob): string {
   if (job.phase === "verifying") return "Checking the download";

@@ -757,6 +757,7 @@ function removeSessionFromStore(): void {
               v-else-if="rowStatus.label && !showProgressCount"
               class="session-meta"
               :class="`session-meta--${rowStatus.tone}`"
+              :title="rowStatus.title"
             >{{ rowStatus.label }}</span>
           </button>
           <button

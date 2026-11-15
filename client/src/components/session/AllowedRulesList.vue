@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { allowedRuleWording, type AllowedRule } from "@/lib/tools";
 import type { PermissionLevel } from "@/lib/permissions";
 
@@ -54,7 +54,11 @@ const rows = computed(() => props.rules.map((rule) => ({ rule, words: allowedRul
           <span class="allowed__what">{{ words.lead }}<template v-if="words.code">
             {{ " " }}<code>{{ words.code }}</code>
           </template>{{ words.tail }}</span>
-          <span class="allowed__when">{{ formatRelativeTime(rule.createdAt) }}</span>
+          <RelativeTime
+            class="allowed__when"
+            :at="rule.createdAt"
+            compact
+          />
         </span>
         <Button
           variant="ghost"

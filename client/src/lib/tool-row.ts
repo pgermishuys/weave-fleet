@@ -3,17 +3,15 @@
  * the call's own state: how long it took, how a shell call ended, and which rows a conversation collapses together.
  */
 import { getTool, parseToolInput } from "@/lib/tools";
+import { formatDuration } from "@/lib/format";
 
-/** A call's run time as a row says it: "0.1s" under a second's tenth, "34s", "2m 5s". Empty when nothing was timed. */
+/** A call's run time as a row says it: "0.1 s", "3.4 s", "34 s", "2 min 05 s". Empty when nothing was timed. */
 export function formatCallDuration(ms: number | undefined): string {
-  if (ms === undefined || !Number.isFinite(ms) || ms < 0) return "";
-  if (ms < 1000) return `${Math.max(0.1, Math.round(ms / 100) / 10).toFixed(1)}s`;
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  if (ms === undefined || ms < 0) return "";
+  return formatDuration(ms, { tenths: true });
 }
 
-/** The shell header: "bun test · exit 0 · 0.1s", leaving out what the harness doesn't report. */
+/** The shell header: "bun test · exit 0 · 0.1 s", leaving out what the harness doesn't report. */
 export function shellHeader(input: Record<string, unknown> | undefined, fallback: string, exit?: number, durationMs?: number): string {
   const command = parseToolInput(input).command?.split("\n")[0]?.trim() || fallback;
   const parts = [command];

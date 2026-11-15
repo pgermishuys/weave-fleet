@@ -41,6 +41,7 @@ import {
 import { capitalize, shortenPath, truncate } from "./text";
 import { parseToolInput, stringField, type ToolInput } from "./input";
 import type { PermissionKindName } from "./permission-wording";
+import { formatDuration } from "@/lib/format";
 
 export type ToolCategory =
   | "read"
@@ -114,7 +115,7 @@ function passLabel(input: LabelInput, fallback: string): string {
     text(input, "role"),
     text(input, "model"),
     text(input, "verdict"),
-    Number.isFinite(millis) && millis > 0 ? `${(millis / 1000).toFixed(1)} s` : undefined,
+    Number.isFinite(millis) && millis > 0 ? formatDuration(millis, { tenths: true }) : undefined,
     credits(input),
     text(input, "reason") ? truncate(text(input, "reason") ?? "", 60) : undefined,
   ];

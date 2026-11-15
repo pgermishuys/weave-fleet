@@ -21,6 +21,7 @@ import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters
 import { useThemeStore } from "@/stores/theme"
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { formatDate } from "@/lib/format";
 
 ChartJS.register(CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip)
 
@@ -254,11 +255,11 @@ const dailyChartLabel = computed(() => {
   const days = props.daily
   if (days.length === 0) return "Daily tokens and cost"
   const [first, last] = [days[0], days[days.length - 1]]
-  return `Line chart of daily tokens and cost, ${formatShortDate(first.date)} to ${formatShortDate(last.date)}. The numbers follow in a table.`
+  return `Line chart of daily tokens and cost, ${formatDate(first.date)} to ${formatDate(last.date)}. The numbers follow in a table.`
 })
 
 const dailyTrendData = computed<ChartData<"line">>(() => ({
-  labels: props.daily.map((point) => formatShortDate(point.date)),
+  labels: props.daily.map((point) => formatDate(point.date)),
   datasets: [
     {
       label: "Tokens",
@@ -403,13 +404,6 @@ function formatCurrency(amount: number): string {
   })}`
 }
 
-function formatShortDate(date: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${date}T00:00:00`))
-}
-
 function getMaxCost(costs: readonly number[]): number {
   if (costs.length === 0) {
     return 0
@@ -482,7 +476,7 @@ function getMaxCost(costs: readonly number[]): number {
               :key="point.date"
             >
               <th scope="row">
-                {{ formatShortDate(point.date) }}
+                {{ formatDate(point.date) }}
               </th>
               <td>{{ compactNumberFormatter.format(point.tokens) }}</td>
               <td>{{ formatCurrency(point.cost) }}</td>

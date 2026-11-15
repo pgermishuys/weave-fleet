@@ -13,6 +13,11 @@
 //   AD_HOC_SPINNER    a home-made spinner: `animate-spin`, or an @keyframes that rotates. Use <Spinner>
 //   NATIVE_DIALOG     window.confirm / alert / prompt, in any .vue or .ts file under src/ (tests aside). Use
 //                     confirmAction() from components/ui/confirm: one look, keyboard and focus right, works on a phone
+//   AD_HOC_FORMAT     a time, date or number formatted by hand with Intl.DateTimeFormat / NumberFormat /
+//                     RelativeTimeFormat or toLocaleString / toLocaleDateString / toLocaleTimeString, in any .vue or
+//                     .ts file under src/ but src/lib/format/ (tests aside). Use @/lib/format (or <RelativeTime>),
+//                     so a time or a count reads the same on every screen. String maths ("${m}m ago") can't be told
+//                     from other text reliably, so it isn't counted: review catches that
 //
 // The counts are compared with design-lint-baseline.json. A count above its baseline fails (the output names
 // the files that grew); a count below it passes and asks you to lower the baseline, so it only ever goes down.
@@ -24,7 +29,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER", "NATIVE_DIALOG"] as const;
+export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER", "NATIVE_DIALOG", "AD_HOC_FORMAT"] as const;
 export type Rule = (typeof RULES)[number];
 
 export interface Violation {
@@ -217,6 +222,23 @@ export function checkNativeDialogs(file: string, content: string): Violation[] {
   return out;
 }
 
+// Intl's formatters and the toLocale* methods, which each screen used to set up its own way. A comment line doesn't
+// count; neither does Intl.DateTimeFormat().resolvedOptions() (it asks the time zone, it doesn't format), though
+// localTimeZone() in @/lib/format says it shorter.
+const AD_HOC_FORMAT = /(?<![\w$])Intl\s*\.\s*(DateTimeFormat|NumberFormat|RelativeTimeFormat)\b(?!\(\)\s*\.\s*resolvedOptions)|\.\s*(toLocaleString|toLocaleDateString|toLocaleTimeString)\s*\(/g;
+
+export function checkAdHocFormat(file: string, content: string): Violation[] {
+  const out: Violation[] = [];
+  content.split("\n").forEach((line, i) => {
+    if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+    for (const m of line.matchAll(AD_HOC_FORMAT)) {
+      const what = m[1] ? `Intl.${m[1]}` : `${m[2]}()`;
+      out.push({ rule: "AD_HOC_FORMAT", file, line: i + 1, detail: `${what}; use @/lib/format` });
+    }
+  });
+  return out;
+}
+
 export function lintFile(file: string, content: string): Violation[] {
   const { template, style } = extractBlocks(content);
   return [
@@ -243,7 +265,12 @@ export function lintClient(root: string = clientRoot): Violation[] {
   const uiVue = findFiles(join(src, "components", "ui"), []).flatMap((full) =>
     checkNativeDialogs(relativeTo(full), readFileSync(full, "utf8")),
   );
-  return [...vue, ...scripts, ...uiVue];
+  // Hand-rolled formatting counts everywhere in src/ but the format module itself.
+  const format = join(src, "lib", "format");
+  const formatting = findFiles(src, [format], [".vue", ".ts", ".tsx"]).flatMap((full) =>
+    checkAdHocFormat(relativeTo(full), readFileSync(full, "utf8")),
+  );
+  return [...vue, ...scripts, ...uiVue, ...formatting];
 }
 
 export function countsOf(violations: Violation[]): Baseline {

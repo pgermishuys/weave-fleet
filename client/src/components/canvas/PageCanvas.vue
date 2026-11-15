@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from "@/lib/format";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { appendDraftText } from "@/composables/use-draft-state";
@@ -41,10 +42,7 @@ const choice = computed(() => props.page.choice);
 const live = computed(() => isChoiceLive(choice.value, sessionsStore.sessionById(props.sessionId)?.activityStatus ?? undefined));
 const bar = computed(() => (choice.value ? pageChoiceBar(choice.value, live.value, proposal.value, refusal.value) : null));
 const answeredAt = computed(() => {
-  const at = bar.value?.at ? new Date(bar.value.at) : null;
-  return at && !Number.isNaN(at.getTime()) && bar.value?.kind === "answered"
-    ? at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : "";
+  return bar.value?.kind === "answered" ? formatTime(bar.value.at) : "";
 });
 
 // A new wait starts clean.

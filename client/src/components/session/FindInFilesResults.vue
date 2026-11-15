@@ -5,6 +5,7 @@ import type { FindTextFailure } from '@/composables/use-find-text'
 import { MATCHES_PER_FILE, segmentsOf, type TextSearchResult } from '@/lib/find-text'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Spinner } from '@/components/ui/spinner'
+import { formatDuration } from '@/lib/format'
 
 const props = defineProps<{
   query: string
@@ -29,7 +30,7 @@ const folderOf = (path: string) => (path.includes('/') ? path.slice(0, path.last
 const keyOf = (path: string, line: number) => `${path}:${line}`
 
 const hasMatches = computed(() => (props.result?.files.length ?? 0) > 0)
-const seconds = computed(() => `${(props.tookMs / 1000).toFixed(1)} s`)
+const seconds = computed(() => formatDuration(props.tookMs, { tenths: true }))
 
 const summary = computed(() => {
   const found = props.result

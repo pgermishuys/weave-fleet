@@ -94,6 +94,13 @@ No gutter between the rail and the context area.
   16px (the default) and `lg` 20px (a panel or page). It turns only for `motion-safe` and fades slowly under
   prefers-reduced-motion. Pass `label` when nothing beside it says what's loading. Busy refresh buttons show a
   Spinner in place of their icon; never `animate-spin` or a home-made rotating `@keyframes`.
+- **Times and durations:** `@/lib/format`, never Intl or `toLocale*` in a component. `formatRelative(at, { compact })`
+  is the one relative style: `compact` in dense lists and tables ("now", "4m", "3h", "5d", "2w", then a date such as
+  "12 Oct" from eight weeks, never "119w"), words elsewhere ("4 minutes ago"). Every relative time has the absolute one
+  (`formatDateTime`) in its tooltip; `<RelativeTime :at compact>` (`ui/relative-time`) does both. Absolute times take
+  the user's locale (`formatTime`, `formatDate`, `formatDateTime`, `formatTimestamp`, `formatWhen`) and leave the year
+  out this year. Durations are `formatDuration(ms)`: "45 s", "3 min 20 s", "1 h 05 min"; `formatCountdown` for
+  "in 3 min".
 - **Colours:** theme tokens only (`--text`, `--muted`, `--accent`, `--border`, `--main-bg`, `--panel-bg`, `--card-bg`, …,
   and the Tailwind classes built on them such as `text-muted`, `bg-card-bg`).
   - Every theme in `client/src/assets/main.css` defines them.
@@ -106,7 +113,9 @@ No gutter between the rail and the context area.
     token, a duration that isn't `var(--transition…)`, and an element with its own empty-state class (`x__empty`,
     `empty-message`), any red-palette class or `text-error` / `text-destructive` as a text colour, and `animate-spin`
     or a rotating `@keyframes`.
-  - In any `.vue` or `.ts` file under `src/` (tests aside), it fails `window.confirm`, `alert` or `prompt`.
+  - In any `.vue` or `.ts` file under `src/` (tests aside), it fails `window.confirm`, `alert` or `prompt`, and
+    (outside `src/lib/format/`) a new `Intl.DateTimeFormat` / `NumberFormat` / `RelativeTimeFormat` or `toLocale*`
+    call.
   - The counts are compared with `scripts/design-lint-baseline.json`; `--list <RULE>` prints every one.
 
 ## Diagnostics and Testing

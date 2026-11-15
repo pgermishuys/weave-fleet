@@ -4,7 +4,7 @@ import { AlertCircle, Bot, ChevronRight, FileText, Folder, ScrollText, Terminal 
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { AUTOCOMPLETE_LISTBOX_ID, autocompleteOptionId, type AutocompleteItem } from "@/composables/use-autocomplete";
 import { useRelativeTime } from "@/composables/use-relative-time";
-import { formatCompactAge } from "@/lib/session-row-status";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { Spinner } from "@/components/ui/spinner";
 
 defineOptions({
@@ -213,10 +213,13 @@ function handleSelect(value: string): void {
                 class="autocomplete-popup__description"
               >{{ item.disabledReason ?? item.description }}</span>
             </span>
-            <span
+            <RelativeTime
               v-if="item.session"
               class="autocomplete-popup__age"
-            >{{ formatCompactAge(item.session.updatedAt, now) }}</span>
+              :at="item.session.updatedAt"
+              :now="now"
+              compact
+            />
           </button>
 
           <button

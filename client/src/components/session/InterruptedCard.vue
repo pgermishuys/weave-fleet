@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { changedFilesText, type SessionInterruption } from "@/lib/session-interruption";
-import { formatRetryClock } from "@/lib/turn-retry";
+import { formatWhen } from "@/lib/format";
 
 /**
  * At the end of the conversation of a session a Fleet restart cut off: when, what didn't finish, and Continue (or Ask
@@ -18,7 +18,7 @@ const emit = defineEmits<{
   dismiss: [];
 }>();
 
-const clock = computed(() => formatRetryClock(props.interruption.at));
+const clock = computed(() => formatWhen(props.interruption.at));
 </script>
 
 <template>

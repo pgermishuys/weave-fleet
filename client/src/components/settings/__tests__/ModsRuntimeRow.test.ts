@@ -232,9 +232,9 @@ describe("Mods row: turning Mods on", () => {
   });
 
   it("3d came back: an install already running when the row loaded says how long it has been going", async () => {
-    const wrapper = await mountRow(makeView({ job: job() }), "true");
+    const wrapper = await mountRow(makeView({ job: job({ startedAt: new Date(NOW - 3 * 60_000).toISOString() }) }), "true");
 
-    expect(panel(wrapper).text()).toContain("Started 40 seconds ago. It kept going while you were away.");
+    expect(panel(wrapper).text()).toContain("Started 3 minutes ago. It kept going while you were away.");
   });
 
   it("3 Cancel posts cancel", async () => {

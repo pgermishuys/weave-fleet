@@ -22,7 +22,7 @@ import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { buildInbox, machinesStatus, restartRow, sectionRows, type InboxItem } from "@/lib/phone/inbox";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
-import { ago, clock } from "@/lib/phone/time";
+import { formatRelative, formatTime } from "@/lib/format";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -203,8 +203,8 @@ const machinesLine = computed(() => {
 
 function machineDetail(machine: (typeof machines.value)[number]): string {
   if (machine.problem) return machine.problem;
-  if (machine.status === "unreachable" && machine.diagnosis) return `${machine.diagnosis.headline} · last heard ${ago(machine.lastHeardAt, now.value) || "never"}`;
-  if (machine.status === "unreachable") return `Unreachable · last heard ${ago(machine.lastHeardAt, now.value) || "never"}`;
+  if (machine.status === "unreachable" && machine.diagnosis) return `${machine.diagnosis.headline} · last heard ${formatRelative(machine.lastHeardAt, { now: now.value }) || "never"}`;
+  if (machine.status === "unreachable") return `Unreachable · last heard ${formatRelative(machine.lastHeardAt, { now: now.value }) || "never"}`;
   if (machine.status === "connecting") return "Connecting…";
   const count = `${machine.sessions.length} session${machine.sessions.length === 1 ? "" : "s"}`;
   if (machine.isHome) return `${count} · this phone's home`;
@@ -400,7 +400,7 @@ const pull = usePullToRefresh({
                 data-testid="inbox-unreachable"
               >
                 {{ machine.name }} unreachable<template v-if="machine.lastHeardAt">
-                  since {{ clock(machine.lastHeardAt) }}
+                  since {{ formatTime(machine.lastHeardAt) }}
                 </template>. Showing what it said last.
               </p>
 

@@ -4,8 +4,6 @@ import type { DomainEvent } from "@/lib/domain-events";
 import {
   applyWorkItem,
   elapsedTickMs,
-  formatAgo,
-  formatElapsed,
   isWorkRunning,
   toRunningWorkItem,
   toRunningWorkItems,
@@ -123,14 +121,7 @@ describe("running work items", () => {
     expect(list.map((work) => work.kind)).toEqual(["shell", "subagent"]);
   });
 
-  it("says how long and how it ended in a few words", () => {
-    expect(formatElapsed(58_000)).toBe("58s");
-    expect(formatElapsed(192_000)).toBe("3m");
-    expect(formatElapsed(3_840_000)).toBe("1h 4m");
-    expect(formatElapsed(7_200_000)).toBe("2h");
-    expect(formatAgo(0)).toBe("just now");
-    expect(formatAgo(59_000)).toBe("just now");
-    expect(formatAgo(240_000)).toBe("4m ago");
+  it("says how it ended in a few words", () => {
     // Seconds tick in the first minute only; after that the minutes are all that changes.
     expect(elapsedTickMs(12_000)).toBe(1_000);
     expect(elapsedTickMs(61_000)).toBe(60_000);

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Ban, Check, X } from "lucide-vue-next";
-import { formatElapsed, workElapsedMs } from "@/lib/running-work";
+import { formatDateTime, formatDuration } from "@/lib/format";
+import { workElapsedMs } from "@/lib/running-work";
 import { lineageKindLabel, type AgentRow } from "@/lib/session-lineage";
 
 /**
@@ -30,14 +31,14 @@ const stateText = computed(() => {
   const { row } = props;
   switch (row.state) {
     case "running":
-      return row.work ? formatElapsed(workElapsedMs(row.work, props.now)) : "working";
+      return row.work ? formatDuration(workElapsedMs(row.work, props.now), { precision: "minutes" }) : "working";
     case "waiting": return "needs you";
     case "failed": return row.work?.endedReason === "lost" ? "lost" : "failed";
     case "stopped": return "stopped";
     case "done": {
       // How long it ran; "done" for one that answered at once.
       const ran = row.work ? workElapsedMs(row.work, props.now) : 0;
-      return ran >= 1000 ? formatElapsed(ran) : "done";
+      return ran >= 1000 ? formatDuration(ran, { precision: "minutes" }) : "done";
     }
     default: return "idle";
   }
@@ -46,8 +47,8 @@ const stateText = computed(() => {
 const stateTitle = computed(() => {
   const work = props.row.work;
   if (!work) return undefined;
-  const started = new Date(work.startedAt).toLocaleTimeString();
-  return props.row.state === "running" ? `Started at ${started}` : `Ran for ${stateText.value}, from ${started}`;
+  const started = formatDateTime(work.startedAt, { now: props.now, seconds: true });
+  return props.row.state === "running" ? `Started ${started}` : `Ran for ${formatDuration(workElapsedMs(work, props.now))}, from ${started}`;
 });
 
 const label = computed(() => [props.row.name, props.row.task, props.parent ? null : kindLabel.value, props.runsOn, props.note, stateText.value]

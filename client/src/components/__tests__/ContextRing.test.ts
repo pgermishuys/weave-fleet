@@ -11,6 +11,7 @@ import { _resetSessionContextForTesting, publishSessionContext } from "@/composa
 import { resetHarnessUsageForTests } from "@/composables/use-harness-usage";
 import { toContextUsage } from "@/lib/context-usage";
 import { useSessionsStore } from "@/stores/sessions";
+import { formatWhen } from "@/lib/format";
 
 const mockApi = vi.mocked(api);
 
@@ -213,7 +214,7 @@ describe("ContextRing", () => {
     expect(mockApi.GET).toHaveBeenCalledWith("/api/harnesses/usage");
     const limits = Array.from(popover()?.querySelectorAll<HTMLElement>('[data-testid="context-limit"]') ?? []);
     expect(limits.map((limit) => limit.querySelector("span")?.textContent)).toEqual(["5-hour limit", "Weekly limit"]);
-    const time = inTwoHours.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    const time = formatWhen(inTwoHours);
     expect(limits[0].textContent).toContain(`82% · resets ${time}`);
     expect(limits[0].dataset.tone).toBe("warn");
     expect(limits[1].textContent).toMatch(/63% · resets \w+/);

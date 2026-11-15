@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from "@/lib/format";
 import { computed, onMounted, ref, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { FolderGit2, RefreshCw, Settings2 } from "lucide-vue-next";
@@ -28,7 +29,7 @@ const scannedAtLabel = computed(() => {
     return "Not scanned yet";
   }
 
-  return new Date(scannedAt.value).toLocaleString();
+  return formatDateTime(scannedAt.value);
 });
 
 onMounted(() => {

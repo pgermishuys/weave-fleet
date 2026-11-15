@@ -32,10 +32,6 @@ export function toScheduledRetry(value: unknown): ScheduledRetry | null {
   };
 }
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-
 /** The failure card's title for a turn a limit stopped. */
 export function limitTitle(kind: string | null | undefined): string | null {
   switch (kind) {
@@ -62,28 +58,3 @@ export function limitName(kind: RetryKind): string {
   }
 }
 
-/** "14:05", or "Mon 14:05" when it isn't today, or "9 Oct 14:05" more than a week out. */
-export function formatRetryClock(dueAt: string | number, now: number = Date.now()): string {
-  const due = new Date(typeof dueAt === "number" ? dueAt : Date.parse(dueAt));
-  const time = due.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  const today = new Date(now);
-  if (due.toDateString() === today.toDateString()) return time;
-  if (due.getTime() - now < 6 * DAY_MS) return `${due.toLocaleDateString(undefined, { weekday: "short" })} ${time}`;
-  return `${due.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
-}
-
-/** "in 40 s", "in 12 min", "in 2 h 5 min", "in 3 days"; "now" once it's due. */
-export function formatRetryIn(dueAt: string | number, now: number = Date.now()): string {
-  const left = (typeof dueAt === "number" ? dueAt : Date.parse(dueAt)) - now;
-  if (!Number.isFinite(left) || left <= 0) return "now";
-  if (left < MINUTE_MS) return `in ${Math.max(1, Math.round(left / 1000))} s`;
-  if (left < HOUR_MS) return `in ${Math.ceil(left / MINUTE_MS)} min`;
-  if (left < DAY_MS) {
-    const hours = Math.floor(left / HOUR_MS);
-    const minutes = Math.ceil((left - hours * HOUR_MS) / MINUTE_MS);
-    if (minutes === 60) return `in ${hours + 1} h`;
-    return minutes > 0 ? `in ${hours} h ${minutes} min` : `in ${hours} h`;
-  }
-  const days = Math.round(left / DAY_MS);
-  return `in ${days} ${days === 1 ? "day" : "days"}`;
-}

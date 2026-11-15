@@ -8,7 +8,8 @@ import { useModels } from "@/composables/use-models";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { runSessionCommand } from "@/lib/session-commands";
-import { formatCost, formatDuration, formatTokens } from "@/lib/format-utils";
+import { formatCost, formatTokens } from "@/lib/format-utils";
+import { formatDuration } from "@/lib/format";
 import { deriveTurns, fileEditsOf, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
@@ -70,7 +71,7 @@ function modelName(turn: SessionTurn): string {
 }
 
 function took(turn: SessionTurn): string | null {
-  return turn.durationMs === null ? null : formatDuration(Math.max(1, Math.round(turn.durationMs / 1000)));
+  return turn.durationMs === null ? null : formatDuration(Math.max(1000, turn.durationMs));
 }
 
 function fileSummary(turn: SessionTurn): string {

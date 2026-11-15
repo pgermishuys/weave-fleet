@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
+import { isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
+import { formatWhen } from "@/lib/format";
 
 const NOW = Date.UTC(2026, 8, 12, 12, 0, 0);
 const MIN = 60_000;
@@ -34,24 +35,30 @@ describe("sessionRowStatus: a failed last turn", () => {
   });
 });
 
-describe("formatCompactAge", () => {
+describe("an idle row's age", () => {
   it.each([
     [NOW - 20_000, "now"],
     [NOW - 4 * MIN, "4m"],
     [NOW - 2 * 60 * MIN, "2h"],
     [NOW - 3 * 24 * 60 * MIN, "3d"],
     [NOW - 15 * 24 * 60 * MIN, "2w"],
-  ])("formats %s as %s", (ts, expected) => {
-    expect(formatCompactAge(ts, NOW)).toBe(expected);
+  ])("shows %s as %s", (ts, expected) => {
+    expect(sessionRowStatus(item("idle", {}, ts), NOW).label).toBe(expected);
   });
 
-  it("accepts numeric strings and ISO dates", () => {
-    expect(formatCompactAge(String(NOW - 5 * MIN), NOW)).toBe("5m");
-    expect(formatCompactAge(new Date(NOW - 3 * 60 * MIN).toISOString(), NOW)).toBe("3h");
+  it("is a date past eight weeks, never 119w", () => {
+    const label = sessionRowStatus(item("idle", {}, NOW - 119 * 7 * 24 * 60 * MIN), NOW).label;
+    expect(label).not.toMatch(/w$/);
+    expect(label).toMatch(/2024/);
   });
 
-  it("returns an empty string for unparseable input", () => {
-    expect(formatCompactAge("", NOW)).toBe("");
+  it("carries the exact time as its tooltip", () => {
+    expect(sessionRowStatus(item("idle"), NOW).title).toBeTruthy();
+  });
+
+  it("is empty when the session has no time", () => {
+    const none = { ...item("idle"), session: { id: "s1", title: "Session", time: {} } } as unknown as SessionListItem;
+    expect(sessionRowStatus(none, NOW).label).toBe("");
   });
 });
 
@@ -89,7 +96,7 @@ describe("sessionRowStatus", () => {
   });
 
   it("shows last activity for idle sessions", () => {
-    expect(sessionRowStatus(item("idle"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
+    expect(sessionRowStatus(item("idle"), NOW)).toMatchObject({ label: "2h", tone: "quiet", description: "Idle" });
   });
 
   it("says when Fleet tries a turn a limit stopped again", () => {
@@ -99,16 +106,16 @@ describe("sessionRowStatus", () => {
       NOW,
     );
 
-    const clock = new Date(dueAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    const clock = formatWhen(dueAt, { now: NOW });
     expect(status).toEqual({
       label: `Retry ${clock}`,
       tone: "retry",
-      description: `Stopped by a usage limit. Fleet tries again at ${clock} (in 2 h 5 min)`,
+      description: `Stopped by a usage limit. Fleet tries again at ${clock} (in 2 h 05 min)`,
     });
   });
 
   it("shows last activity for stopped sessions, which wake on the next prompt", () => {
-    expect(sessionRowStatus(item("stopped"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
+    expect(sessionRowStatus(item("stopped"), NOW)).toMatchObject({ label: "2h", tone: "quiet", description: "Idle" });
   });
 });
 

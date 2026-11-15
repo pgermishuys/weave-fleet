@@ -4,7 +4,7 @@ import type { DomainEvent } from "@fleet/lib/domain-events";
 import { isTopLevel, sessionBucket, sessionUpdatedAt, type SessionBucket } from "@fleet/lib/needs-you";
 import { deriveSessionStatus } from "@fleet/lib/session-status";
 import { toInterruption } from "~/fleet/interruption-core";
-import { short } from "@fleet/lib/phone/time";
+import { formatRelative } from "@fleet/lib/format";
 
 /** The wire calls a hub event's payload "properties" (same as the web client's toDomainEvent). */
 export function toDomainEvent(eventId: number | null, data: unknown): DomainEvent {
@@ -101,4 +101,4 @@ export function rowDetail(item: SessionListItem): string {
   return [folder, item.branch].filter(Boolean).join(" · ");
 }
 
-export const rowAge = (item: SessionListItem, now: number) => short(sessionUpdatedAt(item), now);
+export const rowAge = (item: SessionListItem, now: number) => formatRelative(sessionUpdatedAt(item), { now, compact: true });

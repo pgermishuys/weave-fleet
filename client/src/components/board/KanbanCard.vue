@@ -2,7 +2,7 @@
 import { ExternalLink, Github, TriangleAlert } from "lucide-vue-next";
 import type { BoardCard } from "@/stores/board";
 import { computed, shallowRef } from "vue";
-import { formatRelativeTime } from "@/lib/format-utils";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm";
 
@@ -120,7 +120,7 @@ const githubIssueLabel = computed(() => {
 });
 const githubUpdatedLabel = computed(() => {
   const updatedAt = githubMetadata.value?.updatedAt;
-  return updatedAt ? formatRelativeTime(updatedAt) : null;
+  return updatedAt ? formatRelative(updatedAt) : null;
 });
 const metadataText = computed(() => {
   if (props.card.metadata === null) {
@@ -130,8 +130,8 @@ const metadataText = computed(() => {
   return metadataObject.value === null ? props.card.metadata : null;
 });
 const sourceDetail = computed(() => props.card.sourceKey ?? "No source key");
-const updatedLabel = computed(() => formatRelativeTime(props.card.updatedAt));
-const createdLabel = computed(() => formatRelativeTime(props.card.createdAt));
+const updatedLabel = computed(() => formatRelative(props.card.updatedAt));
+const createdLabel = computed(() => formatRelative(props.card.createdAt));
 
 function beginRename(): void {
   isEditing.value = true;
@@ -226,7 +226,10 @@ function handleDragEnd(): void {
           Stale
         </span>
       </div>
-      <span class="k-card__timestamp">
+      <span
+        class="k-card__timestamp"
+        :title="formatDateTime(card.updatedAt)"
+      >
         Updated {{ updatedLabel }}
       </span>
     </div>
@@ -296,7 +299,7 @@ function handleDragEnd(): void {
           class="k-card__detail"
         >
           <dt>GitHub updated</dt>
-          <dd>{{ githubUpdatedLabel }}</dd>
+          <dd :title="formatDateTime(githubMetadata?.updatedAt)">{{ githubUpdatedLabel }}</dd>
         </div>
       </dl>
 
@@ -318,7 +321,7 @@ function handleDragEnd(): void {
     <dl class="k-card__details">
       <div class="k-card__detail">
         <dt>Created</dt>
-        <dd>{{ createdLabel }}</dd>
+        <dd :title="formatDateTime(card.createdAt)">{{ createdLabel }}</dd>
       </div>
       <div class="k-card__detail">
         <dt>Source key</dt>

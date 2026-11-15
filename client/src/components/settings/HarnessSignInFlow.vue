@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from "@/lib/format";
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { Check, Copy, ExternalLink } from "lucide-vue-next";
 import type { HarnessSignInAttempt, HarnessSignInMethod, HarnessSignInProvider } from "@/api/client";
@@ -62,7 +63,7 @@ const fields = computed(() => (method.value ? visibleFields(method.value.fields,
 const remote = typeof window === "undefined" ? false : isRemoteBrowser(window.location.hostname);
 const deviceCode = computed(() => (attempt.value ? codeToEnter(attempt.value.instructions) : null));
 const expiresAt = computed(() =>
-  attempt.value ? new Date(attempt.value.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+  attempt.value ? formatTime(attempt.value.expiresAt) : "");
 
 watch(method, (next) => {
   answers.value = next ? initialAnswers(next.fields) : {};

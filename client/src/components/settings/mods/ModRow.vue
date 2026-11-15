@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { Undo2 } from "lucide-vue-next";
-import { formatAbsoluteTimestamp, formatRelativeTime } from "@/lib/format-utils";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { KeptMod } from "@/lib/mods/kept";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
@@ -75,7 +75,7 @@ const undo = () => run("undo", () => store.undo(props.mod.name));
           v-if="activeVersion"
           class="mt-1 text-xs text-muted"
         >
-          kept <span :title="formatAbsoluteTimestamp(Date.parse(activeVersion.createdAt))">{{ formatRelativeTime(activeVersion.createdAt) }}</span>
+          kept <RelativeTime :at="activeVersion.createdAt" />
           <template v-if="activeVersion.sessionTitle">
             · from “<a
               v-if="activeVersion.sessionId"

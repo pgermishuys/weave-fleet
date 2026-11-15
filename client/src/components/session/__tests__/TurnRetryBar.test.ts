@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import TurnRetryBar from "@/components/session/TurnRetryBar.vue";
 import type { ScheduledRetry } from "@/lib/turn-retry";
+import { formatWhen } from "@/lib/format";
 
 const NOW = new Date(2026, 9, 7, 1, 51, 43);
 
@@ -29,7 +30,7 @@ describe("TurnRetryBar", () => {
   it("says when Fleet tries again, and that it waits for the limit's reset", () => {
     const wrapper = mount(TurnRetryBar, { props: { retry: retry() } });
 
-    const clock = new Date(NOW.getTime() + 112 * 60_000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    const clock = formatWhen(NOW.getTime() + 112 * 60_000, { now: NOW.getTime() });
     expect(wrapper.get("[data-testid='turn-retry-when']").text()).toBe(`Fleet tries again at ${clock} · in 1 h 52 min`);
     expect(wrapper.text()).toContain("It carries on when the limit resets. Nothing was lost.");
   });

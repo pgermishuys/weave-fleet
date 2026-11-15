@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDate } from "@/lib/format";
 import { computed, nextTick, onUnmounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import SessionContextChips from "@/components/session-context/SessionContextChips.vue";
@@ -74,8 +75,8 @@ const restoredNote = shallowRef(false);
 const restoreError = shallowRef<string | null>(null);
 const checkoutRestoringNow = computed(() => restoreStarted.value || props.checkoutRestoring === true);
 const checkoutRemovedLabel = computed(() => {
-  const date = props.checkoutRemovedAt ? new Date(props.checkoutRemovedAt) : null;
-  const when = date && !Number.isNaN(date.getTime()) ? ` on ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "";
+  const date = formatDate(props.checkoutRemovedAt);
+  const when = date ? ` on ${date}` : "";
   return `Fleet removed this session's checkout${when} to save space. The branch${props.branch ? ` ${props.branch}` : ""} and this conversation are kept; your next message puts it back.`;
 });
 const showCheckoutChip = computed(() => Boolean(props.checkoutRemovedAt) || checkoutRestoringNow.value || restoredNote.value);

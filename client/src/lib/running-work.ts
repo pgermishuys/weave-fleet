@@ -142,24 +142,6 @@ export function workKindLabel(kind: RunningWorkKind): string {
   }
 }
 
-/**
- * A short duration: `58s` in the first minute, then whole minutes, `4m`, `1h 12m`. Seconds only while they matter, so
- * a busy screen doesn't count them in several places at once; the tooltip keeps the exact start.
- */
-export function formatElapsed(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  return minutes % 60 === 0 ? `${hours}h` : `${hours}h ${minutes % 60}m`;
-}
-
-/** How long ago something ended: `just now` in the first minute, then `4m ago`. */
-export function formatAgo(ms: number): string {
-  return ms < 60_000 ? "just now" : `${formatElapsed(ms)} ago`;
-}
-
 /** How often an elapsed time of `ms` needs to tick to stay right: every second in its first minute, then every minute. */
 export function elapsedTickMs(ms: number): number {
   return ms < 60_000 ? 1_000 : 60_000;

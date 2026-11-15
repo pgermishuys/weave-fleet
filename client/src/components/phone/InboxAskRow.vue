@@ -11,7 +11,7 @@ import { collapse } from "@/lib/phone/animate";
 import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
 import { haptic } from "@/lib/phone/haptics";
 import type { InboxItem } from "@/lib/phone/inbox";
-import { short } from "@/lib/phone/time";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
 /**
@@ -116,7 +116,11 @@ function openFromSheet(): void {
       />
       <span class="ph-pcard__title">{{ heading }}</span>
       <span class="ph-pcard__meta">
-        <span class="ph-from">{{ item.machineName }}</span>{{ short(item.updatedAt, now) }}
+        <span class="ph-from">{{ item.machineName }}</span><RelativeTime
+          :at="item.updatedAt"
+          :now="now"
+          compact
+        />
       </span>
     </div>
     <button

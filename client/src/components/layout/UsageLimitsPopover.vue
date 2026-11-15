@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime } from "@/lib/format";
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { Gauge } from "lucide-vue-next";
 import { createReusableTemplate } from "@vueuse/core";
@@ -88,12 +89,11 @@ const chip = computed(() => {
   };
 });
 
-const clock = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
 function readLine(provider: ProviderUsage): string | null {
   const parts: string[] = [];
   if (provider.source) parts.push(`read from ${provider.source}`);
-  if (provider.readAt !== null) parts.push(`last asked ${clock(provider.readAt)}`);
+  if (provider.readAt !== null) parts.push(`last asked ${formatTime(provider.readAt)}`);
   return parts.length ? parts.join(", ") : null;
 }
 

@@ -4,7 +4,7 @@ import { showToast } from "@/composables/phone/use-phone-toast";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { shareLink } from "@/lib/phone/share";
-import { ago } from "@/lib/phone/time";
+import { formatRelative } from "@/lib/format";
 import { Check, CornerDownRight, ImageIcon } from "lucide-vue-next";
 import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
@@ -450,7 +450,7 @@ const statusText = computed(() => {
   switch (value.tone) {
     case "working": return value.detail ? `${value.state} · ${value.detail}` : value.state;
     case "needs-you": return "Needs you";
-    case "finished": return lastMessageAt.value ? `Finished ${ago(lastMessageAt.value, now.value)}` : "Finished";
+    case "finished": return lastMessageAt.value ? `Finished ${formatRelative(lastMessageAt.value, { now: now.value })}` : "Finished";
     case "unreachable": return `Can't reach ${machineName.value} · last heard ${value.detail}`;
     default: return value.state;
   }
