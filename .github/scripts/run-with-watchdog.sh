@@ -33,6 +33,21 @@ beat_every=${WATCHDOG_BEAT_SECONDS:-15}
 [ $# -gt 0 ] || { echo "run-with-watchdog.sh: no command" >&2; exit 2; }
 command_line="$*"
 
+# A SIGINT or SIGTERM ends the command and all it started. The trap goes in before anything starts: one that came after
+# the command started let a cancel that landed first kill only this script (exit 143), leaving the command running. A
+# cancel between `&` and `pid=$!` finds the command in $!; one before it started has nothing to end.
+pid=""
+cancelled() {
+  echo "run-with-watchdog.sh: cancelled, ending the command"
+  [ -n "$pid" ] || pid=${!:-}
+  if [ -n "$pid" ]; then
+    end_all
+    beat "Cancelled after $((SECONDS - started)) s: $command_line"
+  fi
+  exit 130
+}
+trap cancelled INT TERM
+
 descendants() {
   local child
   for child in $(pgrep -P "$1" 2>/dev/null); do
@@ -127,7 +142,6 @@ except OSError as error:
     sys.exit(127)
 ' "$@" &
 pid=$!
-trap 'echo "run-with-watchdog.sh: cancelled, ending the command"; end_all; beat "Cancelled after $((SECONDS - started)) s: $command_line"; exit 130' INT TERM
 
 next_beat=$SECONDS
 while kill -0 "$pid" 2>/dev/null; do

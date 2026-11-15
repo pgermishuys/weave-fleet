@@ -43,9 +43,13 @@ grep -q '::error::' "$log" || fail "nothing said why the command was ended"
 [ -z "$(left)" ] || { fail "left running: $(left | tr '\n' ' ')"; pkill -KILL -f -- "$marker"; }
 
 # Cancelled (the runner's step timeout sends SIGINT, then SIGTERM): it ends the command too.
+# It waits for the command's child itself: the watchdog's own command line holds the marker too, so waiting for any
+# match sent the TERM as soon as the watchdog started.
 "$dog" 60 bash -c "bash -c 'sleep 600; : $marker cancelled' & sleep 600; : $marker" > "$log" 2>&1 &
 dog_pid=$!
-for _ in $(seq 1 50); do [ -n "$(left)" ] && break; sleep 0.1; done
+child() { pgrep -f -- "^bash -c sleep 600; : $marker cancelled\$" || true; }
+for _ in $(seq 1 50); do [ -n "$(child)" ] && break; sleep 0.1; done
+[ -n "$(child)" ] || fail "the command to cancel didn't start its child within 5 s"
 kill -TERM "$dog_pid"
 wait "$dog_pid"; status=$?
 [ $status -eq 130 ] || fail "a cancelled watchdog exited $status, not 130"
