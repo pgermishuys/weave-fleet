@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "~/theme";
+import { wordColor } from "~/theme/words";
 import { Icon, type IconName } from "./icons";
 import { alpha, Text } from "./text";
 
@@ -60,10 +61,11 @@ export function Card({ children, tone = "default", style, testID }: {
 
 type PillTone = "running" | "error" | "waiting" | "accent" | "muted";
 
+/** `fg` for the words, `icon` for the icon beside them (a status colour itself, 3:1), `bg` for the tint. */
 function toneColors(tone: PillTone | "default", c: ReturnType<typeof useTheme>["color"]) {
-  if (tone === "default" || tone === "muted") return { fg: c.muted, bg: tone === "muted" ? c.tint5 : "transparent" };
-  if (tone === "accent") return { fg: c.accent, bg: c.accentDim };
-  return { fg: c[tone], bg: alpha(c[tone], 0.1) };
+  if (tone === "default" || tone === "muted") return { fg: c.muted, icon: c.muted, bg: tone === "muted" ? c.tint5 : "transparent" };
+  if (tone === "accent") return { fg: c.accentText, icon: c.accent, bg: c.accentDim };
+  return { fg: wordColor(tone, c), icon: c[tone], bg: alpha(c[tone], 0.1) };
 }
 
 /** A bordered label: PR, branch, machine. Tappable when `onPress` is given. */
@@ -71,7 +73,7 @@ export function Chip({ label, icon, tone = "default", mono, onPress }: {
   label: string; icon?: IconName; tone?: PillTone | "default"; mono?: boolean; onPress?: () => void;
 }) {
   const { color } = useTheme();
-  const { fg, bg } = toneColors(tone, color);
+  const { fg, icon: iconColor, bg } = toneColors(tone, color);
   const bordered = tone === "default";
   return (
     <Pressable
@@ -82,7 +84,7 @@ export function Chip({ label, icon, tone = "default", mono, onPress }: {
         borderColor: bordered ? color.border : "transparent", flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start",
       }}
     >
-      {icon ? <Icon name={icon} size={12} color={fg} /> : null}
+      {icon ? <Icon name={icon} size={12} color={iconColor} /> : null}
       <Text size={12} weight="medium" mono={mono} style={{ color: fg }} numberOfLines={1}>{label}</Text>
     </Pressable>
   );

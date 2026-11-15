@@ -40,8 +40,8 @@ export function ToolRow({ tool, label, detail, status, adds, dels, chips, output
         <Icon name={TOOL_ICON[tool]} size={15} color={color.muted} />
         <Text size={13.5} weight="medium">{label}</Text>
         <Text mono size={12} tone="muted" numberOfLines={1} style={{ flex: 1, minWidth: 40 }}>{detail}</Text>
-        {adds ? <Text mono size={12} tone="running">{`+${adds}`}</Text> : null}
-        {dels ? <Text mono size={12} tone="error">{`−${dels}`}</Text> : null}
+        {adds ? <Text mono size={12} style={{ color: color.diffAddText }}>{`+${adds}`}</Text> : null}
+        {dels ? <Text mono size={12} style={{ color: color.diffDelText }}>{`−${dels}`}</Text> : null}
         {chips?.map((c) => <Pill key={c.label} label={c.label} tone={c.tone} />)}
         {status === "running" ? <StatusGlyph status="running" size={8} />
           : status === "done" ? <Icon name="check" size={14} color={color.running} />

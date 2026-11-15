@@ -19,6 +19,7 @@ export function WhereLine({ parts, onPress }: { parts: WherePart[]; onPress: (ke
     <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" testID="where-line" contentContainerStyle={{ alignItems: "center", paddingHorizontal: 2 }}>
       {parts.map((part, index) => {
         const lit = part.tone ? (part.tone === "error" ? color.error : color.waiting) : null;
+        const litWords = part.tone ? (part.tone === "error" ? color.errorText : color.waitingText) : null;
         return (
           <View key={part.key} style={{ flexDirection: "row", alignItems: "center" }}>
             {index > 0 ? <Text size={13} tone="muted" style={{ marginHorizontal: 2 }}>·</Text> : null}
@@ -27,7 +28,7 @@ export function WhereLine({ parts, onPress }: { parts: WherePart[]; onPress: (ke
               style={{ minHeight: 40, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 3, justifyContent: "center" }}
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: lit ? 7 : 0, height: 26, borderRadius: 13, backgroundColor: lit ? alpha(lit, 0.14) : "transparent" }}>
-                <Text size={12.5} weight={lit ? "medium" : "regular"} numberOfLines={1} style={{ color: lit ?? color.muted, maxWidth: 160 }}>{part.label}</Text>
+                <Text size={12.5} weight={lit ? "medium" : "regular"} numberOfLines={1} style={{ color: litWords ?? color.muted, maxWidth: 160 }}>{part.label}</Text>
                 <Icon name="chevron-down" size={12} color={lit ?? color.muted} />
               </View>
             </Pressable>
@@ -54,12 +55,13 @@ export function Notice({ tone, lead, rest, testID }: { tone: "warning" | "error"
 export function ModelChip({ label, onPress, tone }: { label: string; onPress: () => void; tone?: "warning" }) {
   const { color } = useTheme();
   const lit = tone === "warning" ? color.waiting : null;
+  const litWords = tone === "warning" ? color.waitingText : null;
   return (
     <Pressable
       testID="model-chip" onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={{ top: 6, bottom: 6 }}
       style={{ height: 30, maxWidth: "100%", flexShrink: 1, paddingHorizontal: 10, borderRadius: 15, borderWidth: 1, borderColor: lit ? alpha(lit, 0.5) : color.border, backgroundColor: lit ? alpha(lit, 0.12) : color.tint5, flexDirection: "row", alignItems: "center", gap: 4 }}
     >
-      <Text size={12.5} numberOfLines={1} style={{ color: lit ?? color.text, flexShrink: 1 }}>{label}</Text>
+      <Text size={12.5} numberOfLines={1} style={{ color: litWords ?? color.text, flexShrink: 1 }}>{label}</Text>
       <Icon name="chevron-down" size={12} color={lit ?? color.muted} />
     </Pressable>
   );
