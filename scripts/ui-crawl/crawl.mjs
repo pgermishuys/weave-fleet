@@ -3,7 +3,8 @@
 // WCAG 2 A/AA pass and icon-only controls with no name. Writes <out>/crawl.json and <out>/shots/*.png.
 //
 // Usually run through run.sh, which builds the client and serves it. On its own:
-//   node crawl.mjs --base=http://127.0.0.1:4173 [--out=out] [--only=<id substring>] [--variants=a,b] [--workers=3]
+//   node crawl.mjs --base=http://127.0.0.1:4173 [--out=out] [--set=nightly|themes] [--only=<id substring>]
+//     [--variants=a,b] [--workers=3]
 //
 // The SignalR hub is faked (negotiate + WebSocket) so a session's conversation renders without an API.
 import { chromium } from "playwright";
@@ -11,7 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LABS_ON, SCREENS, VARIANTS, sessionSnapshot } from "./screens.mjs";
+import { LABS_ON, SCREENS, VARIANTS, sessionSnapshot, variantsOf } from "./screens.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (name, fallback) => {
@@ -22,7 +23,7 @@ const BASE = arg("base", process.env.FLEET_UI_BASE ?? "http://127.0.0.1:4173");
 const OUT = arg("out", join(here, "out"));
 const ONLY = arg("only");
 const WORKERS = Math.max(1, Number(arg("workers", "3")));
-const variantNames = arg("variants")?.split(",") ?? Object.keys(VARIANTS).filter((n) => !VARIANTS[n].onRequest);
+const variantNames = arg("variants")?.split(",") ?? variantsOf(arg("set", "nightly"));
 for (const n of variantNames) if (!VARIANTS[n]) throw new Error(`unknown variant ${n}`);
 
 const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
@@ -199,11 +200,11 @@ async function visit(browser, vName, screen) {
       return out;
     });
     await page.addScriptTag({ content: AXE });
-    rec.axe = await page.evaluate(async () => {
-      const r = await window.axe.run(document, {
-        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] },
-        resultTypes: ["violations"],
-      });
+    const runOnly = v.axeRules
+      ? { type: "rule", values: v.axeRules }
+      : { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] };
+    rec.axe = await page.evaluate(async (runOnly) => {
+      const r = await window.axe.run(document, { runOnly, resultTypes: ["violations"] });
       return r.violations.map((x) => ({
         id: x.id,
         impact: x.impact,
@@ -211,7 +212,7 @@ async function visit(browser, vName, screen) {
         count: x.nodes.length,
         targets: x.nodes.slice(0, 4).map((n) => ({ t: n.target.join(" "), s: (n.failureSummary || "").split("\n")[1]?.slice(0, 160) })),
       }));
-    });
+    }, runOnly);
     await page.screenshot({ path: join(OUT, "shots", `${screen.id}--${vName}.png`) });
   } catch (e) {
     rec.pageErrors.push("CRAWL: " + String(e.message).split("\n")[0].slice(0, 300));

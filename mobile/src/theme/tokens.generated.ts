@@ -33,7 +33,7 @@ export const tokens = {
     "card": "#ffffff",
     "border": "rgba(26, 25, 24, 0.09)",
     "text": "#1A1918",
-    "muted": "#6E6A65",
+    "muted": "#67645F",
     "accent": "#5B6EC7",
     "accentDim": "rgba(91, 110, 199, 0.12)",
     "onAccent": "#ffffff",

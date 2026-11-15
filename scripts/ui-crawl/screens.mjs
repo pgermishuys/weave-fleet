@@ -18,6 +18,9 @@ export const LABS_ON = {
   LiveMachines: "true",
 };
 
+/** The axe rules a theme can change. */
+const THEME_RULES = ["color-contrast", "link-in-text-block"];
+
 /** Theme, window size and Labs. `phone` variants are 390 px wide: sideways overflow there is a gate. */
 export const VARIANTS = {
   "dark-desk-labsoff": { theme: "dark", w: 1440, h: 900, labs: false },
@@ -28,7 +31,26 @@ export const VARIANTS = {
   // Fleet's theme against the opposite operating-system colour scheme: only with --variants=…
   "dark-desk-oslight": { theme: "dark", os: "light", w: 1440, h: 900, labs: true, onRequest: true },
   "light-desk-osdark": { theme: "light", os: "dark", w: 1440, h: 900, labs: true, onRequest: true },
+  // The other eight themes, desktop with Labs on, each under its own operating-system scheme: the "themes" set, a
+  // second pass with its own baseline (axe-baseline-themes.json). Dark and light are already in the nightly set. Only
+  // axe's colour rules run there: the rest see the same markup in every theme, and the nightly set already counts them.
+  ...Object.fromEntries(
+    [
+      ["weave-classic", "dark"],
+      ["black", "dark"],
+      ["nord", "dark"],
+      ["dracula", "dark"],
+      ["solarized-dark", "dark"],
+      ["solarized-light", "light"],
+      ["monokai", "dark"],
+      ["github-dark", "dark"],
+    ].map(([theme, os]) => [`${theme}-desk`, { theme, os, w: 1440, h: 900, labs: true, set: "themes", axeRules: THEME_RULES }]),
+  ),
 };
+
+/** The variants a crawl of `set` visits: "nightly" (the five above) or "themes". On-request variants belong to none. */
+export const variantsOf = (set = "nightly") =>
+  Object.keys(VARIANTS).filter((n) => !VARIANTS[n].onRequest && (VARIANTS[n].set ?? "nightly") === set);
 
 const SETTINGS = {
   general: "General",
