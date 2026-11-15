@@ -10,7 +10,10 @@ marker="watchdog-test-$$-$RANDOM"
 log="$(mktemp)"
 failed=0
 fail() { echo "FAIL: $*"; failed=1; }
-left() { pgrep -f -- "$marker" | grep -vx "$$" || true; }
+escaped="$(mktemp)"
+# Everything still running: what holds the marker, and the escaped process's group, whose sleep doesn't hold it.
+left() { { pgrep -f -- "$marker"; [ -s "$escaped" ] && pgrep -g "$(cat "$escaped")"; } 2>/dev/null | grep -vx "$$" || true; }
+clean_up() { pkill -KILL -f -- "$marker"; [ -s "$escaped" ] && pkill -KILL -g "$(cat "$escaped")"; }
 # Each process holds the marker after its sleep, so bash can't exec the sleep in its place and drop the marker.
 
 # The command's own status comes back.
@@ -23,10 +26,13 @@ mine=$(ps -o pgid= -p $$ | tr -d ' ')
 theirs=$("$dog" 10 bash -c 'ps -o pgid= -p $$' | tr -d ' ')
 [ -n "$theirs" ] && [ "$theirs" != "$mine" ] || fail "the command ran in this process group ($mine), not one of its own ($theirs)"
 
-# A process that leaves the command's group and its parent, as a daemon would: only WATCHDOG_ALSO finds it.
+# A process that leaves the command's group and its parent, as a daemon would: only WATCHDOG_ALSO finds it. Its own
+# child, a sleep, doesn't hold the marker, as a browser's helpers don't hold its profile path: the watchdog ends it as
+# one of the escaped process's descendants and group. It leads that group (setsid), and writes its number down so
+# left() can look in it.
 tree="$(mktemp)"
 cat > "$tree" <<EOF
-( python3 -c 'import os, sys; os.setsid(); os.execvp("bash", ["bash", "-c", "sleep 600; : $marker escaped"])' & )
+( python3 -c 'import os, sys; os.setsid(); os.execvp("bash", ["bash", "-c", "echo \$\$ > $escaped; sleep 600; : $marker escaped"])' & )
 ( bash -c 'sleep 600; : $marker orphan' & )
 bash -c 'sleep 600; : $marker child' &
 sleep 600
@@ -40,7 +46,8 @@ took=$((SECONDS - start))
 [ $status -eq 124 ] || fail "a command past its limit exited $status, not 124"
 [ $took -le 15 ] || fail "ending a command 2 s past its limit took ${took} s"
 grep -q '::error::' "$log" || fail "nothing said why the command was ended"
-[ -z "$(left)" ] || { fail "left running: $(left | tr '\n' ' ')"; pkill -KILL -f -- "$marker"; }
+[ -s "$escaped" ] || fail "the escaped process didn't write down its group"
+[ -z "$(left)" ] || { fail "left running: $(left | tr '\n' ' ')"; clean_up; }
 
 # Cancelled (the runner's step timeout sends SIGINT, then SIGTERM): it ends the command too.
 # It waits for the command's child itself: the watchdog's own command line holds the marker too, so waiting for any
@@ -53,7 +60,7 @@ for _ in $(seq 1 50); do [ -n "$(child)" ] && break; sleep 0.1; done
 kill -TERM "$dog_pid"
 wait "$dog_pid"; status=$?
 [ $status -eq 130 ] || fail "a cancelled watchdog exited $status, not 130"
-[ -z "$(left)" ] || { fail "left running after cancel: $(left | tr '\n' ' ')"; pkill -KILL -f -- "$marker"; }
+[ -z "$(left)" ] || { fail "left running after cancel: $(left | tr '\n' ' ')"; clean_up; }
 
 # The heartbeat: written into the check run while the command runs, and once more with how it ended. A stand-in for
 # GitHub's API records the title of each PATCH it's sent. It's a plain TCPServer: http.server.HTTPServer looks up
@@ -90,6 +97,6 @@ tail -1 "$api_dir/beats" | grep -q " Ended by the watchdog after 2 s: sleep 30$"
 kill "$api_pid" 2>/dev/null
 rm -rf "$api_dir"
 
-rm -f "$log" "$tree"
+rm -f "$log" "$tree" "$escaped"
 [ $failed -eq 0 ] && echo "run-with-watchdog.sh: all cases pass"
 exit $failed
