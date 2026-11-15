@@ -8,6 +8,16 @@ Replies word by word (so streaming shows), and on keywords in the last user text
   long-reply -> a reply taller than the screen, ending "That's every step, run N.". It stops after Step 20 and goes on
                 only once the walk posts to /release (or after 5 minutes), so the walk sees it streaming however slow
                 the device is
+  spawn-agent -> calls the task tool (a sub-agent), so the harness starts a child session; the child's own turn gets a one
+                line reply and ends, then the parent says "Sub-agent reported: ..., run N". Fleet shows the delegation: the
+                child under its parent in the session list, in the Progress panel and in the conversation
+  background-work -> calls the task tool with a sub-agent whose own turn streams for about 30 s (a bash call would wait
+                for an answer under "ask"), so Fleet's running-work strip shows it for that long, then the child ends and the parent says "Background work finished, run N".
+                (OpenCode 1's task tool blocks its parent until the child ends, so the work is "running" while the parent
+                is too; OpenCode 2's background tools aren't used here.)
+  ask-permission -> calls the write tool on notes/report.md in the session's folder, which the harness asks permission for
+                when Fleet's PermissionLevel preference is "ask" (start-fleet.sh sets it); on allow it says "Wrote the report,
+                run N", on deny "Couldn't write the report, run N". With the level on "allow everything" there's no card.
 Anything else gets a short Markdown reply.
 """
 import json, os, re, sys, threading, time
@@ -89,13 +99,35 @@ class H(BaseHTTPRequestHandler):
 
         call, reply, pace, hold = None, None, 0.06, None
         slow = "slow-task" in text and "bash" in tools
-        if last_role == "tool" and page_tool and "fleet_page_show" in str(msgs[-1].get("name", "")) + tool_call_name(msgs):
+        task_done = last_role == "tool" and tool_call_name(msgs) == "task"
+        if task_done:
+            head = "Background work finished" if "background-work" in text else "Sub-agent reported: the off-by-one is in paginate()"
+            reply = f"{head}, run {next_run(msgs, head)} of the suite."
+        elif last_role == "tool" and tool_call_name(msgs) == "write":
+            ok = "error" not in str(msgs[-1].get("content", "")).lower() and "rejected" not in str(msgs[-1].get("content", "")).lower()
+            reply = f"{'Wrote the report' if ok else 'Couldn' + chr(39) + 't write the report'}, run {next_run(msgs, 'the report, run ')}."
+        elif last_role == "tool" and page_tool and "fleet_page_show" in str(msgs[-1].get("name", "")) + tool_call_name(msgs):
             m = re.search(r'"[Ss]ummary"\s*:\s*"([^"]*)"', str(msgs[-1].get("content", "")))
             reply = f"Going with **{m.group(1) if m else 'nothing'}**, run {next_run(msgs, 'Going with ')} of the suite."
         elif last_role == "tool":
             reply = f"Ran it, run {next_run(msgs, 'Ran it, run ')} of the suite. **All 42 tests pass** and the build is clean."
         elif "title" in text.lower() and "generate" in text.lower() or (msgs and "title" in str(msgs[0].get("content", ""))[:400].lower() and not tools):
             reply = "Fix pagination off-by-one"
+        elif "background-child" in text:
+            # Streams for about 30 s (60 words, 0.5 s each) rather than calling bash, which "ask" would hold for an answer.
+            reply = " ".join(f"Migrating-batch-{i}" for i in range(1, 60)) + " Migrated the cache."
+            pace = 0.5
+        elif "spawn-child" in text:
+            reply = "The off-by-one is in paginate(): it stops one page early."
+        elif "spawn-agent" in text and "task" in tools:
+            call = ("task", {"description": "Find the off-by-one", "subagent_type": "general",
+                             "prompt": "spawn-child: find the off-by-one in paginate() and say where it is, in one line."})
+        elif "background-work" in text and "task" in tools:
+            call = ("task", {"description": "Migrate the cache", "subagent_type": "general",
+                             "prompt": "background-child: migrate the cache."})
+        elif "ask-permission" in text and "write" in tools:
+            call = ("write", {"filePath": os.path.join(os.environ["HOME"], "src/demo-app/notes/report.md"),
+                              "content": "# Report\n\nThe off-by-one is fixed.\n"})
         elif slow:
             call = ("bash", {"command": "sleep 45 && echo migrated", "description": "Migrate the cache"})
         elif "show-page" in text and page_tool:
