@@ -76,7 +76,7 @@ function choose(key: string): void {
 .mx-switch:hover, .mx-switch[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .mx-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mx-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
-.mx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.82143rem; color: var(--coral); }
+.mx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.82143rem; color: var(--coral-text); }
 .mx-chev { width: 12px; height: 12px; flex-shrink: 0; color: var(--muted); }
 .mx-menu { min-width: 240px; padding: 4px; }
 .mx-menu-label { margin: 0; padding: 6px 8px 4px; font-size: 0.71429rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }

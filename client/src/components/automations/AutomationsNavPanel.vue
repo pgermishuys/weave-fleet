@@ -345,7 +345,7 @@ function handleCreate(): void {
   max-width: 7em;
   flex-shrink: 0;
   overflow: hidden;
-  color: var(--coral);
+  color: var(--coral-text);
   font-family: var(--font-mono-stack);
   font-size: 0.82143rem;
   text-overflow: ellipsis;
@@ -377,7 +377,7 @@ function handleCreate(): void {
 }
 
 .automation-row__meta--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .automations-nav-empty {

@@ -241,7 +241,7 @@ function count(n: number, noun: string): string {
 :deep(.ansi-fg-bright-black) {
   color: color-mix(in srgb, var(--muted) 80%, transparent);
 }
-:deep(.ansi-fg-red) { color: var(--error); }
+:deep(.ansi-fg-red) { color: var(--error-text); }
 :deep(.ansi-fg-green) { color: var(--running-text); }
 :deep(.ansi-fg-yellow) { color: var(--idle-text); }
 :deep(.ansi-fg-blue) { color: var(--complete-text); }
@@ -249,7 +249,7 @@ function count(n: number, noun: string): string {
 :deep(.ansi-fg-cyan) { color: color-mix(in srgb, var(--complete-text) 50%, var(--running-text)); }
 :deep(.ansi-fg-white),
 :deep(.ansi-fg-bright-white) { color: var(--text); }
-:deep(.ansi-fg-bright-red) { color: color-mix(in srgb, var(--error) 75%, var(--text)); }
+:deep(.ansi-fg-bright-red) { color: color-mix(in srgb, var(--error-text) 75%, var(--text)); }
 :deep(.ansi-fg-bright-green) { color: color-mix(in srgb, var(--running-text) 75%, var(--text)); }
 :deep(.ansi-fg-bright-yellow) { color: color-mix(in srgb, var(--idle-text) 75%, var(--text)); }
 :deep(.ansi-fg-bright-blue) { color: color-mix(in srgb, var(--complete-text) 75%, var(--text)); }

@@ -161,7 +161,7 @@ function runNotes(run: AutomationRun): string[] {
 
 /* The machine a run went to, in the sidebar's machine coral. */
 .automation-run__title .automation-run__machine {
-  color: var(--coral);
+  color: var(--coral-text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
 }
@@ -195,7 +195,7 @@ function runNotes(run: AutomationRun): string[] {
 }
 
 .automation-run__state--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .automation-run__state--warn {

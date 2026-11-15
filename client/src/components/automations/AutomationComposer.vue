@@ -820,7 +820,7 @@ defineExpose({ focusMessage });
 
 .automation-composer__runs-on b {
   font-weight: 500;
-  color: var(--coral);
+  color: var(--coral-text);
 }
 
 .automation-composer__separator {
@@ -851,7 +851,7 @@ defineExpose({ focusMessage });
 /* The machine runs go to, when it's another one, in the sidebar's machine coral. */
 .automation-composer__plan-machine {
   margin-right: 4px;
-  color: var(--coral);
+  color: var(--coral-text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
 }

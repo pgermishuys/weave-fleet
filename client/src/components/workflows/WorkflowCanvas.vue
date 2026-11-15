@@ -592,7 +592,7 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
   align-items: center;
   gap: 5px;
   margin-top: 6px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 11.5px;
 }
 
@@ -717,6 +717,6 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
 
 .wf-loop-label--missing {
   border-color: var(--error);
-  color: var(--error);
+  color: var(--error-text);
 }
 </style>

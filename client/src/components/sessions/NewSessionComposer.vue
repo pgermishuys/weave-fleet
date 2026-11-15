@@ -1458,7 +1458,7 @@ onUnmounted(() => {
   border-radius: var(--radius-card);
   padding: 10px 12px;
   background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1635,7 +1635,7 @@ onUnmounted(() => {
 /* The machine a session on another machine starts on, in the sidebar's machine coral. */
 .new-session__plan-machine {
   margin-right: 4px;
-  color: var(--coral);
+  color: var(--coral-text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
 }

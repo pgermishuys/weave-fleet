@@ -181,7 +181,7 @@ function openRun(): void {
 }
 
 .wf-group__meta--fail {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 /* Steps sit under the run, each step's dot under the run's title. */

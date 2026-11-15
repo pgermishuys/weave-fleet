@@ -387,7 +387,7 @@ async function onAllow(provider: string): Promise<void> {
 
 .usage-chip--used {
   background: color-mix(in srgb, var(--error) 14%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .usage-chip__icon {
@@ -483,7 +483,7 @@ async function onAllow(provider: string): Promise<void> {
 }
 
 .usage-pop__row--used {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .usage-pop__bar {

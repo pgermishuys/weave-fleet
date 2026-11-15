@@ -303,7 +303,7 @@ async function copyCommand(): Promise<void> {
 
 .harness-update__error {
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
 }
 

@@ -433,7 +433,7 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
 .context-ring[data-tone="danger"] .context-ring__fill,
 .context-ring[data-tone="danger"] .context-ring__percent {
   stroke: var(--error);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .context-ring--amber:not([data-tone="danger"]) .context-ring__fill,
@@ -663,7 +663,7 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
 
 .context-card__error {
   margin: 12px 0 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12px;
 }
 

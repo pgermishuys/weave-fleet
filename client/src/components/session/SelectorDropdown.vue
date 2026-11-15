@@ -424,7 +424,7 @@ function selectItem(itemId: string): void {
 }
 
 .selector-dropdown__usage--used {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .selector-dropdown__usage-bar {

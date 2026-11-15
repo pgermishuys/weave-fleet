@@ -84,7 +84,7 @@ function press(): void {
 
 .mod-button--danger {
   background: color-mix(in srgb, var(--error) 16%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .mod-button--danger:hover:not(:disabled) {

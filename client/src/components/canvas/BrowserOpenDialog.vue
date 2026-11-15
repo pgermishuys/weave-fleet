@@ -239,7 +239,7 @@ async function submit(): Promise<void> {
   border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
   border-radius: var(--radius-btn);
   background: color-mix(in srgb, var(--error) 8%, transparent);
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
 }
 </style>

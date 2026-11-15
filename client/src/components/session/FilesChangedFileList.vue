@@ -346,7 +346,7 @@ function normalizeLineCount(value: number | null | undefined): number {
 
 .files-changed-file-list__notice--error {
   border-color: color-mix(in srgb, var(--error) 35%, var(--border));
-  color: color-mix(in srgb, var(--error) 76%, var(--text));
+  color: color-mix(in srgb, var(--error-text) 76%, var(--text));
 }
 
 .files-changed-file-list__loading {
@@ -526,7 +526,7 @@ function normalizeLineCount(value: number | null | undefined): number {
 }
 
 .files-changed-file-list__stat--remove {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 @keyframes files-changed-file-list-pulse {

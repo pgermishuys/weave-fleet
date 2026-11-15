@@ -624,7 +624,7 @@ onUnmounted(() => {
 
 .notice__btn--danger {
   background: color-mix(in srgb, var(--error) 16%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .notice__btn--danger:hover {

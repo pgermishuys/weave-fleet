@@ -168,7 +168,7 @@ function handleInputKeyDown(event: KeyboardEvent): void {
           </span>
 
           <CommandShortcut v-else-if="command.globalShortcut">
-            <kbd class="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-secondary px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+            <kbd class="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
               {{ formatGlobalShortcut(command.globalShortcut) }}
             </kbd>
           </CommandShortcut>
@@ -184,7 +184,7 @@ function handleInputKeyDown(event: KeyboardEvent): void {
         <span><kbd class="font-mono">Esc</kbd> Close</span>
       </div>
 
-      <span class="opacity-50"><kbd class="font-mono">{{ isApplePlatform() ? "⌘K" : "Ctrl+K" }}</kbd> toggle</span>
+      <span><kbd class="font-mono">{{ isApplePlatform() ? "⌘K" : "Ctrl+K" }}</kbd> toggle</span>
     </div>
   </CommandDialog>
 </template>

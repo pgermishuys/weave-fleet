@@ -635,6 +635,6 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 .pc__error {
   margin: 0 8px;
   font-size: var(--ph-t-meta);
-  color: var(--error);
+  color: var(--error-text);
 }
 </style>

@@ -162,7 +162,7 @@ const selectedName = computed(() =>
 }
 
 .ns-machine-chip--down .ns-machine-chip__name {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .ns-machine__dot {

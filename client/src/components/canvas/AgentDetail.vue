@@ -223,7 +223,7 @@ async function stop(): Promise<void> {
 }
 
 .agent-detail__error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .agent-detail__actions {

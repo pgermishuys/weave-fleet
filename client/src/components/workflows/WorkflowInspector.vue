@@ -764,7 +764,7 @@ h3 {
 }
 
 .wf-help--error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .wf-help code {
@@ -976,7 +976,7 @@ button.wf-radio__option {
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
   background: none;
-  color: var(--error);
+  color: var(--error-text);
   font: inherit;
   font-size: 12px;
   cursor: pointer;

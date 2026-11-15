@@ -684,7 +684,7 @@ const firstRunHint = computed(() => {
 }
 
 .automation-page__danger {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .automation-page__body {
@@ -733,7 +733,7 @@ const firstRunHint = computed(() => {
 .automation-page__error {
   border-color: color-mix(in srgb, var(--error) 30%, transparent);
   background: color-mix(in srgb, var(--error) 10%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .automation-page__notice--warn {

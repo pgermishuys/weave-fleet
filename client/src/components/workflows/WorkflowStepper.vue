@@ -347,7 +347,7 @@ function open(step: WorkflowRunStep): void {
 }
 
 .wf-stepper__error {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .wf-stp__extra {

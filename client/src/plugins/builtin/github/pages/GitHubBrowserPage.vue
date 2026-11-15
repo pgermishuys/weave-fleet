@@ -478,7 +478,7 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 13px;
 }
 
@@ -587,7 +587,7 @@ const expiresIn = computed(() => (deviceState.value.status === "awaiting-auth"
   align-items: center;
   gap: 8px;
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
 }
 

@@ -580,7 +580,7 @@ function openRun(run: WorkflowRun): void {
   border: 1px solid color-mix(in srgb, var(--error) 40%, var(--border));
   border-radius: var(--radius-card);
   list-style: none;
-  color: var(--error);
+  color: var(--error-text);
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -744,7 +744,7 @@ function openRun(run: WorkflowRun): void {
 .wf-runs__fail {
   width: 13px;
   height: 13px;
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .wf-runs__title {
@@ -780,7 +780,7 @@ function openRun(run: WorkflowRun): void {
 }
 
 .wf-runs__status--fail {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .wf-dot-wait {

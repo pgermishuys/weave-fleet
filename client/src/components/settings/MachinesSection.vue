@@ -1117,7 +1117,7 @@ onUnmounted(() => stopPolling?.());
   padding: 1px 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--coral) 14%, transparent);
-  color: var(--coral);
+  color: var(--coral-text);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -1204,7 +1204,7 @@ onUnmounted(() => stopPolling?.());
 }
 
 .machine-card__state--bad {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .machine-card__actions {

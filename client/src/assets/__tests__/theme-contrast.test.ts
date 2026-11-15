@@ -17,6 +17,8 @@
 //   pills used raw Tailwind greens and ambers (text-green-300 was 1.28:1 on the light theme).
 // - Accent words (links, picked labels): --accent-text, 4.5:1 on every surface, on --accent-dim and on a 14% accent
 //   tint. The default --accent as words was 3.81:1 on a card, solarized-light's 3.00:1.
+// - Error and coral: --error-text and --coral-text as words, the colours themselves 3:1 as icons (nord's --error was
+//   2.46:1, monokai's 2.89:1).
 // - Muted words: --muted, 4.5:1 on every surface (solarized's own was 4.11:1 and 3.64:1).
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -305,10 +307,10 @@ describe("error words", () => {
   });
 });
 
-const STATUSES = ["running", "idle", "complete", "queued"] as const;
+const STATUSES = ["running", "idle", "complete", "queued", "coral", "error"] as const;
 // A rule may colour with a status itself (not its -text word colour) only where it draws an icon, glyph or mark.
 const NON_TEXT = /svg|icon|glyph|star|__check\b|__mark|__shield|__marker|ring__fill/;
-const STATUS_TOKEN = /var\(--(running|idle|complete|queued|status-waiting|pr-open|pr-blocked|pr-merged|pr-closed|check-pass|diff-add|diff-del|accent|primary)\)/;
+const STATUS_TOKEN = /var\(--(running|idle|complete|queued|status-waiting|pr-open|pr-blocked|pr-merged|pr-closed|check-pass|diff-add|diff-del|accent|primary|error|check-fail|coral)\)/;
 // Components this file checks on their own terms: the session row's mixes and the GitHub state icons.
 const OWN_TERMS = new Set(["components/github/PrBadge.vue", "components/sessions/SessionItem.vue", "components/github/CheckIcon.vue", "components/github/GitHubItemIcon.vue", "components/sessions/StatusGlyph.vue"]);
 const PALETTE = /\b(?:text|bg|border|fill|stroke|ring)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
@@ -337,7 +339,7 @@ describe("status words", () => {
     for (const { file, text } of sources()) {
       if (OWN_TERMS.has(file)) continue;
       // Tailwind: text-running and friends only on an icon (a PascalCase component or an <svg>).
-      if (/\btext-(?:running|idle|complete|queued|accent)(?![-\w/])/.test(text)) for (const tag of text.matchAll(/<([A-Za-z][\w-]*)\b[^>]*?\btext-(?:running|idle|complete|queued|accent)(?![-\w/])/g)) {
+      if (/\btext-(?:running|idle|complete|queued|accent|coral)(?![-\w/])/.test(text)) for (const tag of text.matchAll(/<([A-Za-z][\w-]*)\b[^>]*?\btext-(?:running|idle|complete|queued|accent|coral)(?![-\w/])/g)) {
         if (!/^(?:[A-Z]|svg$)/.test(tag[1])) offenders.push(`${file} <${tag[1]}> uses a status colour as a text class`);
       }
       if (!STATUS_TOKEN.test(text)) continue;

@@ -317,7 +317,7 @@ async function handleDelete(): Promise<void> {
 }
 
 .dash-row__status--error {
-  color: var(--error);
+  color: var(--error-text);
   font-weight: 500;
 }
 
@@ -366,7 +366,7 @@ async function handleDelete(): Promise<void> {
 
 .dash-row__action--danger:hover {
   background: color-mix(in srgb, var(--error) 12%, transparent);
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .dash-row__action:disabled {

@@ -1649,7 +1649,7 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
 
 .ns-folder-error {
   margin: 0 8px 8px;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
 }
 

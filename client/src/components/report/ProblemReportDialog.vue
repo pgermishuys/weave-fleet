@@ -1139,7 +1139,7 @@ function formatTime(date: Date): string {
 
 .report__was {
   margin-right: 4px;
-  color: var(--error);
+  color: var(--error-text);
   text-decoration-color: color-mix(in srgb, var(--error) 70%, transparent);
 }
 
@@ -1234,7 +1234,7 @@ function formatTime(date: Date): string {
 .report__error {
   flex-basis: 100%;
   margin: 0;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 12.5px;
 }
 
