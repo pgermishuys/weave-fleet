@@ -19,7 +19,8 @@
 # step) kills them too. Otherwise it exits with the command's own status.
 #
 # WATCHDOG_ALSO: a pattern for processes to end with the tree although they've left it, such as a browser that lost its
-#   parent. It's read from the environment so it can't match this script's own command line.
+#   parent, together with everything they started and the rest of the group they lead. It's read from the environment
+#   so it can't match this script's own command line, and a match that is this script or runs it is never ended.
 # WATCHDOG_CHECK_RUN: the job's own check run (${{ job.check_run_id }}). Every WATCHDOG_BEAT_SECONDS (15) the load,
 #   memory and the tree's processes are written into its output with GH_TOKEN, so they outlive the runner. Read them
 #   with `gh api repos/<owner>/<repo>/check-runs/<job id> --jq .output.text`.
@@ -56,9 +57,28 @@ descendants() {
   done
 }
 
-# Every process to end: the command's group, all the command started, and whatever matches WATCHDOG_ALSO.
+# This script, the processes it runs under and its own group: never ended, whatever WATCHDOG_ALSO matches.
+spared=" $$ "
+p=$$
+while p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') && [ -n "$p" ] && [ "$p" -gt 1 ]; do spared+="$p "; done
+own_group=$(ps -o pgid= -p $$ | tr -d ' ')
+
+# Whatever matches WATCHDOG_ALSO, with all it started and, if it leads a group (a process that left the tree with
+# setsid does), the rest of that group: a browser's helpers don't carry its profile path, and they'd outlive it.
+also_targets() {
+  local match
+  for match in $(pgrep -f -- "$also"); do
+    case "$spared" in *" $match "*) continue ;; esac
+    echo "$match"
+    descendants "$match"
+    [ "$match" != "$own_group" ] && [ "$(ps -o pgid= -p "$match" | tr -d ' ')" = "$match" ] && pgrep -g "$match"
+  done
+}
+
+# Every process to end: the command's group, all the command started, and whatever matches WATCHDOG_ALSO with all it
+# started.
 targets() {
-  { echo "$pid"; pgrep -g "$pid"; descendants "$pid"; [ -n "$also" ] && pgrep -f -- "$also"; } 2>/dev/null \
+  { echo "$pid"; pgrep -g "$pid"; descendants "$pid"; [ -n "$also" ] && also_targets; } 2>/dev/null \
     | grep -vx "$$" | sort -un
 }
 
