@@ -287,6 +287,14 @@ const openFolds = shallowRef<ReadonlySet<string>>(new Set());
 function foldKey(path: string, id: string): string {
   return `${path}\u0000${id}`;
 }
+/**
+ * A hunk's lines scroll sideways unless they wrap, so a keyboard has to be able to reach them (a tab stop, then the
+ * arrow keys) and a screen reader has to know what the region holds.
+ */
+function scrollRegion(label: string): Record<string, string | number | undefined> {
+  return { role: "region", "aria-label": label, tabindex: wrap.value ? undefined : 0 };
+}
+
 function openFold(path: string, id: string): void {
   openFolds.value = new Set([...openFolds.value, foldKey(path, id)]);
 }
@@ -1027,6 +1035,7 @@ function onCodeScroll(event: Event): void {
                 <div
                   v-else-if="layout === 'unified'"
                   class="rscroll"
+                  v-bind="scrollRegion(`Unchanged lines of ${file.file}`)"
                 >
                   <div class="rinner">
                     <div
@@ -1049,6 +1058,7 @@ function onCodeScroll(event: Event): void {
                 <div
                   v-else
                   class="rsplit"
+                  v-bind="scrollRegion(`Unchanged lines of ${file.file}`)"
                 >
                   <div
                     v-for="row in splitFoldRows(item.lines)"
@@ -1109,6 +1119,7 @@ function onCodeScroll(event: Event): void {
                 <div
                   v-if="layout === 'unified'"
                   class="rscroll"
+                  v-bind="scrollRegion(`Changes to ${file.file} at ${item.name || `line ${item.startLine}`}`)"
                 >
                   <div class="rinner">
                     <div
@@ -1141,6 +1152,7 @@ function onCodeScroll(event: Event): void {
                 <div
                   v-else
                   class="rsplit"
+                  v-bind="scrollRegion(`Changes to ${file.file} at ${item.name || `line ${item.startLine}`}`)"
                 >
                   <div
                     v-for="(row, n) in hunkRows(item)"
@@ -1601,8 +1613,16 @@ function onCodeScroll(event: Event): void {
   min-width: max-content;
 }
 
-.review--wrap .rscroll {
+.review--wrap .rscroll,
+.rscroll:focus-visible {
+  /* The fade would hide the right edge of the focus ring. */
   mask-image: none;
+}
+
+/* A hunk's lines fill its file card, which clips anything outside it: the ring goes inside. */
+.rscroll:focus-visible,
+.rsplit:focus-visible {
+  outline-offset: -2px;
 }
 
 .review--wrap .rinner {

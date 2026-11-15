@@ -31,25 +31,28 @@ function handleCollapse(): void {
 </script>
 
 <template>
-  <div
-    class="right-tabs"
-    role="tablist"
-    aria-label="Right panel tabs"
-  >
-    <button
-      v-for="tab in tabs"
-      :key="tab.id"
-      :id="`tab-${tab.id}`"
-      type="button"
-      class="right-tab"
-      :class="{ active: activeTab === tab.id }"
-      role="tab"
-      :aria-selected="activeTab === tab.id"
-      :aria-controls="`panel-${tab.id}`"
-      @click="handleSelect(tab.id)"
+  <div class="right-tabs">
+    <!-- The collapse button sits beside the tablist, not in it: a tablist holds only tabs. -->
+    <div
+      class="right-tabs__list"
+      role="tablist"
+      aria-label="Right panel tabs"
     >
-      {{ tab.label }}
-    </button>
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        :id="`tab-${tab.id}`"
+        type="button"
+        class="right-tab"
+        :class="{ active: activeTab === tab.id }"
+        role="tab"
+        :aria-selected="activeTab === tab.id"
+        :aria-controls="activeTab === tab.id ? `panel-${tab.id}` : undefined"
+        @click="handleSelect(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
 
     <Button
       variant="toolbar-icon"
@@ -72,6 +75,12 @@ function handleCollapse(): void {
   align-items: stretch;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.right-tabs__list {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
 }
 
 .right-tab {
