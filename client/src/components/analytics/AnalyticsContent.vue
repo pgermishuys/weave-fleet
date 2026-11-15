@@ -16,6 +16,7 @@ import {
 } from "@/composables/use-analytics-sessions";
 import { useAnalyticsSection } from "@/composables/use-analytics-section";
 import { useAnalyticsSummary } from "@/composables/use-analytics-summary";
+import { PageHeader } from "@/components/ui/page-header";
 
 // The menu in the context panel picks the section; it is in the address, so a reload keeps it.
 const activeTab = useAnalyticsSection();
@@ -264,14 +265,10 @@ function withSelectedProject(
     class="analytics-page"
     aria-label="Analytics dashboard"
   >
-    <header class="analytics-page__header phone-menu-lane">
-      <h1 class="analytics-page__title">
-        Analytics
-      </h1>
-      <p class="analytics-page__subtitle">
-        Tokens and spend across your sessions, by project and model. Costs are estimates at list prices, not a bill.
-      </p>
-    </header>
+    <PageHeader
+      title="Analytics"
+      description="Tokens and spend across your sessions, by project and model. Costs are estimates at list prices, not a bill."
+    />
 
     <!-- On a phone the menu is a strip of chips here; beside the page it is the context panel. -->
     <AnalyticsSectionStrip class="analytics-page__strip" />
@@ -291,28 +288,6 @@ function withSelectedProject(
   flex-direction: column;
   gap: 20px;
   min-width: 0;
-}
-
-.analytics-page__header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.analytics-page__title {
-  margin: 0;
-  color: var(--text);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-
-.analytics-page__subtitle {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
 }
 
 .analytics-page__strip {

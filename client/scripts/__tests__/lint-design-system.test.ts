@@ -134,6 +134,28 @@ describe("home-made spinners", () => {
   });
 });
 
+describe("page titles written by hand", () => {
+  const sfc = `<template>
+  <h1 class="text-2xl font-semibold">Repositories</h1>
+  <h1
+    class="title"
+  >
+    Jobs
+  </h1>
+  <h2>A section</h2>
+  <header class="h1-ish" />
+  <PageHeader title="Analytics" />
+</template>
+`;
+  const lines = lintFile("src/components/Example.vue", sfc)
+    .filter((v) => v.rule === "AD_HOC_PAGE_TITLE")
+    .map((v) => v.line);
+
+  it("counts every <h1>, one line or several, and not an h2 or <PageHeader>", () => {
+    expect(lines).toEqual([2, 3]);
+  });
+});
+
 describe("the browser's own dialogs", () => {
   const code = [
     "if (!window.confirm(`Delete ${name}?`)) return;",

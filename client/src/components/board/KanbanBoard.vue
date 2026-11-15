@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import BoardSourceConfig from "@/components/board/BoardSourceConfig.vue";
 import KanbanColumn from "@/components/board/KanbanColumn.vue";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useBoardStore } from "@/stores/board";
@@ -392,64 +393,53 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
     class="kanban-container"
     aria-label="Kanban board"
   >
-    <!-- phone-menu-lane: on a phone the header starts clear of the floating menu button. -->
-    <header
-      class="kanban-header phone-menu-lane"
+    <PageHeader
+      class="kanban-header"
       :class="{ 'kanban-header--manage': isManageMode }"
+      eyebrow="Persistent board"
+      :title="boardTitle"
+      :description="subtitle"
+      bar
     >
-      <div class="kanban-header__copy">
-        <p class="kanban-header__eyebrow">
-          Persistent board
-        </p>
-        <div>
-          <form
-            v-if="isEditingBoard"
-            class="kanban-header__rename-form"
-            @submit.prevent="handleRenameBoard"
+      <template
+        v-if="isEditingBoard"
+        #heading
+      >
+        <form
+          class="kanban-header__rename-form"
+          @submit.prevent="handleRenameBoard"
+        >
+          <input
+            v-model="boardNameDraft"
+            class="kanban-header__rename-input"
+            type="text"
+            maxlength="120"
+            placeholder="Rename board"
+            :disabled="isMutating"
+            @keydown.esc.prevent="cancelBoardRename"
           >
-            <input
-              v-model="boardNameDraft"
-              class="kanban-header__rename-input"
-              type="text"
-              maxlength="120"
-              placeholder="Rename board"
-              :disabled="isMutating"
-              @keydown.esc.prevent="cancelBoardRename"
+          <div class="kanban-header__rename-actions">
+            <Button
+              type="submit"
+              variant="default"
+              size="sm"
+              :disabled="isMutating || boardNameDraft.trim().length === 0"
             >
-            <div class="kanban-header__rename-actions">
-              <Button
-                type="submit"
-                variant="default"
-                size="sm"
-                :disabled="isMutating || boardNameDraft.trim().length === 0"
-              >
-                Save board
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                :disabled="isMutating"
-                @click="cancelBoardRename"
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-
-          <h1
-            v-else
-            class="kanban-header__title"
-          >
-            {{ boardTitle }}
-          </h1>
-          <p class="kanban-header__subtitle">
-            {{ subtitle }}
-          </p>
-        </div>
-      </div>
-
-      <div class="kanban-header__actions">
+              Save board
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              :disabled="isMutating"
+              @click="cancelBoardRename"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </template>
+      <template #actions>
         <Button
           type="button"
           variant="outline"
@@ -495,8 +485,8 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         >
           Add lane
         </Button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section
       class="kanban-summary"
@@ -704,12 +694,6 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
 }
 
 .kanban-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px 12px;
-  border-bottom: 1px solid var(--border);
   transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
@@ -719,35 +703,10 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.kanban-header__copy {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.kanban-header__actions,
 .kanban-header__rename-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.kanban-header__eyebrow {
-  margin: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.kanban-header__title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--text);
 }
 
 .kanban-header__rename-form {
@@ -763,13 +722,6 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   background: rgba(255, 255, 255, 0.02);
   color: var(--text);
   padding: 10px 12px;
-}
-
-.kanban-header__subtitle {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
 }
 
 .kanban-header__button--mode {
@@ -935,11 +887,6 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
 }
 
 @media (max-width: 960px) {
-  .kanban-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .kanban-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

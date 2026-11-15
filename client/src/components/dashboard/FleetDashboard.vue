@@ -21,6 +21,7 @@ import RetentionFilter from "./RetentionFilter.vue";
 import SummaryBar from "./SummaryBar.vue";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNote } from "@/components/ui/error-note";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 
 /** How many quiet sessions show before "Show more". */
@@ -176,25 +177,21 @@ function handleNewSession(): void {
     class="dashboard"
     aria-label="Fleet dashboard"
   >
-    <header class="dashboard__head">
-      <div class="dashboard__heading phone-menu-lane">
-        <h1 class="dashboard__title">
-          {{ greeting }}
-        </h1>
-        <p class="dashboard__status">
-          {{ statusLine }}
-        </p>
-      </div>
-
-      <Button
-        data-testid="new-session-button"
-        size="sm"
-        @click="handleNewSession"
-      >
-        <Plus class="h-4 w-4" />
-        New session
-      </Button>
-    </header>
+    <PageHeader
+      :title="greeting"
+      :description="statusLine"
+    >
+      <template #actions>
+        <Button
+          data-testid="new-session-button"
+          size="sm"
+          @click="handleNewSession"
+        >
+          <Plus class="h-4 w-4" />
+          New session
+        </Button>
+      </template>
+    </PageHeader>
 
     <div
       v-if="showHarnessBanner"
@@ -360,36 +357,6 @@ function handleNewSession(): void {
   width: 100%;
   max-width: 1040px;
   margin: 0 auto;
-}
-
-.dashboard__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.dashboard__heading {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.dashboard__title {
-  margin: 0;
-  color: var(--text);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-
-.dashboard__status {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .dashboard__harness-banner {

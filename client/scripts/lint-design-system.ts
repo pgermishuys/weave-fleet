@@ -11,6 +11,8 @@
 //                     `text-error` / `text-destructive` for words, which miss 4.5:1 in most themes. Use <ErrorNote>,
 //                     or `text-error-text` for an error word that isn't a note
 //   AD_HOC_SPINNER    a home-made spinner: `animate-spin`, or an @keyframes that rotates. Use <Spinner>
+//   AD_HOC_PAGE_TITLE a page title written by hand: an <h1> in a template. An h1 is a page's title by definition, so
+//                     this is reliable; an h2 is a section as often as a title, so it isn't counted. Use <PageHeader>
 //   NATIVE_DIALOG     window.confirm / alert / prompt, in any .vue or .ts file under src/ (tests aside). Use
 //                     confirmAction() from components/ui/confirm: one look, keyboard and focus right, works on a phone
 //   AD_HOC_FORMAT     a time, date or number formatted by hand with Intl.DateTimeFormat / NumberFormat /
@@ -29,7 +31,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER", "NATIVE_DIALOG", "AD_HOC_FORMAT"] as const;
+export const RULES = ["RAW_BUTTON", "HARDCODED_RADIUS", "HARDCODED_TIMING", "AD_HOC_EMPTY_STATE", "RAW_ERROR_RED", "AD_HOC_SPINNER", "NATIVE_DIALOG", "AD_HOC_FORMAT", "AD_HOC_PAGE_TITLE"] as const;
 export type Rule = (typeof RULES)[number];
 
 export interface Violation {
@@ -112,6 +114,17 @@ export function checkRawButtons(file: string, template: Block[]): Violation[] {
   for (const block of template) {
     for (const m of block.text.matchAll(/<button(?=[\s>/])[^>]*>?/g)) {
       out.push({ rule: "RAW_BUTTON", file, line: lineAt(block, m.index), detail: "raw <button>; use <Button>" });
+    }
+  }
+  return out;
+}
+
+// Opening <h1> tags: a page title of its own where <PageHeader> would do.
+export function checkPageTitles(file: string, template: Block[]): Violation[] {
+  const out: Violation[] = [];
+  for (const block of template) {
+    for (const m of block.text.matchAll(/<h1(?=[\s>/])/g)) {
+      out.push({ rule: "AD_HOC_PAGE_TITLE", file, line: lineAt(block, m.index), detail: "raw <h1>; use <PageHeader>" });
     }
   }
   return out;
@@ -248,6 +261,7 @@ export function lintFile(file: string, content: string): Violation[] {
     ...checkEmptyStates(file, template),
     ...checkErrorRed(file, content),
     ...checkSpinners(file, template, style),
+    ...checkPageTitles(file, template),
     ...checkNativeDialogs(file, content),
   ];
 }

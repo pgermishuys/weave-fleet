@@ -106,6 +106,6 @@ describe("the dashboard on another machine", () => {
   it("starts its heading clear of the phone's menu button, as every other page's heading does", async () => {
     const wrapper = mount(FleetDashboard, { global: { provide: { [MACHINE_TARGET as symbol]: () => targetFor(falcon) } } });
     await flushPromises();
-    expect(wrapper.get(".dashboard__heading").classes()).toContain("phone-menu-lane");
+    expect(wrapper.get("[data-slot=page-header]").classes()).toContain("phone-menu-lane");
   });
 });

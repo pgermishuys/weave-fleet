@@ -275,7 +275,7 @@ describe("Automations screen", () => {
       },
     });
     expect(sidebarRows(wrapper).map((row) => row.name)).toEqual(["Weekly PR digest", "Summarise the open PRs"]);
-    expect(wrapper.find("[data-testid='automation-title']").text()).toBe("Summarise the open PRs");
+    expect(wrapper.find("[data-slot='page-header-title']").text()).toBe("Summarise the open PRs");
     expect(wrapper.find("[data-testid='automation-action-message']").text()).toContain("Created and on. First run");
   });
 
@@ -522,7 +522,7 @@ describe("Automations screen", () => {
     await flushPromises();
 
     expect(sent[0]).toMatchObject({ method: "PUT", url: "/api/automations/a1", body: { name: "Monday PR digest" } });
-    expect(wrapper.find("[data-testid='automation-title']").text()).toBe("Monday PR digest");
+    expect(wrapper.find("[data-slot='page-header-title']").text()).toBe("Monday PR digest");
   });
 
   it("warns that saving moves an older UTC schedule to your time zone", async () => {

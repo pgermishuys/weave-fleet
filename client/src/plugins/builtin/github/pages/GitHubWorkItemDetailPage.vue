@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { ChevronDown, ChevronRight, ExternalLink, GitBranch, MessageSquare, Plus, RefreshCw, Sparkles, TriangleAlert } from "lucide-vue-next";
+import { ChevronDown, ExternalLink, GitBranch, MessageSquare, Plus, RefreshCw, Sparkles, TriangleAlert } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import CheckIcon from "@/components/github/CheckIcon.vue";
 import ChecksSummary from "@/components/github/ChecksSummary.vue";
@@ -38,6 +38,7 @@ import { isSessionLive, sessionRowStatus } from "@/lib/session-row-status";
 import { checkState, ciStatus, formatFixPrompt, reviewThreads, type SmartLink } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { Spinner } from "@/components/ui/spinner";
+import { PageHeader, type PageHeaderLink } from "@/components/ui/page-header";
 
 const props = defineProps<{
   owner: string;
@@ -176,6 +177,13 @@ function goHome(): void {
   void router.navigate({ to: "/github" });
 }
 
+/** The way back, above the title: GitHub › owner / repo › Pull requests (or Issues). */
+const trail = computed<PageHeaderLink[]>(() => [
+  { label: "GitHub", href: "/github", onSelect: goHome },
+  { label: `${props.owner} / ${props.repo}`, href: `/github/${props.owner}/${props.repo}`, onSelect: goToRepo },
+  { label: isPull.value ? "Pull requests" : "Issues" },
+]);
+
 function referenceHref(entry: GitHubTimelineEntry): string | undefined {
   return entry.url ?? undefined;
 }
@@ -252,133 +260,111 @@ function timelineTone(entry: GitHubTimelineEntry): string {
     </div>
 
     <template v-else>
-      <header class="gh-item__head">
-        <nav
-          class="gh-item__crumbs"
-          aria-label="Breadcrumbs"
-        >
+      <PageHeader
+        class="gh-item__head"
+        :trail="trail"
+        bar
+      >
+        <template #title>
+          {{ summary.title }} <span class="gh-item__number">#{{ summary.number }}</span>
+        </template>
+        <template #actions>
+          <button
+            type="button"
+            class="gh-btn gh-btn--ghost"
+            :disabled="isRefreshing"
+            aria-label="Refresh"
+            title="Refresh"
+            @click="refresh"
+          >
+            <Spinner
+              v-if="isRefreshing"
+              size="sm"
+            />
+            <RefreshCw
+              v-else
+              :size="14"
+              aria-hidden="true"
+            />
+          </button>
           <a
-            href="/github"
-            @click.prevent="goHome"
-          >GitHub</a>
-          <ChevronRight
-            :size="12"
-            aria-hidden="true"
-          />
-          <a
-            :href="`/github/${owner}/${repo}`"
-            @click.prevent="goToRepo()"
-          >{{ owner }} / {{ repo }}</a>
-          <ChevronRight
-            :size="12"
-            aria-hidden="true"
-          />
-          <span>{{ isPull ? "Pull requests" : "Issues" }}</span>
-        </nav>
-
-        <div class="gh-item__title-row">
-          <h1 class="gh-item__title">
-            {{ summary.title }} <span class="gh-item__number">#{{ summary.number }}</span>
-          </h1>
-          <div class="gh-item__actions">
+            class="gh-btn"
+            :href="summary.url"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <ExternalLink
+              :size="13"
+              aria-hidden="true"
+            />
+            GitHub
+          </a>
+          <span class="gh-split">
             <button
               type="button"
-              class="gh-btn gh-btn--ghost"
-              :disabled="isRefreshing"
-              aria-label="Refresh"
-              title="Refresh"
-              @click="refresh"
+              class="gh-btn gh-btn--primary"
+              :disabled="sending.has('fix') || sent.has('fix')"
+              data-testid="github-item-primary"
+              @click="primary.run"
             >
               <Spinner
-                v-if="isRefreshing"
+                v-if="sending.has('fix')"
                 size="sm"
               />
-              <RefreshCw
-                v-else
-                :size="14"
-                aria-hidden="true"
-              />
-            </button>
-            <a
-              class="gh-btn"
-              :href="summary.url"
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              <ExternalLink
+              <Sparkles
+                v-else-if="primary.icon === 'fix'"
                 :size="13"
                 aria-hidden="true"
               />
-              GitHub
-            </a>
-            <span class="gh-split">
-              <button
-                type="button"
-                class="gh-btn gh-btn--primary"
-                :disabled="sending.has('fix') || sent.has('fix')"
-                data-testid="github-item-primary"
-                @click="primary.run"
-              >
-                <Spinner
-                  v-if="sending.has('fix')"
-                  size="sm"
-                />
-                <Sparkles
-                  v-else-if="primary.icon === 'fix'"
-                  :size="13"
-                  aria-hidden="true"
-                />
-                <MessageSquare
-                  v-else-if="primary.icon === 'open'"
-                  :size="13"
-                  aria-hidden="true"
-                />
-                <Plus
-                  v-else
-                  :size="13"
-                  aria-hidden="true"
-                />
-                {{ primary.label }}
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <button
-                    type="button"
-                    class="gh-btn gh-btn--primary gh-split__more"
-                    aria-label="More ways to work on this"
-                  >
-                    <ChevronDown
-                      :size="13"
-                      aria-hidden="true"
-                    />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  class="w-64"
+              <MessageSquare
+                v-else-if="primary.icon === 'open'"
+                :size="13"
+                aria-hidden="true"
+              />
+              <Plus
+                v-else
+                :size="13"
+                aria-hidden="true"
+              />
+              {{ primary.label }}
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <button
+                  type="button"
+                  class="gh-btn gh-btn--primary gh-split__more"
+                  aria-label="More ways to work on this"
                 >
-                  <template v-if="sessions.length">
-                    <DropdownMenuLabel>In Fleet</DropdownMenuLabel>
-                    <DropdownMenuItem
-                      v-for="item in sessions"
-                      :key="item.session.id"
-                      @select="openSession(item)"
-                    >
-                      <MessageSquare class="size-3.5" />
-                      <span class="truncate">{{ sessionName(item) }}</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </template>
-                  <DropdownMenuItem @select="start">
-                    <Plus class="size-3.5" />
-                    {{ sessions.length ? "Start another session" : primary.label }}
+                  <ChevronDown
+                    :size="13"
+                    aria-hidden="true"
+                  />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                class="w-64"
+              >
+                <template v-if="sessions.length">
+                  <DropdownMenuLabel>In Fleet</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    v-for="item in sessions"
+                    :key="item.session.id"
+                    @select="openSession(item)"
+                  >
+                    <MessageSquare class="size-3.5" />
+                    <span class="truncate">{{ sessionName(item) }}</span>
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </span>
-          </div>
-        </div>
-
+                  <DropdownMenuSeparator />
+                </template>
+                <DropdownMenuItem @select="start">
+                  <Plus class="size-3.5" />
+                  {{ sessions.length ? "Start another session" : primary.label }}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </template>
         <div class="gh-item__by">
           <PrStatePill
             :kind="isPull ? 'pull' : 'issue'"
@@ -412,7 +398,7 @@ function timelineTone(entry: GitHubTimelineEntry): string {
         >
           {{ sendError }}
         </p>
-      </header>
+      </PageHeader>
 
       <div class="gh-item__body">
         <main class="gh-item__main">
@@ -705,56 +691,9 @@ function timelineTone(entry: GitHubTimelineEntry): string {
   color: var(--error);
 }
 
-.gh-item__head {
-  display: grid;
-  gap: 10px;
-  padding: 18px 28px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.gh-item__crumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.gh-item__crumbs a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.gh-item__crumbs a:hover {
-  color: var(--text);
-}
-
-.gh-item__title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.gh-item__title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
-  text-wrap: balance;
-}
-
 .gh-item__number {
   color: var(--muted);
   font-weight: 400;
-}
-
-.gh-item__actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 6px;
 }
 
 .gh-item__by {
@@ -1079,14 +1018,9 @@ function timelineTone(entry: GitHubTimelineEntry): string {
     border-left: 0;
     border-bottom: 1px solid var(--border);
   }
-
-  .gh-item__title-row {
-    flex-direction: column;
-  }
 }
 
 @container (max-width: 520px) {
-  .gh-item__head,
   .gh-item__main {
     padding-inline: 16px;
   }
