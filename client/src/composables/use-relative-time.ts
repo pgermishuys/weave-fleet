@@ -26,6 +26,9 @@ function stopTimer(): void {
 }
 
 export function useRelativeTime(): Readonly<ShallowRef<number>> {
+  // Nothing ticked while no one watched: catch up at once, or the first consumer shows a stale time for up to 30 s.
+  if (timer === null) now.value = Date.now();
+
   onMounted(() => {
     consumerCount += 1;
     startTimer();
