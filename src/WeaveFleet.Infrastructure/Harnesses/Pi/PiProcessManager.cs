@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Application.Terminals;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Pi;
@@ -228,7 +229,7 @@ internal sealed class PiProcessManager : IPiProcessManager
         {
             try
             {
-                _process.Kill(entireProcessTree: true);
+                ProcessTree.Kill(_process);
             }
             catch (Exception ex)
             {

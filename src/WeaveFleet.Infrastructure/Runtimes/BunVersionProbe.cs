@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Infrastructure.IO;
 
@@ -277,7 +278,7 @@ internal static class BunVersionProbe
     {
         try
         {
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
         {

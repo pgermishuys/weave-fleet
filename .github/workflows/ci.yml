@@ -570,7 +570,9 @@ jobs:
   # The mod store opens and stats every file of a mod natively (SafeFile: open with O_NONBLOCK | O_NOFOLLOW, then
   # fstat), and the open flags differ by OS and CPU. The other .NET tests run on Linux x64 only, so these few run on
   # each other Unix Fleet's code has a path for. Fleet ships macOS for Apple silicon only (osx-arm64 in release.yml),
-  # so Intel Mac isn't tested. On the Mac, the page check in headless Chrome runs here too.
+  # so Intel Mac isn't tested. The process-tree kill (ProcessTree, which lists children through libproc on a Mac) runs
+  # here too, with its check that a tree killed in a group launchd started sends the group no SIGHUP. On the Mac, the
+  # page check in headless Chrome runs here too.
   mods-file-safety:
     needs: changes
     if: needs.changes.outputs.dotnet == 'true'
@@ -598,14 +600,14 @@ jobs:
         with:
           bun-version-file: .bun-version
 
-      - name: Run the mod store's file-safety tests
+      - name: Run the mod store's file-safety and process-tree tests
         shell: bash
         env:
           FLEET_TEST_REAL_BUN: ${{ steps.bun.outputs.bun-path }}
         run: >
           dotnet test tests/WeaveFleet.Infrastructure.Tests
           --configuration Release
-          --filter "Category=ModsFileSafety"
+          --filter "Category=ModsFileSafety|Category=ProcessTree"
           --logger "trx;LogFileName=mods-file-safety.trx"
           --results-directory test-results/
           -p:SkipFrontendBuild=true
@@ -617,7 +619,7 @@ jobs:
           total=$(grep -ho '<Counters total="[0-9]*"' test-results/mods-file-safety.trx | grep -o '[0-9]*' || echo 0)
           echo "Tests run: ${total}"
           if [ "${total:-0}" -eq 0 ]; then
-            echo "::error::The mod file-safety tests didn't run."
+            echo "::error::The mod file-safety and process-tree tests didn't run."
             exit 1
           fi
 

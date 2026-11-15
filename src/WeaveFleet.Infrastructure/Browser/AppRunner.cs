@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Infrastructure.Harnesses;
 
@@ -193,7 +194,7 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
             if (Math.Abs((process.StartTime.ToUniversalTime() - startedAt.UtcDateTime).TotalSeconds) > 2)
                 return false;
 
-            process.Kill(entireProcessTree: true);
+            ProcessTree.Kill(process);
             LogLeftoverKilled(logger, pid, null);
             return true;
         }
@@ -814,7 +815,7 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
             try
             {
                 if (!process.HasExited)
-                    process.Kill(entireProcessTree: true);
+                    ProcessTree.Kill(process);
             }
             catch (InvalidOperationException)
             {

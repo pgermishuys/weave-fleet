@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Processes;
 
 namespace WeaveFleet.Infrastructure.Harnesses;
 
@@ -173,7 +174,7 @@ internal sealed partial class HarnessProcessRecords
     private static void KillProcessTree(int pid)
     {
         using var process = Process.GetProcessById(pid);
-        process.Kill(entireProcessTree: true);
+        ProcessTree.Kill(process);
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Stopping harness process {Pid} ({Name}, {Executable}): the Fleet that started it (pid {OwnerPid}) is gone")]

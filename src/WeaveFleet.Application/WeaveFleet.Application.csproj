@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <IsTrimmable>true</IsTrimmable>
+    <!-- ProcessTree calls kill and proc_listchildpids through LibraryImport. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

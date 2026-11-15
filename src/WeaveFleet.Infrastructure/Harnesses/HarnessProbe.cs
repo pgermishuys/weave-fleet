@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Processes;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.IO;
 
@@ -156,7 +157,7 @@ internal static partial class HarnessProbe
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); }
+            try { ProcessTree.Kill(process); }
             catch (InvalidOperationException) { } // already exited
             ct.ThrowIfCancellationRequested();
             return new ProbeResult(-1, string.Empty, TimedOut: true);
