@@ -6,7 +6,8 @@
 //
 //   node report.mjs [--out=out] [--set=nightly|themes] [--previous=<an earlier summary.json>] [--gate]
 //
-// Gates (a red night): page errors (and screens the crawl couldn't reach), console errors, failed requests, sideways
+// Gates (a red night; gates.mjs): page errors (and screens the crawl couldn't reach), a screen showing an error page,
+// console errors, failed requests, sideways
 // overflow at 390 px, and the axe ratchet: each axe WCAG 2 A/AA rule's count against axe-baseline.json, over the
 // screens this run visited. A rule above its baseline fails (naming the screens that grew); below it passes and asks
 // you to lower the baseline, so the counts only go down. Report only: icon-only controls with no name, overflow at
@@ -20,6 +21,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { GATES } from "./gates.mjs";
 import { SCREENS, variantsOf } from "./screens.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,28 +31,6 @@ const OUT = arg("out") ?? join(here, "out");
 const previousFile = arg("previous");
 const crawl = JSON.parse(readFileSync(join(OUT, "crawl.json"), "utf8"));
 const previous = previousFile && existsSync(previousFile) ? JSON.parse(readFileSync(previousFile, "utf8")) : null;
-
-const GATES = {
-  pageErrors: { label: "Page errors", find: (r) => r.pageErrors },
-  consoleErrors: {
-    label: "Console errors",
-    find: (r) => r.console.filter((c) => c.type === "error" && !c.mockGap).map((c) => (c.url ? `${c.text} (${c.url})` : c.text)),
-  },
-  failedRequests: {
-    label: "Failed requests",
-    find: (r) => r.failed.map((f) => `${f.method ?? ""} ${f.url} ${f.status ?? f.why ?? ""}`.trim()),
-  },
-  phoneOverflow: {
-    label: "Sideways overflow at 390 px",
-    find: (r) => {
-      if (!r.phone || !r.overflow) return [];
-      const o = r.overflow;
-      if (!o.pageOverflows && !o.offenderCount) return [];
-      return [`page ${o.pageW}px in a ${o.vw}px window; ${o.offenderCount} element${o.offenderCount === 1 ? "" : "s"} past the edge`,
-        ...o.offenders.map((x) => `<${x.tag} class="${x.cls}"> right ${x.right}px ${x.text ? `“${x.text}”` : ""}`.trim())];
-    },
-  },
-};
 
 const key = (r) => `${r.screen}--${r.variant}`;
 const gates = {};

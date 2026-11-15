@@ -128,6 +128,19 @@ export const SCREENS = [
   },
 ];
 
+/**
+ * Screens that must turn the crawl red, for its self-test (run.sh --self-test): each names the gates it must fail. The
+ * route exists only in the mock-mode build (client/src/lib/crawl-self-test.ts).
+ */
+export const SELF_TEST_SCREENS = [
+  {
+    id: "self-test-throws",
+    path: "/crawl-self-test/throws",
+    mustFail: ["errorPages", "consoleErrors"],
+    expectText: "Crawl self-test: this screen throws while it renders",
+  },
+];
+
 // A rich but invented conversation for the faked hub: text, tools (done, failed, running) and a question.
 const SESSION = "mock-session-1";
 
