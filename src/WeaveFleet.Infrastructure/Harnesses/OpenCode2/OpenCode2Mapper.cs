@@ -366,10 +366,21 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         if (ReadNoticeMetadata(data) is not { } metadata
             || ReadString(metadata, "source") != SubagentTool
             || ReadString(metadata, "childID") is not { } childSessionId
-            || !(_backgroundSubagents.Remove(childSessionId, out var started) || _reportedSubagents.TryGetValue(childSessionId, out started)))
+            || !(_backgroundSubagents.TryGetValue(childSessionId, out var started) || _reportedSubagents.TryGetValue(childSessionId, out started)))
         {
             return null;
         }
+
+        // 2.3.0 keeps state "completed" in the metadata when the child went idle with work still running; only the
+        // text, which lists that work, says it isn't over. The delegation stays open for the child's next report.
+        if (ReadString(metadata, "state") is null or "completed"
+            && ReadNoticeItem(data) is { } item && ReadString(item, "text") is { } text
+            && text.Contains("Background work still running:", StringComparison.Ordinal))
+        {
+            return started with { Status = "running" };
+        }
+
+        _backgroundSubagents.Remove(childSessionId);
 
         // The child may report again after a later round of work (OpenCode reports every time it goes idle): keep it.
         _reportedSubagents[childSessionId] = started;
