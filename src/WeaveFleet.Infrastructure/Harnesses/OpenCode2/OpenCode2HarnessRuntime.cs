@@ -217,10 +217,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var directory = HarnessHelpers.OnDiskSpelling(options.WorkingDirectory);
 
-        var server = await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
+        var (server, workflowsOn) = await GetServerWithWorkflowsAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
         // On a server with the step tool, every session that isn't a workflow step has it denied.
         var created = await server.Client.CreateSessionAsync(
-            directory, ct, hideStepTool: server.Setup.Workflows && !options.WorkflowStep).ConfigureAwait(false);
+            directory, ct, hideStepTool: HidesStepTool(server.Setup.Workflows, workflowsOn, options.WorkflowStep)).ConfigureAwait(false);
 
         var session = NewSession(
             created,
@@ -512,14 +512,29 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// Built-in skills aren't a setting of the server: they're files in a folder it watches.
     /// </summary>
     private async Task<OpenCode2Server> GetServerAsync(string ownerUserId, OpenCode2Profile? profile, CancellationToken ct)
+        => (await GetServerWithWorkflowsAsync(ownerUserId, profile, ct).ConfigureAwait(false)).Server;
+
+    /// <summary>
+    /// <see cref="GetServerAsync"/>, with whether workflows are on in the owner's settings now. A busy server keeps the
+    /// setup it started with, so its own <see cref="OpenCode2ServerSetup.Workflows"/> can be the older answer.
+    /// </summary>
+    private async Task<(OpenCode2Server Server, bool WorkflowsOn)> GetServerWithWorkflowsAsync(string ownerUserId, OpenCode2Profile? profile, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var setup = await GetSetupAsync(ownerUserId, profile).ConfigureAwait(false);
         var server = await _servers.GetAsync(OpenCode2ServerKey.For(ownerUserId, profile), setup, ct).ConfigureAwait(false);
         if (profile is not null)
             EnsureIdleTimer();
-        return server;
+        return (server, setup.Workflows);
     }
+
+    /// <summary>
+    /// Whether a new session has the step tool denied. Only a server that has the tool needs it: every session that isn't
+    /// a workflow step, and a step too once workflows are off in the settings (a busy server started with them on is
+    /// kept until it's idle, so a step that lands there would otherwise be offered a tool the user turned off).
+    /// </summary>
+    internal static bool HidesStepTool(bool serverHasStepTool, bool workflowsOnNow, bool workflowStep)
+        => serverHasStepTool && (!workflowStep || !workflowsOnNow);
 
     private static OpenCode2Profile? ProfileOf(RuntimeLaunchArtifacts? artifacts)
         => (artifacts as OpenCode2LaunchArtifacts)?.Profile;
