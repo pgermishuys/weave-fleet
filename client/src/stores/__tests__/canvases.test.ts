@@ -465,3 +465,27 @@ describe("useCanvasesStore file tabs", () => {
     expect(store.sessionCanvases("s1").review).toBe(true);
   });
 });
+
+describe("terminal codes in a canvas title", () => {
+  const esc = String.fromCharCode(27);
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  it("titles a visual without them", () => {
+    expect(visualCanvasTitle({ $type: "html", content: "<p/>", title: `${esc}[31mReport${esc}[0m` } as VisualPayload)).toBe("Report");
+  });
+
+  it("titles a page canvas's tab and frame without them", () => {
+    const store = useCanvasesStore();
+    store.applyCanvasEvent(wire<CanvasUpdated>(JSON.stringify({
+      type: "canvas.updated",
+      eventId: null,
+      properties: { sessionId: SESSION, canvasId: CANVAS, kind: "page", title: `${esc}[31mPick a plan${esc}[0m`, version: 1, actor: "agent", state: { pageId: "p1", entry: "index.html" }, summary: "" },
+    })));
+
+    expect(serverTab(store)).toMatchObject({ kind: "page", page: { title: "Pick a plan" } });
+  });
+});

@@ -23,6 +23,7 @@ import { lineageLinkLabel, type LineageKind } from "@/lib/session-lineage";
 import { useRouter } from "@tanstack/vue-router";
 import { ArchiveRestore, Check, Copy, CornerLeftUp, GitBranch, Layers, X, Plus } from "lucide-vue-next";
 import { Spinner } from "@/components/ui/spinner";
+import { plainTerminalText } from "@/lib/tool-output";
 
 const phone = useIsMobileNav();
 
@@ -122,7 +123,7 @@ const { sessionListShown } = storeToRefs(useSidebarStore());
 const isAddingTag = ref(false);
 const newTagInput = ref("");
 
-const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
+const sessionTitle = computed(() => (props.title ? plainTerminalText(props.title).trim() : "") || "Untitled session");
 
 // "Started by …": the session another session forked or started links back to it.
 const router = useRouter();

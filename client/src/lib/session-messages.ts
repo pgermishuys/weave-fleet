@@ -1,3 +1,5 @@
+import { plainTerminalText } from "@/lib/tool-output";
+
 /**
  * Messages between sessions: one session's agent tells another something with the `fleet_message` tool. Fleet
  * delivers it as a prompt wrapped in a tag naming the sender, which it resolved from the calling process:
@@ -47,12 +49,12 @@ function decode(value: string): string {
 export function parsePeerMessage(body: string): { peer: PeerSender; text: string } | null {
   const match = PEER_MESSAGE.exec(body);
   if (!match) return null;
-  const peer: PeerSender = { sessionId: decode(match[1]), title: decode(match[2]) };
+  const peer: PeerSender = { sessionId: decode(match[1]), title: plainTerminalText(decode(match[2])) };
   if (match[3] !== undefined) {
     peer.machineId = decode(match[3]);
     peer.machineName = decode(match[4]);
   }
-  return { peer, text: match[5] };
+  return { peer, text: plainTerminalText(match[5]) };
 }
 
 export type PeerOutcome = "finished" | "failed";
@@ -64,10 +66,10 @@ const PEER_UPDATE =
 export function parsePeerUpdate(body: string): { peer: PeerSender; outcome: PeerOutcome; text: string } | null {
   const match = PEER_UPDATE.exec(body);
   if (!match) return null;
-  const peer: PeerSender = { sessionId: decode(match[1]), title: decode(match[2]) };
+  const peer: PeerSender = { sessionId: decode(match[1]), title: plainTerminalText(decode(match[2])) };
   if (match[4] !== undefined) {
     peer.machineId = decode(match[4]);
     peer.machineName = decode(match[5]);
   }
-  return { peer, outcome: match[3] as PeerOutcome, text: match[6] };
+  return { peer, outcome: match[3] as PeerOutcome, text: plainTerminalText(match[6]) };
 }

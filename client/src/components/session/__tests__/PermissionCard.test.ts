@@ -190,3 +190,25 @@ describe("PermissionCard", () => {
     wrapper.unmount();
   });
 });
+
+describe("PermissionCard terminal codes", () => {
+  const esc = String.fromCharCode(27);
+
+  it("shows a command made from coloured output without the codes", () => {
+    const { wrapper } = mountCard(ask({ title: `echo ${esc}[31mfailed${esc}[0m`, directory: `${esc}[2m/repo${esc}[0m` }));
+
+    expect(wrapper.text()).toContain("echo failed");
+    expect(wrapper.text()).toContain("/repo");
+    expect(wrapper.text()).not.toContain("[31m");
+    expect(wrapper.text()).not.toContain(esc);
+    wrapper.unmount();
+  });
+
+  it("shows the file of an edit ask without the codes", () => {
+    const { wrapper } = mountCard(ask({ kind: "edit", tool: "edit", title: `${esc}[1msrc/app.ts${esc}[0m`, detail: "+a\n-b" }));
+
+    expect(wrapper.text()).toContain("src/app.ts");
+    expect(wrapper.text()).not.toContain("[1m");
+    wrapper.unmount();
+  });
+});

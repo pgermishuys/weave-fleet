@@ -75,3 +75,19 @@ describe("parsePeerUpdate", () => {
     expect(parsePeerUpdate('<fleet-session-update session="a" title="b" outcome="maybe">\nx\n</fleet-session-update>')).toBeNull();
   });
 });
+
+describe("terminal codes in a message from another session", () => {
+  const esc = String.fromCharCode(27);
+
+  it("drops them from the sender's title and the text", () => {
+    const body = `<fleet-session-message from="ses_1" title="${esc}[31mFix${esc}[0m login">\n${esc}[32mDone${esc}[0m, see above.\n</fleet-session-message>`;
+
+    expect(parsePeerMessage(body)).toEqual({ peer: { sessionId: "ses_1", title: "Fix login" }, text: "Done, see above." });
+  });
+
+  it("drops them from an update's title and text", () => {
+    const body = `<fleet-session-update session="ses_1" title="${esc}[1mDocs${esc}[0m" outcome="finished">\n${esc}[32mAll green${esc}[0m\n</fleet-session-update>`;
+
+    expect(parsePeerUpdate(body)).toEqual({ peer: { sessionId: "ses_1", title: "Docs" }, outcome: "finished", text: "All green" });
+  });
+});

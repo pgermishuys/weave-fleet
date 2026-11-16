@@ -154,6 +154,17 @@ describe("SessionsPanel across machines", () => {
     document.body.innerHTML = "";
   });
 
+  it("lists a session whose title has terminal codes without them", async () => {
+    const esc = String.fromCharCode(27);
+    useSessionsStore().setSessions([item("home-1", `${esc}[31mFix${esc}[0m the build`, "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+
+    expect(view.text()).toContain("Fix the build");
+    expect(view.text()).not.toContain("[31m");
+    view.unmount();
+  });
+
   it("lists home first and the other machines in the order they were added, with the live one tagged", async () => {
     useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
     const view = mountPanel();

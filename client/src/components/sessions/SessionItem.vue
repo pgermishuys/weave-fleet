@@ -72,6 +72,7 @@ import { clearSessionAttachments } from "@/api/session-attachments";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
 import { useSessionListOn } from "@/stores/session-list-on";
+import { plainTerminalText } from "@/lib/tool-output";
 
 interface Props {
   session: SessionListItem;
@@ -160,7 +161,7 @@ const {
 const sessionId = computed(() => props.session.session.id);
 const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
-const displayTitle = computed(() => props.label || props.session.session.title?.trim() || "Untitled session");
+const displayTitle = computed(() => props.label || plainTerminalText(props.session.session.title ?? "").trim() || "Untitled session");
 const now = useRelativeTime();
 const rowStatus = computed(() => sessionRowStatus(props.session, now.value, !props.machineNotAnswering));
 // A working row whose machine went quiet has no working glyph: it can't be known to work.
