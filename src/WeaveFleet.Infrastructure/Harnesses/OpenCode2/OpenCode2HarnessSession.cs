@@ -930,6 +930,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         foreach (var work in _work.Values.ToList())
             Write(WorkEvents.Ended(work, WorkEndedReasons.Lost, _context.FleetSessionId));
 
+        foreach (var harnessEvent in _mapper.OpenToolsEnded())
+            Write(harnessEvent);
+
         if (_status is HarnessSessionStatus.Running)
         {
             _events.Writer.TryWrite(_mapper.Error(new OpenCode2ErrorInfo
