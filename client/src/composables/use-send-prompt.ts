@@ -200,7 +200,7 @@ function buildDeliveredPromptCounts(messages: readonly AccumulatedMessage[]): Ma
 }
 
 /**
- * User messages the session already had while no prompt was in flight. The text-match
+ * User messages the session already had while no prompt was in flight. The matching by text
  * fallback must not count them as the delivery of a prompt sent since.
  */
 const baselineUserMessageIds = new Map<string, Set<string>>();
