@@ -198,7 +198,7 @@ public sealed partial class WorktreeCleanup(
 
         try
         {
-            var status = await GitCommand.RunAsync(workspace.Directory, GitTimeout, "status", "--porcelain", "-z", "--ignored=matching").ConfigureAwait(false);
+            var status = await GitCommand.RunAsync(workspace.Directory, GitTimeout, "status", "--porcelain", "-z", "--untracked-files=normal", "--ignored=matching").ConfigureAwait(false);
             var (changed, strayIgnored) = ReadStatus(status);
             if (changed > 0)
                 return Keep(changed == 1 ? "Has uncommitted changes (1 file)." : $"Has uncommitted changes ({changed} files).");

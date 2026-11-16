@@ -207,7 +207,7 @@ public sealed partial class SessionInterruptions(
             var workspace = session is null ? null : await workspaces.GetByIdAsync(session.WorkspaceId).ConfigureAwait(false);
             if (workspace is null || !Directory.Exists(workspace.Directory))
                 return null;
-            var status = await GitCommand.RunAsync(workspace.Directory, GitTimeout, "status", "--porcelain", "-z").ConfigureAwait(false);
+            var status = await GitCommand.RunAsync(workspace.Directory, GitTimeout, "status", "--porcelain", "-z", "--untracked-files=normal").ConfigureAwait(false);
             return status.Split('\0', StringSplitOptions.RemoveEmptyEntries).Length;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

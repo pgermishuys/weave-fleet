@@ -239,7 +239,7 @@ public sealed partial class WorkspaceService(
     {
         if (!System.IO.Directory.Exists(directory))
             return false;
-        var status = await TryRunGitAsync(directory, "status", "--porcelain");
+        var status = await TryRunGitAsync(directory, "status", "--porcelain", "--untracked-files=normal");
         if (!string.IsNullOrWhiteSpace(status))
             return true;
         foreach (var marker in new[] { "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply" })

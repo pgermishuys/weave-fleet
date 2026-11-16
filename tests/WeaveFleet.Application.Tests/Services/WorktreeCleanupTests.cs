@@ -137,6 +137,19 @@ public sealed class WorktreeCleanupTests : IDisposable
     }
 
     [Fact]
+    public async Task a_new_file_keeps_a_checkout_even_when_git_is_set_to_hide_untracked_files()
+    {
+        _repository.Git("config", "status.showUntrackedFiles", "no");
+        var workspace = await WorktreeAsync("fleet/hidden-untracked");
+        Archived(workspace, daysAgo: 10);
+        File.WriteAllText(Path.Combine(workspace.Directory, "new-report.md"), "draft");
+
+        var checkouts = await _cleanup.ListAsync();
+
+        Verdict(checkouts, workspace).ShouldBe((CheckoutVerdicts.Keep, "Has uncommitted changes (1 file)."));
+    }
+
+    [Fact]
     public async Task a_folder_another_session_uses_is_kept_but_its_own_subagents_do_not_count()
     {
         var shared = await WorktreeAsync("fleet/shared");
