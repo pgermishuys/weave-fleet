@@ -543,3 +543,36 @@ describe("use-send-prompt @ sessions", () => {
     expect(sentPrompts.value).toHaveLength(0)
   })
 })
+
+describe("reconcileSentPrompts text-match fallback", () => {
+  function sentUnconfirmed(sessionId: string, text: string, id: string) {
+    sendUnconfirmedPrompt(sessionId, text, `corr-${id}`)
+    return useSentPrompts(sessionId).sentPrompts
+  }
+
+  it("keeps a sent prompt that is not delivered yet when the session already has earlier messages", () => {
+    const sessionId = "probe-history"
+    const history = [deliveredUserMessage(sessionId, "old", "first question")]
+    reconcileSentPrompts(sessionId, history)
+    const sent = sentUnconfirmed(sessionId, "second question", "a")
+    reconcileSentPrompts(sessionId, history)
+    expect(sent.value).toHaveLength(1)
+    reconcileSentPrompts(sessionId, [...history, deliveredUserMessage(sessionId, "srv-new", "second question")])
+    expect(sent.value).toHaveLength(0)
+  })
+
+  it("shows a message once when the harness normalises its line endings", () => {
+    const sessionId = "probe-crlf"
+    const sent = sentUnconfirmed(sessionId, "line one\r\nline two\n", "b")
+    reconcileSentPrompts(sessionId, [deliveredUserMessage(sessionId, "srv-1", "line one\nline two")])
+    expect(sent.value).toHaveLength(0)
+  })
+
+  it("leaves one row when two identical messages are sent and one is delivered", () => {
+    const sessionId = "probe-identical"
+    sendUnconfirmedPrompt(sessionId, "again", "c1")
+    sendUnconfirmedPrompt(sessionId, "again", "c2")
+    reconcileSentPrompts(sessionId, [deliveredUserMessage(sessionId, "srv-1", "again")])
+    expect(useSentPrompts(sessionId).sentPrompts.value).toHaveLength(1)
+  })
+})
