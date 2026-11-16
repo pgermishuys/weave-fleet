@@ -236,6 +236,11 @@ internal sealed partial class SmartLinkWatcherService(
                 if (number <= 0)
                     continue;
 
+                // A branch name gets reused (release, fix/login): a pull request that closed before this session began
+                // belongs to an earlier use of it.
+                if (ClosedBeforeSessionStarted(pull, target.SessionStartedAt))
+                    continue;
+
                 var reference = new GitHubLinkReference(repo.Owner, repo.Repo, number, GitHubLinkReference.PullRequest);
                 var stored = await repository.InsertDetectedAsync(
                     NewLink(target.SessionId, target.UserId, reference, SmartLinkRelationships.Own),
@@ -247,6 +252,11 @@ internal sealed partial class SmartLinkWatcherService(
             }
         }
     }
+
+    internal static bool ClosedBeforeSessionStarted(JsonObject pull, string? sessionStartedAt)
+        => DateTimeOffset.TryParse(sessionStartedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var started)
+            && DateTimeOffset.TryParse(pull["closed_at"]?.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var closed)
+            && closed < started;
 
     private async Task<(string Owner, string Repo)?> ResolveGitHubRemoteAsync(string directory, CancellationToken ct)
     {
