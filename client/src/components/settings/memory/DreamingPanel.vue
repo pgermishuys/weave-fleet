@@ -71,6 +71,8 @@ function openSession(id: string): void {
   void navigate({ to: "/sessions/$id", params: { id }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
+let loadError: string | null = null;
+
 async function load(): Promise<void> {
   if (!isDreamingEnabled.value || !props.repository) {
     dream.value = null;
@@ -79,9 +81,14 @@ async function load(): Promise<void> {
   const repository = props.repository;
   try {
     const dreams = await listDreams(repository, target);
-    if (repository === props.repository) dream.value = dreams[0] ?? null;
+    if (repository === props.repository) {
+      dream.value = dreams[0] ?? null;
+      // Only this read's own error clears; a failed Dream now or Undo keeps its note.
+      if (error.value === loadError) error.value = null;
+    }
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : "Couldn't load the dreams.";
+    loadError = caught instanceof Error ? caught.message : "Couldn't load the dreams.";
+    error.value = loadError;
   }
 }
 

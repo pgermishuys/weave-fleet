@@ -282,6 +282,39 @@ describe("Dreaming in Settings → Memory", () => {
     expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ budgetTokens: 1000000 }, expect.anything());
   });
 
+  it("says when the nightly read fails, and shows the row once Try again works", async () => {
+    mocks.getNightlyDreaming.mockRejectedValueOnce(new Error("Nightly dreaming is unavailable."));
+    const wrapper = await mountSection();
+
+    expect(wrapper.get("[data-testid='dream-nightly-error']").text()).toContain("Nightly dreaming is unavailable.");
+    expect(wrapper.find("[data-testid='dream-nightly']").exists()).toBe(false);
+
+    mocks.getNightlyDreaming.mockResolvedValue(nightlyView());
+    await wrapper.get("[data-testid='dream-nightly-error'] button").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid='dream-nightly-error']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='dream-nightly']").exists()).toBe(true);
+  });
+
+  it("clears \"Couldn't load the dreams.\" when a later poll succeeds", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.listDreams.mockResolvedValueOnce([dreamView({ status: "running", finished: null, changes: [] })]);
+      const wrapper = await mountSection();
+      mocks.listDreams.mockRejectedValueOnce(new Error("Couldn't load the dreams."));
+      await vi.advanceTimersByTimeAsync(3000);
+      await flushPromises();
+      expect(wrapper.text()).toContain("Couldn't load the dreams.");
+
+      mocks.listDreams.mockResolvedValue([dreamView({ status: "running", finished: null, changes: [] })]);
+      await vi.advanceTimersByTimeAsync(3000);
+      await flushPromises();
+      expect(wrapper.text()).not.toContain("Couldn't load the dreams.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says when the automation is paused, and links to it", async () => {
     mocks.getNightlyDreaming.mockResolvedValue(nightlyView({ enabled: true, paused: true, automationId: "a1" }));
     const wrapper = await mountSection();
