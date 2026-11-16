@@ -199,11 +199,23 @@ function buildDeliveredPromptCounts(messages: readonly AccumulatedMessage[]): Ma
   return deliveredPromptCounts;
 }
 
+/**
+ * User messages the session already had while no prompt was in flight. The matching by text
+ * fallback must not count them as the delivery of a prompt sent since.
+ */
+const baselineUserMessageIds = new Map<string, Set<string>>();
+
 export function reconcileSentPrompts(sessionId: string, messages: readonly AccumulatedMessage[]): void {
   const prompts = sentPromptRegistry[sessionId];
   if (!prompts || prompts.length === 0) {
+    baselineUserMessageIds.set(
+      sessionId,
+      new Set(messages.filter((message) => message.role === "user").map((message) => message.messageId)),
+    );
     return;
   }
+  const baseline = baselineUserMessageIds.get(sessionId);
+  messages = baseline ? messages.filter((message) => message.role !== "user" || !baseline.has(message.messageId)) : messages;
 
   const deliveredPromptIds = new Set(
     messages
