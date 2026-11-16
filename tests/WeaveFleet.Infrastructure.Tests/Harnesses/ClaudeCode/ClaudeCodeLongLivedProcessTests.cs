@@ -204,6 +204,55 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task An_idle_process_with_a_cron_pending_keeps_running_until_the_cap()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await PromptAsync("set a cron");
+
+        _time.Advance(TimeSpan.FromSeconds(IdleSeconds * 5));
+        await Task.Delay(200);
+        session.ProcessId.ShouldNotBeNull();
+
+        // A recurring cron doesn't keep the process for ever.
+        _time.Advance(ClaudeCodeTasks.MaxScheduleKeep + TimeSpan.FromSeconds(IdleSeconds));
+        await WaitForAsync(() => session.ProcessId is null);
+    }
+
+    [Fact]
+    public async Task An_idle_process_with_a_wakeup_pending_keeps_running_until_it_has_fired()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await PromptAsync("set a wakeup");
+
+        _time.Advance(TimeSpan.FromSeconds(IdleSeconds * 2));
+        await Task.Delay(200);
+        session.ProcessId.ShouldNotBeNull();
+
+        _time.Advance(TimeSpan.FromMinutes(15));
+        await WaitForAsync(() => session.ProcessId is null);
+    }
+
+    [Fact]
+    public async Task A_deleted_cron_no_longer_keeps_an_idle_process_running()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await PromptAsync("set a cron");
+        await PromptAsync("delete the cron");
+
+        _time.Advance(TimeSpan.FromSeconds(IdleSeconds + 1));
+        await WaitForAsync(() => session.ProcessId is null);
+    }
+
+    [Fact]
     public async Task Stopping_the_session_ends_the_process_and_logs_the_work_it_loses()
     {
         if (OperatingSystem.IsWindows())
@@ -1120,6 +1169,17 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                     *'start background'*) started "sleep 1"; wake 1 $n 0 & ;;
                     *'start slow background'*) started "sleep 2"; wake 0.2 $n 1.5 & ;;
                     *'start lasting background'*) started "sleep 600" ;;
+                    *'set a cron'*|*'set a wakeup'*|*'delete the cron'*)
+                      case "$line" in
+                        *'set a cron'*) tool=CronCreate; input='{"cron":"*/5 * * * *","prompt":"check"}'; out='Scheduled recurring job cron1234' ;;
+                        *'set a wakeup'*) tool=ScheduleWakeup; input='{"delaySeconds":600,"prompt":"look again","reason":"wait"}'; out='Wakeup scheduled' ;;
+                        *) tool=CronDelete; input='{"id":"cron1234"}'; out='Deleted cron1234' ;;
+                      esac
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_s'$n'","name":"'$tool'","input":'"$input"'}]},"parent_tool_use_id":null}'
+                      echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_s'$n'","type":"tool_result","content":"'"$out"'"}]},"parent_tool_use_id":null}'
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'_b","role":"assistant","content":[{"type":"text","text":"Done."}]},"parent_tool_use_id":null}'
+                      echo '{"type":"result","subtype":"success","is_error":false,"result":"Done.","session_id":"cc-1"}'
+                      ;;
                     *'steer me'*)
                       steering=1
                       echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_steer","name":"Bash","input":{"command":"sleep 5; echo one"}}]},"parent_tool_use_id":null}'

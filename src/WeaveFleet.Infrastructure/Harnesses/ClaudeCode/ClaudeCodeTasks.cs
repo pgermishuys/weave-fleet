@@ -52,6 +52,66 @@ internal sealed partial class ClaudeCodeTasks
     /// <summary>Whether any background task still runs, which keeps the process from stopping when idle.</summary>
     internal bool HasBackgroundWork => _background.Count > 0;
 
+    /// <summary>
+    /// The longest an idle process is kept alive for a cron or wakeup the agent set. A recurring cron would otherwise keep
+    /// it for ever; the user can still ask for longer by sending a prompt, and the next one resumes the conversation.
+    /// </summary>
+    internal static readonly TimeSpan MaxScheduleKeep = TimeSpan.FromHours(1);
+
+    private static readonly TimeSpan WakeupGrace = TimeSpan.FromMinutes(2);
+
+    // Session-only crons (CronCreate) and wakeups (ScheduleWakeup) live in the process and die with it, so a process
+    // with one pending must not be stopped for being idle. Keyed by the tool call that made it.
+    private readonly Dictionary<string, Schedule> _schedules = new(StringComparer.Ordinal);
+
+    private sealed class Schedule(DateTimeOffset until, bool wakeup = false)
+    {
+        public bool Wakeup { get; } = wakeup;
+        public DateTimeOffset Until { get; } = until;
+        public string? Result { get; set; }
+    }
+
+    /// <summary>Notes a <c>CronCreate</c>, <c>ScheduleWakeup</c> or <c>CronDelete</c> call, made at <paramref name="now"/>.</summary>
+    internal void ObserveScheduling(string callId, string? name, JsonElement input, DateTimeOffset now)
+    {
+        switch (name)
+        {
+            case "CronCreate":
+                _schedules[callId] = new Schedule(now + MaxScheduleKeep);
+                break;
+            case "ScheduleWakeup":
+                var delay = input.ValueKind == JsonValueKind.Object && input.TryGetProperty("delaySeconds", out var seconds) && seconds.TryGetDouble(out var value)
+                    ? TimeSpan.FromSeconds(Math.Max(0, value))
+                    : TimeSpan.Zero;
+                _schedules[callId] = new Schedule(now + (delay > MaxScheduleKeep ? MaxScheduleKeep : delay) + WakeupGrace, wakeup: true);
+                break;
+            case "CronDelete":
+                var id = PermissionEvents.String(input, "id");
+                var matches = id is { Length: > 0 }
+                    ? _schedules.Where(entry => entry.Value.Result?.Contains(id, StringComparison.Ordinal) == true).Select(entry => entry.Key).ToList()
+                    : [];
+                // The result didn't name the cron: forget every cron rather than keep the process for one that's gone.
+                if (matches.Count == 0)
+                    matches = [.. _schedules.Where(entry => !entry.Value.Wakeup).Select(entry => entry.Key)];
+                foreach (var key in matches)
+                    _schedules.Remove(key);
+                break;
+        }
+    }
+
+    /// <summary>The latest time a pending cron or wakeup keeps the process, or null when none is pending at <paramref name="now"/>.</summary>
+    internal DateTimeOffset? ScheduledUntil(DateTimeOffset now)
+        => _schedules.Values.Where(schedule => schedule.Until > now).Select(schedule => schedule.Until).DefaultIfEmpty().Max() is var latest && latest > now
+            ? latest
+            : null;
+
+    /// <summary>Remembers a scheduling call's result, which names the cron a later <c>CronDelete</c> removes.</summary>
+    internal void ObserveScheduleResult(string? callId, string? content)
+    {
+        if (callId is not null && _schedules.TryGetValue(callId, out var schedule))
+            schedule.Result = content;
+    }
+
     /// <summary>The tool call <paramref name="callId"/>, when this process made it.</summary>
     internal Call? FindCall(string callId) => _calls.GetValueOrDefault(callId);
 
@@ -98,6 +158,7 @@ internal sealed partial class ClaudeCodeTasks
         _tasks.Clear();
         _background.Clear();
         _calls.Clear();
+        _schedules.Clear();
         return lost;
     }
 

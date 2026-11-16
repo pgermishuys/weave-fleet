@@ -1363,8 +1363,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
 
         var process = _process;
-        _idleTimer = Time.CreateTimer(
-            _ => _ = StopIfIdleAsync(process), null, TimeSpan.FromSeconds(_config.IdleShutdownSeconds), Timeout.InfiniteTimeSpan);
+        // A cron or wakeup the agent set is lost with the process: wait until the last pending one has fired (or its cap).
+        var delay = TimeSpan.FromSeconds(_config.IdleShutdownSeconds);
+        if (_tasks.ScheduledUntil(Time.GetUtcNow()) is { } scheduledUntil && scheduledUntil - Time.GetUtcNow() + delay is var kept && kept > delay)
+            delay = kept;
+        _idleTimer = Time.CreateTimer(_ => _ = StopIfIdleAsync(process), null, delay, Timeout.InfiniteTimeSpan);
     }
 
     private void DisarmIdleTimer()
@@ -1646,6 +1649,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 if (block is ClaudeCodeToolUseBlock { Id: { } callId } toolUse)
                 {
                     _tasks.ObserveToolUse(callId, toolUse.Name, toolUse.Input, assistantMsg.ParentToolUseId);
+                    _tasks.ObserveScheduling(callId, toolUse.Name, toolUse.Input, Time.GetUtcNow());
                     // Its call to Fleet's MCP server comes next, naming only this id; this says whether a subagent made it.
                     if (ClaudeCodeTools.FleetTool(toolUse.Name) is not null)
                         _bridgeTokens?.NoteCall(callId, assistantMsg.ParentToolUseId);
@@ -1662,7 +1666,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             foreach (var block in userMsg.Message?.Content ?? [])
             {
                 if (block is ClaudeCodeToolResultBlock result)
+                {
                     _tasks.ObserveToolResult(result.Content);
+                    _tasks.ObserveScheduleResult(result.ToolUseId, result.Content);
+                }
             }
         }
     }
