@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted, shallowRef } from "vue";
-import { Cable, ChevronDown, FlaskConical, FolderGit2, Lightbulb, Palette, Puzzle, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Wrench, Settings2 } from "lucide-vue-next";
+import { Cable, ChevronDown, FlaskConical, FolderGit2, KeyRound, Lightbulb, Palette, Puzzle, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Wrench, Settings2 } from "lucide-vue-next";
 import SettingsMachineSwitch from "@/components/settings/SettingsMachineSwitch.vue";
 import { useSettingsMachine } from "@/composables/use-settings-machine";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
@@ -67,6 +67,7 @@ const coreGroups: readonly SettingsNavGroup[] = [
       { id: "permissions", label: "What agents can do", icon: ShieldCheck },
       { id: "skills", label: "Skills & tools", icon: Wrench },
       { id: "memory", label: "Memory", icon: Lightbulb },
+      { id: "credentials", label: "API keys", icon: KeyRound },
     ],
   },
   {
