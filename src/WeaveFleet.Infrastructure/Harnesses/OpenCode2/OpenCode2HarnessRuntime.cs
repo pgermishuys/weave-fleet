@@ -249,8 +249,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         // A delegated child's V2 session lives on its parent's server, which is the only one that sends its events. The
         // child is prepared with the parent's profile as it is now, which is another server when the profile was edited
         // since the parent's server started.
-        var server = (options.ParentSessionId is { } parentSessionId ? _servers.FindServing(options.OwnerUserId, parentSessionId) : null)
-            ?? await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
+        OpenCode2Server? serving = options.ParentSessionId is { } parentSessionId ? _servers.FindServing(options.OwnerUserId, parentSessionId) : null;
+        var (server, workflowsOn) = serving is not null
+            ? (serving, (await GetSetupAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts)).ConfigureAwait(false)).Workflows)
+            : await GetServerWithWorkflowsAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
         var info = await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
 
@@ -263,7 +265,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             var wanted = rules.Contains(OpenCode2HttpClient.DenyBrowser)
                 ? [.. rules]
                 : OpenCode2HttpClient.WithBrowser(rules, OpenCode2HttpClient.BrowserAllowed(rules));
-            if (server.Setup.Workflows && !options.WorkflowStep && !rules.Contains(OpenCode2HttpClient.DenyStepTool))
+            if (NeedsStepToolDeny(rules, server.Setup.Workflows, workflowsOn, options.WorkflowStep))
                 wanted.Add(OpenCode2HttpClient.DenyStepTool);
 
             if (!wanted.SequenceEqual(rules))
@@ -533,6 +535,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// a workflow step, and a step too once workflows are off in the settings (a busy server started with them on is
     /// kept until it's idle, so a step that lands there would otherwise be offered a tool the user turned off).
     /// </summary>
+    /// <summary>A resumed session that doesn't have the step tool denied yet but should (<see cref="HidesStepTool"/>).</summary>
+    internal static bool NeedsStepToolDeny(IReadOnlyList<OpenCode2PermissionRule> rules, bool serverHasStepTool, bool workflowsOnNow, bool workflowStep)
+        => HidesStepTool(serverHasStepTool, workflowsOnNow, workflowStep) && !rules.Contains(OpenCode2HttpClient.DenyStepTool);
+
     internal static bool HidesStepTool(bool serverHasStepTool, bool workflowsOnNow, bool workflowStep)
         => serverHasStepTool && (!workflowStep || !workflowsOnNow);
 
