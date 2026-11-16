@@ -36,7 +36,9 @@ public sealed partial class OpenCode2WorkflowLiveTests
             var events = fleet.Watch(cts.Token, step);
 
             await PromptAsync(step, stepPrompt, options: null, cts.Token);
-            await WaitForAsync(events, () => fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, stepPrompt)), cts.Token);
+            // V2 2.3 runs the subagent in the background: the parent's call returns first, the child's call after it.
+            await WaitForAsync(events, () => fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, stepPrompt))
+                && fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, childPrompt)), cts.Token);
 
             // The child's call came back refused, and the step is still running.
             LlmRequest.LastToolText(fleet.Llm.Queue.Requests.First(r => LlmRequest.Continues(r, childPrompt)))

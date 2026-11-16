@@ -61,10 +61,13 @@ public sealed partial class OpenCode2ServerLiveTests
                 return new ScriptedLlmResponse { Text = $"Child answered by {LlmRequest.Model(request)}." };
             if (LlmRequest.Starts(request, warmup))
                 return new ScriptedLlmResponse { Text = "Ready." };
+            // V2 2.3 runs a subagent in the background: the call returns at once, and the child's report wakes the parent.
+            if (IsSubagentReport(request, "Child answered by"))
+                return new ScriptedLlmResponse { Text = "The helper answered." };
             if (LlmRequest.Starts(request, prompt))
                 return ToolCall("call_profile_sub", "subagent", new { description = "Name the model", prompt = childPrompt, agent = "general", subagent_type = "general" });
             if (LlmRequest.Continues(request, prompt))
-                return new ScriptedLlmResponse { Text = "The helper answered." };
+                return new ScriptedLlmResponse { Text = "Handed over." };
             return null;
         });
 
@@ -84,16 +87,20 @@ public sealed partial class OpenCode2ServerLiveTests
         await PromptAsync(id, prompt, options: null, cts.Token);
         var childId = await WaitForAsync(events, async () =>
             (await Delegations(id)).FirstOrDefault(d => d.ParentToolCallId == "call_profile_sub")?.ChildSessionId, cts.Token);
-        await WaitForAsync(events, () => events.For(id).Count(e => e.Type == "session.idle") >= 2, cts.Token);
+        await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).LastOrDefault()?.Text == "The helper answered.", cts.Token);
         await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_profile_sub").Status == "completed", cts.Token);
 
         // The subagent ran on the parent's profile, and its Fleet session listens on the parent's server.
-        LlmRequest.LastToolText(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Continues(r, prompt))).ShouldNotBeNull()
-            .ShouldContain("Child answered by delegating-model.");
+        fleet.Llm.Queue.Requests.ShouldContain(r => IsSubagentReport(r, "Child answered by delegating-model."));
         var child = (OpenCode2HarnessSession)await fleet.HarnessSessionAsync(childId, cts.Token);
         child.ProcessId.ShouldBe(parentServer);
         LatestParts<TextMessageEventPart>(events, id).Last().Text.ShouldBe("The helper answered.");
     }
+
+    /// <summary>The model call that wakes a parent with a background subagent's report (a <c>&lt;subagent&gt;</c> message) saying <paramref name="text"/>.</summary>
+    private static bool IsSubagentReport(string request, string text)
+        => LlmRequest.OffersTools(request) && LlmRequest.LastRole(request) == "user"
+            && LlmRequest.LastUserText(request) is { } last && last.Contains("<subagent", StringComparison.Ordinal) && last.Contains(text, StringComparison.Ordinal);
 
     [OpenCode2Fact]
     public async Task A_broken_profile_is_refused_with_what_OpenCode_2_would_leave_out_and_its_check_server_stops()

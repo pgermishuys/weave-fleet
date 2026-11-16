@@ -287,8 +287,10 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
                 return new ScriptedLlmResponse { Text = "B it is." };
             if (LlmRequest.Starts(request, prompt))
                 return ToolCall("call_sub", "subagent", new { description = "Pick a database", prompt = childPrompt, agent = "helper", subagent_type = "helper" });
-            if (LlmRequest.Continues(request, prompt))
+            if (LlmRequest.OffersTools(request) && LlmRequest.LastRole(request) == "user" && LlmRequest.LastUserText(request)!.Contains("<subagent") && LlmRequest.LastUserText(request)!.Contains("B it is."))
                 return new ScriptedLlmResponse { Text = "The helper says: B." };
+            if (LlmRequest.Continues(request, prompt))
+                return new ScriptedLlmResponse { Text = "Handed over." };
             return null;
         });
 
@@ -315,20 +317,19 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
         var child = await fleet.HarnessSessionAsync(childId, cts.Token);
         child.HarnessType.ShouldBe(OpenCode2HarnessSession.Type);
 
-        // The child's question reaches its Fleet session, which needs the user; the parent is still at work.
+        // The child's question reaches its Fleet session, which needs the user. V2 2.3 runs every subagent in the
+        // background, so the parent's turn ended at the launch; its delegation is still running.
         await WaitForAsync(events, async () => await child.GetActivityStatusAsync(cts.Token) == ActivityStatuses.WaitingInput, cts.Token);
-        events.For(id).Select(e => e.Type).ShouldNotContain("session.idle");
         (await Delegations(id)).Single(d => d.ParentToolCallId == "call_sub").Status.ShouldBe("running");
 
         var answered = await fleet.WithOrchestratorAsync(o => o.AnswerQuestionAsync(childId, "call_child_ask", [["B"]], cts.Token));
         answered.IsSuccess.ShouldBeTrue(answered.IsFailure ? answered.Error.Description : null);
 
-        // The child finishes, then the parent, with the child's answer.
-        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+        // The child finishes and reports to the parent, which wakes with the child's answer.
+        await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).LastOrDefault()?.Text == "The helper says: B.", cts.Token);
         await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_sub").Status == "completed", cts.Token);
         LlmRequest.LastToolText(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Continues(r, childPrompt))).ShouldNotBeNull().ShouldContain("B");
-        LlmRequest.LastToolText(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Continues(r, prompt))).ShouldNotBeNull().ShouldContain("B it is.");
-        LatestParts<TextMessageEventPart>(events, id).Last().Text.ShouldBe("The helper says: B.");
+        fleet.Llm.Queue.Requests.ShouldContain(r => LlmRequest.LastRole(r) == "user" && LlmRequest.LastUserText(r)!.Contains("<subagent") && LlmRequest.LastUserText(r)!.Contains("B it is."));
         (await child.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.Idle);
     }
 
@@ -401,7 +402,8 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
                 return ToolCall("call_bg_sub", "subagent", new { description = "A slow helper", prompt = childPrompt, agent = "general", subagent_type = "general", background = true });
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "The helper is on it." };
-            if (LlmRequest.Starts(request, "<subagent"))
+            // Only this test's own report: answers from every test stay queued, and the report of any other subagent has a <subagent> start too.
+            if (LlmRequest.Starts(request, "<subagent") && request.Contains("A slow helper", StringComparison.Ordinal))
                 return new ScriptedLlmResponse { Text = "The helper came back." };
             return null;
         });
