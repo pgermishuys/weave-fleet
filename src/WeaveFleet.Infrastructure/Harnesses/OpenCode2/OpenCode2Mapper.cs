@@ -1066,6 +1066,24 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     }
 
     /// <summary>
+    /// The server stopped with calls still open (V2 sends no end for them): each card ends failed, so none shows running
+    /// for ever, live or when the conversation is read back.
+    /// </summary>
+    public IReadOnlyList<HarnessEvent> OpenToolsEnded()
+    {
+        var events = _tools
+            .Select(entry => ToolPart(entry.Value.MessageId, entry.Key, entry.Value.Name, new OpenCode2ToolPartState
+            {
+                Status = "error",
+                Input = entry.Value.Input,
+                Error = "Stopped before it finished.",
+            }))
+            .ToList();
+        _tools.Clear();
+        return events;
+    }
+
+    /// <summary>
     /// <c>session.tool.success</c> and <c>session.tool.failed</c>: the call's result, any files it returned, and for a
     /// file it wrote, the file. A call that went to the background keeps its card running
     /// (<see cref="ToolStatus"/>); what it returned is the handle it was given, which the card shows.

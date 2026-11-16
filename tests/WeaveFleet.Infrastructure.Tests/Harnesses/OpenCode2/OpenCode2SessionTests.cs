@@ -385,6 +385,23 @@ public sealed class OpenCode2SessionTests
     }
 
     [Fact]
+    public async Task A_tool_still_running_when_the_server_stops_ends_as_an_error()
+    {
+        await using var server = Server(new StubHandler(_ => Json("{}")));
+        await using var session = NewSession(server);
+        session.OnEvent(Event("session.execution.started", $$"""{"sessionID":"{{Session}}"}"""));
+        session.OnEvent(Event("session.tool.input.started", $$"""{"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","name":"read"}"""));
+        session.OnEvent(Event("session.tool.called", $$$"""{"sessionID":"{{{Session}}}","assistantMessageID":"msg_1","id":"call_1","input":{"path":"a.txt"}}"""));
+
+        session.OnServerStopped();
+
+        var events = await ReadAvailableAsync(session);
+        var last = events.Where(e => e.Type == EventTypes.MessagePartUpdated).Last();
+        last.Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString().ShouldBe("error");
+        events.Select(StatusOf).TakeLast(2).ShouldBe([EventTypes.SessionError, EventTypes.SessionIdle]);
+    }
+
+    [Fact]
     public async Task An_idle_session_says_nothing_when_the_server_stops()
     {
         await using var server = Server(new StubHandler(_ => Json("{}")));
