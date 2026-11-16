@@ -53,6 +53,7 @@ async function load(): Promise<void> {
   }
   try {
     nightly.value = await getNightlyDreaming(target);
+    error.value = null;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "Couldn't load nightly dreaming.";
   }
@@ -88,8 +89,15 @@ watch(() => nightly.value?.enabled && harnessType.value, (type) => emit("harness
 </script>
 
 <template>
+  <ErrorNote
+    v-if="isDreamingEnabled && !nightly && error"
+    :message="error"
+    class="mt-5"
+    data-testid="dream-nightly-error"
+    @retry="load"
+  />
   <div
-    v-if="isDreamingEnabled && nightly"
+    v-else-if="isDreamingEnabled && nightly"
     class="mt-5 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4"
     data-testid="dream-nightly"
   >
