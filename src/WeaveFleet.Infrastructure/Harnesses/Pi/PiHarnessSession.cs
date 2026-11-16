@@ -578,7 +578,12 @@ internal sealed class PiHarnessSession : IHarnessSession
         }
 
         LogProcessExited(_logger, InstanceId, exitCode, null);
+        var turnRunning = _status is HarnessSessionStatus.Running;
         _status = HarnessSessionStatus.Error;
+
+        // Its tool calls won't finish and its turn won't end: say so, or the conversation shows them running for ever.
+        foreach (var harnessEvent in _mapper.ProcessEnded($"Pi exited with code {exitCode} before finishing.", turnRunning))
+            _eventChannel.Writer.TryWrite(harnessEvent);
     }
 
     private static IReadOnlyList<PiMessage> ExtractMessages(JsonElement? data)

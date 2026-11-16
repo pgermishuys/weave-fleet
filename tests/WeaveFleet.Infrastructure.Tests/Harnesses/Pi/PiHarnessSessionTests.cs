@@ -544,6 +544,27 @@ public sealed class PiHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_process_that_dies_mid_tool_ends_the_tool_as_an_error_and_the_turn_as_failed()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var started = ReadEventsAsync(session, 1, cts.Token);
+        await harness.WriteEventAsync(new PiToolExecutionStartEvent { ToolCallId = "call_1", ToolName = "bash" }, cts.Token);
+        await started;
+
+        var ended = ReadEventsAsync(session, 3, cts.Token);
+        harness.Process.Exit(137);
+        var events = await ended;
+
+        var tool = events[0].Payload!.Value.GetProperty("part");
+        tool.GetProperty("callID").GetString().ShouldBe("call_1");
+        tool.GetProperty("state").GetProperty("status").GetString().ShouldBe("error");
+        events[1].Type.ShouldBe(EventTypes.SessionError);
+        events[2].Type.ShouldBe(EventTypes.SessionStatus);
+    }
+
+    [Fact]
     public async Task running_work_is_the_subagents_the_running_call_reported_and_none_once_it_ends()
     {
         await using var harness = CreateHarness();
@@ -852,11 +873,9 @@ public sealed class PiHarnessSessionTests
 
     private sealed class TestPiProcessManager : IPiProcessManager
     {
-        public event EventHandler<int>? ProcessExited
-        {
-            add { }
-            remove { }
-        }
+        public event EventHandler<int>? ProcessExited;
+
+        public void Exit(int exitCode) => ProcessExited?.Invoke(this, exitCode);
 
         public bool IsRunning { get; set; } = true;
 
