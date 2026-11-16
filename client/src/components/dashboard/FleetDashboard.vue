@@ -207,6 +207,11 @@ function handleNewSession(): void {
       <p class="dashboard__harness-banner-text">
         <strong>No harness is ready yet</strong>
         Fleet runs sessions through a harness such as OpenCode or Claude Code. Install one to start.
+        <span
+          v-if="noHarnessReason"
+          class="dashboard__harness-banner-reason"
+          data-testid="harness-setup-banner-reason"
+        >{{ noHarnessReason }}</span>
       </p>
       <Button
         size="sm"
@@ -388,6 +393,11 @@ function handleNewSession(): void {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.dashboard__harness-banner-reason {
+  display: block;
+  margin-top: 2px;
 }
 
 .dashboard__harness-banner-text strong {

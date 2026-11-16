@@ -5,10 +5,11 @@ import type { SessionListItem } from "@/api/client";
 import { confirmAction } from "@/components/ui/confirm";
 import ProgressRing from "@/components/sessions/ProgressRing.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import { useArchiveSession, useDeleteSession } from "@/composables/use-session-actions";
+import { useDeleteSession } from "@/composables/use-session-actions";
 import { sessionCache } from "@/lib/session-cache";
 import { isSessionLive, sessionRowStatus } from "@/lib/session-row-status";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkflowsStore } from "@/stores/workflows";
 
@@ -26,7 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const sessionsStore = useSessionsStore();
-const { archiveSession, isArchiving } = useArchiveSession();
+const archiveQueue = useArchiveQueueStore();
 const { deleteSession, isDeleting } = useDeleteSession();
 
 const sessionId = computed(() => props.session.session.id);
@@ -46,7 +47,7 @@ const isArchived = computed(() => props.session.retentionStatus === "archived");
 const canArchive = computed(() =>
   !props.readOnly && (props.session.capabilities?.canArchive ?? (!isArchived.value && props.session.lifecycleStatus !== "running")));
 const canDelete = computed(() => !props.readOnly && (props.session.capabilities?.canDelete ?? true));
-const isPending = computed(() => isArchiving.value || isDeleting.value);
+const isPending = computed(() => isDeleting.value);
 
 const place = computed(() => {
   const workspace = props.session.projectName?.trim()
@@ -65,15 +66,10 @@ function lastSegment(path: string): string {
   return parts.at(-1) ?? path;
 }
 
-async function handleArchive(): Promise<void> {
+/** Hides the row now and archives after the same 6 s Undo as the session list. */
+function handleArchive(): void {
   if (!canArchive.value) return;
-  try {
-    await archiveSession(sessionId.value);
-    sessionsStore.patchSession(sessionId.value, { retentionStatus: "archived" });
-    emit("changed");
-  } catch {
-    // Mutation state is owned by the composable.
-  }
+  archiveQueue.archive([sessionId.value]);
 }
 
 async function handleDelete(): Promise<void> {
@@ -175,7 +171,7 @@ async function handleDelete(): Promise<void> {
         :disabled="isPending"
         aria-label="Archive session"
         title="Archive"
-        @click.stop="void handleArchive()"
+        @click.stop="handleArchive()"
         @keydown.stop
       >
         <Archive
