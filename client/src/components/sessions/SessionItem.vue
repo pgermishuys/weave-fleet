@@ -1230,10 +1230,12 @@ function removeSessionFromStore(): void {
 }
 
 .session-item-shell:hover .session-item--has-action .session-meta,
+.session-item-shell:hover .session-item--has-action .session-kind,
 .session-item-shell:hover .session-item--has-action .session-progress,
 .session-item-shell:hover .session-item--has-two-actions .pr-badge,
 .session-item-shell:hover .session-item--has-two-actions .session-running-chip,
 .session-item-shell:has(.session-row-action:focus-visible) .session-meta,
+.session-item-shell:has(.session-row-action:focus-visible) .session-kind,
 .session-item-shell:has(.session-row-action:focus-visible) .session-progress {
   visibility: hidden;
 }
