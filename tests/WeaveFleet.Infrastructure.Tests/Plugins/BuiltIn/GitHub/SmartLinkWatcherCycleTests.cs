@@ -30,6 +30,7 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
     private const string UserId = "test-user";
     private const string BranchX = "/repos/acme/rocket/pulls?head=acme%3Afeature%2Fx&state=all&per_page=5";
     private const string BranchY = "/repos/acme/rocket/pulls?head=acme%3Afeature%2Fy&state=all&per_page=5";
+    private const string BranchRelease = "/repos/acme/rocket/pulls?head=acme%3Arelease&state=all&per_page=5";
     private const string PullRequest7 = "/repos/acme/rocket/pulls/7";
     private const string CheckRuns = "/repos/acme/rocket/commits/abc123/check-runs";
 
@@ -205,6 +206,17 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
         _broadcaster.Broadcasts.Count.ShouldBe(broadcasts + 1);
     }
 
+    [Fact]
+    public async Task A_new_session_on_a_reused_branch_name_does_not_get_a_pull_request_that_closed_before_it_started()
+    {
+        // The clock is 2026-09-14; the session started then. Pull request 3 merged in August, 7 opened after the session began.
+        _links.BranchTargets.Add(new SmartLinkBranchTarget("s1", UserId, "release", _git.Path, null, "2026-09-14T08:30:00.0000000Z"));
+
+        await _watcher.RunCycleAsync(CancellationToken.None);
+
+        _links.All.Where(l => l.SessionId == "s1").Select(l => l.ResourceId).ShouldBe(["acme/rocket#7"]);
+    }
+
     private void OnBranch(string sessionId, string branch)
         => _links.BranchTargets.Add(new SmartLinkBranchTarget(sessionId, UserId, branch, _git.Path, null));
 
@@ -275,6 +287,11 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
 
             JsonNode body = pathAndQuery switch
             {
+                BranchRelease => new JsonArray
+                {
+                    new JsonObject { ["number"] = 3, ["state"] = "closed", ["closed_at"] = "2026-08-02T10:00:00Z", ["merged_at"] = "2026-08-02T10:00:00Z" },
+                    new JsonObject { ["number"] = 7, ["state"] = "open", ["closed_at"] = null },
+                },
                 BranchX => new JsonArray { new JsonObject { ["number"] = 7 } },
                 PullRequest7 => new JsonObject
                 {

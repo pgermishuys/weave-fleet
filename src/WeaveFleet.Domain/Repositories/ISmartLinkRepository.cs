@@ -76,10 +76,14 @@ public interface ISmartLinkRepository
     Task DeleteOrphanedAsync(CancellationToken ct);
 }
 
-/// <summary>A running session with a branch, used to look up the pull request opened from that branch.</summary>
+/// <summary>
+/// A running session with a branch, used to look up the pull request opened from that branch. <paramref name="SessionStartedAt"/>
+/// (ISO 8601) is when the session began: a pull request that closed before then belongs to an earlier use of the branch name.
+/// </summary>
 public sealed record SmartLinkBranchTarget(
     string SessionId,
     string UserId,
     string Branch,
     string Directory,
-    string? SourceDirectory);
+    string? SourceDirectory,
+    string? SessionStartedAt = null);

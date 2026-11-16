@@ -342,7 +342,7 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
         using var conn = _connectionFactory.CreateConnection();
         return await conn.QueryAsync(
             """
-            SELECT s.id AS session_id, s.user_id, w.branch, w.directory, w.source_directory
+            SELECT s.id AS session_id, s.user_id, w.branch, w.directory, w.source_directory, s.created_at
             FROM sessions s
             INNER JOIN workspaces w ON w.id = s.workspace_id
             WHERE s.lifecycle_status = 'running'
@@ -355,7 +355,8 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
                 r.GetString(r.GetOrdinal("user_id")),
                 r.GetString(r.GetOrdinal("branch")),
                 r.GetString(r.GetOrdinal("directory")),
-                r.GetNullableString(r.GetOrdinal("source_directory"))),
+                r.GetNullableString(r.GetOrdinal("source_directory")),
+                r.GetNullableString(r.GetOrdinal("created_at"))),
             ct).ConfigureAwait(false);
     }
 
