@@ -47,5 +47,14 @@ export async function setPluginEnabledEverywhere(pluginId: string, enabled: bool
     return;
   }
   setPluginEnabled(pluginId, enabled);
-  await usePreferencesStore().set(DISABLED_PLUGINS_PREFERENCE_KEY, JSON.stringify([...disabledPluginIds()]));
+  // The list is one preference, so saving this browser's copy would undo what another browser or the phone changed
+  // since this one loaded it. Read what the server has now and change only this plugin in it.
+  const preferences = usePreferencesStore();
+  await preferences.refresh();
+  const raw = preferences.preferences[DISABLED_PLUGINS_PREFERENCE_KEY];
+  const next = new Set(raw === undefined ? disabledPluginIds() : parseDisabledPlugins(raw));
+  if (enabled) next.delete(pluginId);
+  else next.add(pluginId);
+  setDisabledPlugins(next);
+  await preferences.set(DISABLED_PLUGINS_PREFERENCE_KEY, JSON.stringify([...next]));
 }

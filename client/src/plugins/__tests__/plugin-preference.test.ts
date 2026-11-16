@@ -51,6 +51,21 @@ describe("plugin switch kept as a server preference", () => {
     expect(getSidebarViews()).toHaveLength(1);
   });
 
+  it("keeps what another device switched off when this one switches a different plugin", async () => {
+    const other = { ...demo, descriptor: { ...demo.descriptor, id: "other", displayName: "Other" }, contributions: { sidebarItems: [{ viewId: "other", label: "Other", icon: Stub }] } };
+    runtime.registerPlugin(demo);
+    runtime.registerPlugin(other);
+    usePluginPreferenceSync();
+    await settle();
+    // The phone switches "other" off after this browser loaded the (empty) list.
+    api.stored[DISABLED_PLUGINS_PREFERENCE_KEY] = '["other"]';
+
+    await setPluginEnabledEverywhere("demo", false);
+
+    expect(JSON.parse(api.stored[DISABLED_PLUGINS_PREFERENCE_KEY]).sort()).toEqual(["demo", "other"]);
+    expect(isPluginEnabled("other")).toBe(false);
+  });
+
   it("takes the server's list when preferences arrive, on a browser that has never seen it", async () => {
     api.stored[DISABLED_PLUGINS_PREFERENCE_KEY] = '["demo"]';
     holdPluginsUntilKnown();
