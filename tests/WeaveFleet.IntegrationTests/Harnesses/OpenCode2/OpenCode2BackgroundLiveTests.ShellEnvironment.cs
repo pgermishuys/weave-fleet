@@ -41,7 +41,8 @@ public sealed partial class OpenCode2BackgroundLiveTests
                 return new ScriptedLlmResponse { Text = "Listed." };
             if (LlmRequest.Starts(request, prompt))
                 return ToolCall("call_env", "shell", new { command = ListEnvironment, description = "The environment" });
-            if (LlmRequest.Continues(request, prompt) && LlmRequest.LastToolText(request) is { } text && !text.Contains("Listed.", StringComparison.Ordinal))
+            // The subagent call returns at once in V2 2.3 (it runs in the background): only the shell's listing leads to it.
+            if (LlmRequest.Continues(request, prompt) && LlmRequest.LastToolText(request) is { } text && text.Contains("fleet=", StringComparison.Ordinal))
                 return ToolCall("call_env_sub", "subagent", new { description = "List it too", prompt = childPrompt, agent = "general", subagent_type = "general" });
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "Both listed." };
@@ -53,6 +54,7 @@ public sealed partial class OpenCode2BackgroundLiveTests
         var events = fleet.Watch(cts.Token, id);
         await PromptAsync(id, prompt, options: null, cts.Token);
         await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "Both listed."), cts.Token);
+        await WaitForAsync(events, () => fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, childPrompt)), cts.Token);
 
         var own = ToolOutput(fleet.Llm.Queue.Requests.First(r => LlmRequest.Continues(r, prompt)));
         var child = ToolOutput(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Continues(r, childPrompt)));

@@ -57,6 +57,16 @@ public sealed class OpenCode2PluginNoticeTests
     }
 
     [Fact]
+    public void The_note_2_3_0_starts_every_fork_with_is_for_the_model_and_does_not_show()
+    {
+        // Seen live on 2.3.0: a side question's fork began with a notice, "Fork notice", that nobody wrote.
+        var fork = SyntheticMessage("Fork notice") with { Id = "msg_fork_notice_ses_1" };
+
+        OpenCode2History.ToHarnessMessages([fork]).ShouldBeEmpty();
+        new OpenCode2Mapper(FleetSession).MapMessage(fork).ShouldBeEmpty();
+    }
+
+    [Fact]
     public void A_plugins_note_still_in_the_inbox_shows_on_a_reload()
     {
         // It waits there until the next prompt takes it in.

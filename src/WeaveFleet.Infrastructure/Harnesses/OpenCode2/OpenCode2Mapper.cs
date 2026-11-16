@@ -549,6 +549,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// </summary>
     internal static string? PluginNoteText(JsonElement metadata, string? description)
         => !string.IsNullOrWhiteSpace(description)
+            // 2.3.0 starts every fork with a note to the model, described "Fork notice"; the user asked for the fork.
+            && !description.Trim().Equals("Fork notice", StringComparison.OrdinalIgnoreCase)
             && (metadata.ValueKind != JsonValueKind.Object || ReadString(metadata, "source") is not ("shell" or SubagentTool))
                 ? description.Trim()
                 : null;
