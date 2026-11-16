@@ -26,6 +26,27 @@ function mountCard(state: Record<string, unknown>, onSubmit = vi.fn(async () => 
 }
 
 describe("QuestionCard", () => {
+  it("shows a question built from coloured shell output as words, without the codes", () => {
+    const esc = String.fromCharCode(27);
+    const { wrapper, onSubmit } = mountCard({
+      status: "running",
+      input: {
+        questions: [{
+          header: `${esc}[1mBuild${esc}[0m`,
+          question: `${esc}[31mTests failed${esc}[0m: retry?`,
+          options: [{ label: `${esc}[32mRetry${esc}[0m`, description: `${esc}[2mRuns again${esc}[0m` }],
+        }],
+      },
+    });
+    expect(wrapper.text()).toContain("Tests failed: retry?");
+    expect(wrapper.text()).toContain("Runs again");
+    expect(wrapper.text()).not.toContain("[31m");
+    expect(wrapper.text()).not.toContain("[0m");
+    expect(wrapper.text()).not.toContain(esc);
+    expect(onSubmit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it("takes keyboard focus on its first option, and the arrow keys move between options", async () => {
     const { wrapper } = mountCard({ status: "running", input: { questions } });
     expect(document.activeElement).toBe(wrapper.get("[data-testid='question-pill-Staging']").element);

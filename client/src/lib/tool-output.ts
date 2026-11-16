@@ -210,6 +210,15 @@ function isBlank(line: OutputLine): boolean {
   return line.every((span) => span.text.trim() === "");
 }
 
+/**
+ * Text an agent wrote for Fleet's own UI (a question, a page title), without terminal codes: colour, cursor and title
+ * sequences go, so a question built from coloured shell output reads as words, not "[31mFailed[0m". Text with no
+ * escape in it comes back as it is.
+ */
+export function plainTerminalText(raw: string): string {
+  return raw.includes("\x1b") ? parseToolOutput(raw).plain : raw;
+}
+
 export function lineText(line: OutputLine): string {
   let text = "";
   for (const span of line) text += span.text;
