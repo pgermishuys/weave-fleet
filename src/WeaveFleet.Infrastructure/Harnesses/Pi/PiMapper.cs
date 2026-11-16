@@ -259,6 +259,30 @@ internal sealed class PiMapper
         return [CreateReasoningPartUpdatedEvent(messageId, evt.ContentIndex, text)];
     }
 
+    /// <summary>
+    /// Pi's process ended with tool calls still running: they won't finish, so each is ended as an error, the turn fails
+    /// with <paramref name="message"/> and the session goes idle. Empty when nothing was running.
+    /// </summary>
+    internal IReadOnlyList<HarnessEvent> ProcessEnded(string message, bool turnRunning)
+    {
+        var events = new List<HarnessEvent>();
+        foreach (var (callId, state) in _toolsByCallId.ToList())
+        {
+            if (state.IsError is not null)
+                continue;
+            var ended = state with { IsError = true };
+            _toolsByCallId[callId] = ended;
+            events.Add(CreateToolPartUpdatedEvent(ended, new ToolErrorState { Input = state.Input, Output = state.Output, Error = "Stopped before it finished." }));
+        }
+
+        if (events.Count == 0 && !turnRunning)
+            return events;
+
+        events.Add(CreateSessionErrorEvent(message));
+        events.Add(CreateStatusEvent("idle"));
+        return events;
+    }
+
     private IReadOnlyList<HarnessEvent> MapToolExecutionStart(PiToolExecutionStartEvent evt)
     {
         var messageId = ResolveToolHostMessageId(evt.ToolCallId);
