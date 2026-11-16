@@ -1095,7 +1095,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         };
         events.AddRange(ToolFiles(call.MessageId, call.CallId, content));
         if (!failed)
-            events.AddRange(FileWritten(call.MessageId, tool, evt.Location?.Directory));
+            events.AddRange(FileWritten(call.MessageId, tool, evt.Location?.Directory, metadata));
         if (background && TrackBackground(call.MessageId, call.CallId, tool.Name, tool.Input, metadata) is { } work)
             events.Add(work);
         return events;
@@ -1113,8 +1113,10 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// are, against the event's folder. Edits by other means (a shell's <c>sed</c>) aren't seen; the client reloads open
     /// files when the turn ends for those.
     /// </summary>
-    private List<HarnessEvent> FileWritten(string messageId, ToolCall tool, string? directory)
+    private List<HarnessEvent> FileWritten(string messageId, ToolCall tool, string? directory, JsonElement? metadata)
     {
+        if (tool.Name == "patch")
+            return PatchWritten(messageId, directory, metadata);
         if (!FileWritingTools.Contains(tool.Name)
             || tool.Input is not { ValueKind: JsonValueKind.Object } input
             || ReadString(input, "path") is not { Length: > 0 } path)
@@ -1147,6 +1149,48 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                 new OpenCode2FileChangedPayload { File = fullPath, Event = "change" },
                 OpenCode2JsonContext.Default.OpenCode2FileChangedPayload)),
         ];
+    }
+
+    /// <summary>
+    /// A finished <c>patch</c> call (the tool GPT models get in place of edit and write): its input is one patch text, so
+    /// the files it touched come from <c>metadata.files</c> (<c>file</c> is relative to the session folder, absolute for
+    /// a file outside it). Every one is reported as written and changed; no per-file change is sent, as a patch isn't
+    /// a whole file or one replaced string.
+    /// </summary>
+    private List<HarnessEvent> PatchWritten(string messageId, string? directory, JsonElement? metadata)
+    {
+        if (metadata is not { ValueKind: JsonValueKind.Object } meta
+            || !meta.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var baseDirectory = directory ?? workingDirectory;
+        var paths = new List<string>();
+        foreach (var file in files.EnumerateArray())
+        {
+            if (file.ValueKind != JsonValueKind.Object || ReadString(file, "file") is not { Length: > 0 } path)
+                continue;
+            if (!Path.IsPathRooted(path) && string.IsNullOrWhiteSpace(baseDirectory))
+                continue;
+            var fullPath = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory!, path));
+            if (!paths.Contains(fullPath))
+                paths.Add(fullPath);
+        }
+
+        if (paths.Count == 0)
+            return [];
+
+        var events = new List<HarnessEvent>
+        {
+            Event(EventTypes.FilesWritten, JsonSerializer.SerializeToElement(
+                new FilesWrittenPayload { SessionId = fleetSessionId, MessageId = messageId, Paths = paths, Changes = [] },
+                OpenCode2JsonContext.Default.FilesWrittenPayload)),
+        };
+        events.AddRange(paths.Select(p => Event(EventTypes.FileWatcherUpdated, JsonSerializer.SerializeToElement(
+            new OpenCode2FileChangedPayload { File = p, Event = "change" },
+            OpenCode2JsonContext.Default.OpenCode2FileChangedPayload))));
+        return events;
     }
 
     private IEnumerable<HarnessEvent> ToolFiles(string messageId, string callId, IEnumerable<OpenCode2ToolContent>? content)
