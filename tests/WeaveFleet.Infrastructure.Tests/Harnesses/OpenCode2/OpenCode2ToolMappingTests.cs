@@ -168,6 +168,25 @@ public sealed class OpenCode2ToolMappingTests
         file.ChangeType.ShouldBe("change");
     }
 
+    [Fact]
+    public void A_patch_reports_every_file_it_touched_as_written_and_changed()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession, "/elsewhere");
+        mapper.Map(Event("session.tool.input.started", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","name":"patch"}"""));
+        mapper.Map(Event("session.tool.called", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","input":{"patchText":"*** Begin Patch\n*** End Patch"}}"""));
+
+        var events = mapper.Map(Event("session.tool.success", """
+            {"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","content":[{"type":"text","text":"Success."}],
+             "metadata":{"files":[{"file":"src/a.ts","patch":"@@","additions":1,"deletions":0,"status":"modified"},{"file":"b.md","patch":"@@","additions":2,"deletions":0,"status":"added"},{"file":"src/a.ts","patch":"@@","additions":1,"deletions":0,"status":"modified"}]}}
+            """, directory: "/work/proj"));
+
+        var translated = events.Select(Translate).ToList();
+        translated.OfType<FilesWritten>().ShouldHaveSingleItem().Payload.Paths
+            .ShouldBe([Path.GetFullPath("/work/proj/src/a.ts"), Path.GetFullPath("/work/proj/b.md")]);
+        translated.OfType<FilesChanged>().SelectMany(c => c.Payload.Files).Select(f => f.Path)
+            .ShouldBe([Path.GetFullPath("/work/proj/src/a.ts"), Path.GetFullPath("/work/proj/b.md")]);
+    }
+
     [Theory]
     // V2's write sends the whole file; its edit the exact text it replaced, once unless replaceAll.
     [InlineData("write", """{"path":"plan.md","content":"- [ ] 1. One\n"}""", "- [ ] 1. One\n", null, null, false)]
