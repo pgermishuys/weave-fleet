@@ -124,7 +124,9 @@ public sealed class OpenCode2AgentPermissionLiveTests(OpenCode2LiveFleet fleet) 
         var id = await fleet.CreateSessionAsync(folder, "Read-only subagent", cts.Token);
         var events = fleet.Watch(cts.Token, id);
         await PromptAsync(id, prompt, options: null, cts.Token);
-        await WaitForAsync(events, () => fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, prompt)), cts.Token);
+        // V2 2.3 runs the subagent in the background: the parent's call returns before the child's first request.
+        await WaitForAsync(events, () => fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, prompt))
+            && fleet.Llm.Queue.Requests.Any(r => LlmRequest.Continues(r, childPrompt)), cts.Token);
 
         LlmRequest.OfferedToolNames(fleet.Llm.Queue.Requests.First(r => LlmRequest.Starts(r, prompt))).ShouldContain("shell");
         var child = LlmRequest.OfferedToolNames(fleet.Llm.Queue.Requests.First(r => LlmRequest.Starts(r, childPrompt)));
