@@ -176,6 +176,30 @@ public sealed class OpenCode2BackgroundTests
     }
 
     [Fact]
+    public void A_report_from_a_child_that_still_has_work_running_does_not_end_the_delegation()
+    {
+        // 2.3.0: the model-facing tag says "running" and lists the work, but the metadata keeps state "completed".
+        var mapper = new OpenCode2Mapper(FleetSession);
+        mapper.Map(Event("session.tool.input.started", $$"""{"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","name":"subagent"}"""));
+        mapper.Map(Event("session.tool.called", $$"""{"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","input":{"agent":"general","description":"Slow helper"} }"""));
+        var success = Event("session.tool.success", $$"""
+            {"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","content":[],"metadata":{"sessionID":"{{Child}}","status":"running"} }
+            """);
+        mapper.TryReadDelegation(success);
+        mapper.Map(success);
+
+        var report = Event("session.inbox.enqueued", $$"""
+            {"inboxID":"msg_2","sessionID":"{{Session}}","item":{"type":"synthetic","payload":{
+              "text":"<subagent sessionID=\"{{Child}}\" state=\"running\" description=\"Slow helper\">\nIdle.\n\nBackground work still running:\n- shell (sh_1): sleep 40\n</subagent>",
+              "metadata":{"source":"subagent","childID":"{{Child}}","agent":"General","state":"completed"} } } }
+            """);
+
+        mapper.TryReadDelegation(report).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, "running", Background: true));
+        // And it is still the server's to lose.
+        mapper.BackgroundDelegationsLost().ShouldHaveSingleItem().Status.ShouldBe("cancelled");
+    }
+
+    [Fact]
     public void A_notice_for_a_shell_is_not_a_delegation()
     {
         new OpenCode2Mapper(FleetSession).TryReadDelegation(Event("session.inbox.enqueued", $$"""
