@@ -6,6 +6,7 @@ import { QuestionGoneError } from "@/composables/use-question-answer";
 import { focusBlockingCard, moveChoiceFocus } from "@/lib/focus-blocking-card";
 import { linkifyText } from "@/lib/linkify-text";
 import type { AccumulatedToolPart } from "@/lib/client-types";
+import { plainTerminalText } from "@/lib/tool-output";
 import {
   getQuestionInput,
   getQuestionAnswers,
@@ -204,14 +205,14 @@ function answerText(questionIdx: number): string {
       v-for="(q, qi) in questionInput?.questions ?? []"
       :key="qi"
       class="qrow"
-      :title="q.question"
+      :title="plainTerminalText(q.question)"
     >
       <MessageCircleQuestion
         class="qrow__icon"
         aria-hidden="true"
       />
       <span class="qrow__label">Asked</span>
-      <span class="qrow__question">{{ q.question }}</span>
+      <span class="qrow__question">{{ plainTerminalText(q.question) }}</span>
       <span class="qrow__arrow">→</span>
       <span class="qrow__answer">{{ answerText(qi) }}</span>
       <Check
@@ -229,14 +230,14 @@ function answerText(questionIdx: number): string {
   >
     <div
       class="qrow"
-      :title="questionInput?.questions[0]?.question"
+      :title="plainTerminalText(questionInput?.questions[0]?.question ?? '')"
     >
       <MessageCircleQuestion
         class="qrow__icon"
         aria-hidden="true"
       />
       <span class="qrow__label">Asked</span>
-      <span class="qrow__question">{{ questionInput?.questions[0]?.question ?? "Question" }}</span>
+      <span class="qrow__question">{{ plainTerminalText(questionInput?.questions[0]?.question ?? "Question") }}</span>
       <span class="qrow__skipped">Skipped</span>
     </div>
   </div>
@@ -255,7 +256,7 @@ function answerText(questionIdx: number): string {
         class="qcard__head-icon"
         aria-hidden="true"
       />
-      <span class="qcard__title">{{ questionInput.questions[0]?.header || "Question" }}</span>
+      <span class="qcard__title">{{ plainTerminalText(questionInput.questions[0]?.header || "Question") }}</span>
       <span class="qcard__needs">
         <StatusGlyph status="waiting_input" />
         Needs you
@@ -272,12 +273,12 @@ function answerText(questionIdx: number): string {
         v-if="qi > 0 && q.header"
         class="qcard__subhead"
       >
-        {{ q.header }}
+        {{ plainTerminalText(q.header) }}
       </p>
       <!-- eslint-disable-next-line vue/no-v-html -->
       <p
         class="qcard__text"
-        v-html="linkifyText(q.question)"
+        v-html="linkifyText(plainTerminalText(q.question))"
       />
       <p
         v-if="q.multiple"
@@ -289,7 +290,7 @@ function answerText(questionIdx: number): string {
       <div
         class="qcard__choices"
         :role="q.multiple ? 'group' : 'radiogroup'"
-        :aria-label="q.header || q.question"
+        :aria-label="plainTerminalText(q.header || q.question)"
       >
         <button
           v-for="(opt, oi) in q.options"
@@ -310,11 +311,11 @@ function answerText(questionIdx: number): string {
             <template v-else>{{ oi + 1 }}</template>
           </span>
           <span class="qcard__choice-copy">
-            <span class="qcard__choice-name">{{ opt.label }}</span>
+            <span class="qcard__choice-name">{{ plainTerminalText(opt.label) }}</span>
             <span
               v-if="opt.description"
               class="qcard__choice-desc"
-            >{{ opt.description }}</span>
+            >{{ plainTerminalText(opt.description) }}</span>
           </span>
         </button>
 
