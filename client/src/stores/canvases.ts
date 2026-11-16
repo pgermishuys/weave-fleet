@@ -11,6 +11,7 @@ import {
 } from "@/lib/server-canvas";
 import { modPanes, modPaneOwner } from "@/lib/mods/points";
 import type { VisualPayload } from "@/lib/visual-payload";
+import { plainTerminalText } from "@/lib/tool-output";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
 /**
@@ -104,7 +105,7 @@ function defaultSessionCanvases(): SessionCanvases {
 }
 
 export function visualCanvasTitle(payload: VisualPayload): string {
-  const title = payload.title?.trim();
+  const title = payload.title ? plainTerminalText(payload.title).trim() : undefined;
   if (title) return title;
 
   const path = payload.sourceFilePath?.trim();
@@ -155,7 +156,7 @@ function toServerCanvasInstance(canvas: ServerCanvasSnapshot): CanvasInstance | 
     return {
       id: serverCanvasTabId(canvas.canvasId),
       kind: "browser",
-      browser: { ...browserPage(canvas.state), title: canvas.title },
+      browser: { ...browserPage(canvas.state), title: plainTerminalText(canvas.title) },
       server: { canvasId: canvas.canvasId, kind: "browser", version: canvas.version },
     };
   }
@@ -164,7 +165,7 @@ function toServerCanvasInstance(canvas: ServerCanvasSnapshot): CanvasInstance | 
     return {
       id: serverCanvasTabId(canvas.canvasId),
       kind: "page",
-      page: { ...shownPage(canvas.state), title: canvas.title },
+      page: { ...shownPage(canvas.state), title: plainTerminalText(canvas.title) },
       server: { canvasId: canvas.canvasId, kind: "page", version: canvas.version },
     };
   }

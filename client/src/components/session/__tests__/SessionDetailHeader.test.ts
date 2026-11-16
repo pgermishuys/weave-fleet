@@ -311,3 +311,14 @@ describe("SessionDetailHeader composer state", () => {
     querySpy.mockRestore();
   });
 });
+
+describe("SessionDetailHeader title", () => {
+  it("shows a title made from coloured output without its terminal codes", () => {
+    const esc = String.fromCharCode(27);
+    const wrapper = mountHeader({ title: `${esc}[31mFix${esc}[0m the build` });
+
+    expect(wrapper.text()).toContain("Fix the build");
+    expect(wrapper.text()).not.toContain("[31m");
+    expect(wrapper.text()).not.toContain(esc);
+  });
+});

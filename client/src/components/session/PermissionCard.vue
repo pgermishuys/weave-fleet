@@ -8,6 +8,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { PermissionAsk, PermissionReply } from "@/composables/use-session-permissions";
 import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
 import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
+import { plainTerminalText } from "@/lib/tool-output";
 
 const props = defineProps<{
   ask: PermissionAsk;
@@ -19,7 +20,9 @@ const { setActiveSection } = useSettingsNav();
 
 // ── What the agent wants ──────────────────────────────────────────────────────
 
-const heading = computed(() => permissionHeading(props.ask));
+const askTitle = computed(() => (props.ask.title ? plainTerminalText(props.ask.title) : props.ask.title));
+const askDirectory = computed(() => (props.ask.directory ? plainTerminalText(props.ask.directory) : props.ask.directory));
+const heading = computed(() => permissionHeading({ ...props.ask, title: askTitle.value }));
 
 interface DiffLine {
   text: string;
@@ -197,10 +200,10 @@ function openSettings(): void {
     ><span
       v-if="ask.directory"
       class="pcard__cwd"
-    >{{ ask.directory }}</span><span
+    >{{ askDirectory }}</span><span
       class="pcard__prompt"
       aria-hidden="true"
-    >$ </span>{{ ask.title }}</pre>
+    >$ </span>{{ askTitle }}</pre>
 
     <!-- A file, with what changes in it -->
     <div
@@ -208,7 +211,7 @@ function openSettings(): void {
       class="pcard__diff"
     >
       <div class="pcard__file">
-        <span class="pcard__path">{{ ask.title ?? ask.tool }}</span>
+        <span class="pcard__path">{{ askTitle ?? ask.tool }}</span>
         <span
           v-if="added"
           class="pcard__add"
