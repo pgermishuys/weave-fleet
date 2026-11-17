@@ -493,7 +493,7 @@ public sealed class SessionRepository(
     public async Task ArchiveAsync(IDbConnection connection, IDbTransaction? transaction, string id, string archivedAt)
     {
         await connection.ExecuteNonQueryAsync(
-            "UPDATE sessions SET retention_status = 'archived', archived_at = @ArchivedAt, pin_order = NULL WHERE id = @Id AND user_id = @UserId",
+            "UPDATE sessions SET retention_status = 'archived', archived_at = @ArchivedAt, pin_order = NULL, turn_started_at = NULL, turn_waiting = 0 WHERE id = @Id AND user_id = @UserId",
             cmd =>
             {
                 cmd.AddParameter("Id", id);
