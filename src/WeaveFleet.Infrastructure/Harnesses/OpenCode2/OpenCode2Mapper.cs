@@ -581,8 +581,11 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 
     /// <summary>
     /// The text of a prompt a schedule sent into the session (<c>experimental.schedules</c>): a <c>user</c> item that
-    /// carries <c>metadata.schedule</c>. Fleet didn't send it, so no message of Fleet's shows it.
+    /// carries <c>metadata.schedule</c> (2.3.0) or <c>metadata.automation</c> (its later name). Fleet didn't send it, so no message of Fleet's shows it.
     /// </summary>
+    private static bool IsObject(JsonElement element, string name)
+        => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object;
+
     private static string? ReadScheduledPrompt(JsonElement data)
         => data.TryGetProperty("item", out var item)
             && item.ValueKind == JsonValueKind.Object
@@ -591,8 +594,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             && payload.ValueKind == JsonValueKind.Object
             && payload.TryGetProperty("metadata", out var metadata)
             && metadata.ValueKind == JsonValueKind.Object
-            && metadata.TryGetProperty("schedule", out var schedule)
-            && schedule.ValueKind == JsonValueKind.Object
+            && (IsObject(metadata, "schedule") || IsObject(metadata, "automation"))
                 ? ReadString(payload, "text") ?? string.Empty
                 : null;
 

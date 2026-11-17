@@ -231,6 +231,19 @@ public sealed class OpenCode2MapperTests
         failed.Payload.Error.RetryAt.ShouldNotBeNull().ShouldBeInRange(DateTimeOffset.UtcNow.AddSeconds(85), DateTimeOffset.UtcNow.AddSeconds(95));
     }
 
+    [Theory]
+    [InlineData("schedule")]
+    [InlineData("automation")]
+    public void A_timer_prompt_shows_as_a_message_of_the_session_whichever_key_carries_its_metadata(string key)
+    {
+        // OpenCode 2.3.0 marks a timer prompt with metadata.schedule; later builds call it metadata.automation.
+        var events = new OpenCode2Mapper(FleetSession).Map(Event("session.inbox.enqueued",
+            """{"sessionID":"ses_1","inboxID":"msg_timer1","item":{"type":"user","payload":{"text":"Check the build","metadata":{"KEY":{"id":"tmr_1","name":"Nightly"}}}}}""".Replace("KEY", key)));
+
+        events.Count.ShouldBe(2);
+        events[1].Payload!.Value.GetRawText().ShouldContain("Check the build");
+    }
+
     [Fact]
     public void A_scheduled_retry_shows_as_retrying_with_the_attempt_and_the_reason()
     {
