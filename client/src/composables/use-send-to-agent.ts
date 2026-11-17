@@ -1,3 +1,4 @@
+import { randomId } from "@/lib/random-id";
 import { ref, shallowRef, toValue, type MaybeRefOrGetter } from "vue"
 import { apiFetchOn } from "@/lib/api-client"
 import { useMachineTarget } from "@/lib/machine-target"
@@ -20,7 +21,7 @@ export function useSendToAgent(sessionId: MaybeRefOrGetter<string>) {
       const response = await apiFetchOn(connection, `/api/sessions/${encodeURIComponent(toValue(sessionId))}/prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, userMessageId: crypto.randomUUID() }),
+        body: JSON.stringify({ text, userMessageId: randomId() }),
       })
       if (response.ok) {
         sent.value = new Set([...sent.value, key])

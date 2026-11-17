@@ -1,3 +1,4 @@
+import { randomId } from "@/lib/random-id";
 import { computed, reactive, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { components } from "@/api/generated/schema";
 import { useDraftState } from "@/composables/use-draft-state";
@@ -221,7 +222,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     current.asking = true;
     current.error = undefined;
     if (!current.side) current.starting = text;
-    const correlationId = `side-${crypto.randomUUID().replaceAll("-", "")}`;
+    const correlationId = `side-${randomId().replaceAll("-", "")}`;
     try {
       const { data, error, response } = await machine.api.POST("/api/sessions/{id}/side", {
         params: { path: { id: parentId } },

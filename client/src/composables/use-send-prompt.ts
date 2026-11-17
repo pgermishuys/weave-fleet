@@ -1,3 +1,4 @@
+import { randomId } from "@/lib/random-id";
 import { computed, reactive, readonly, shallowRef } from "vue";
 import type { SessionListItem } from "@/api/client";
 import type { components } from "@/api/generated/schema";
@@ -366,9 +367,9 @@ export function seedSentPrompt(
     return;
   }
 
-  const correlationId = `prompt-${crypto.randomUUID().replaceAll("-", "")}`;
+  const correlationId = `prompt-${randomId().replaceAll("-", "")}`;
   ensureSentPrompts(sessionId).push({
-    id: `user-${crypto.randomUUID().replaceAll("-", "")}`,
+    id: `user-${randomId().replaceAll("-", "")}`,
     correlationId,
     status: "pending",
     body: text,
@@ -578,8 +579,8 @@ export function useSendPrompt(sessionId: string) {
     const pickedModel = modelFromKey(draft.modelId);
     const model = draft.modelId ? modelsByKey.value[draft.modelId] : modelsByKey.value[defaultModelKey.value];
     const now = new Date();
-    const promptId = `user-${crypto.randomUUID().replaceAll("-", "")}`;
-    const correlationId = `prompt-${crypto.randomUUID().replaceAll("-", "")}`;
+    const promptId = `user-${randomId().replaceAll("-", "")}`;
+    const correlationId = `prompt-${randomId().replaceAll("-", "")}`;
     const resolvedAgentId = draft.agentId || agent?.id || defaultAgentId.value;
     const resolvedModelId = model?.id ?? pickedModel?.modelID ?? "";
     const usesDefaultAgent = !draft.agentId;
