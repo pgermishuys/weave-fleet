@@ -152,6 +152,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // What the user answered each question call with, kept with the call once it returns.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<IReadOnlyList<string>>> _answers = new(StringComparer.Ordinal);
 
+    // What claude --resume says when the session's transcript is gone.
+    private const string ResumeGonePrefix = "No conversation found with session ID:";
+
     private string? _claudeSessionId;    // captured from init message, used for --resume
     // The memory notes from the session's first prompt, sent with every prompt after it: a system prompt that changes
     // between --resume runs can't reuse the conversation's prompt cache.
@@ -1886,7 +1889,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             if (apiErrorMessage is not null)
                 await AddAssistantBlocksAsync(_root, apiErrorMessage).ConfigureAwait(false);
 
-            if (ClaudeCodeMapper.DescribeFailedResult(result) is { } failure && !TurnEndsWithText(failure))
+            if (ClaudeCodeMapper.DescribeFailedResult(result) is { } gone && gone.StartsWith(ResumeGonePrefix, StringComparison.Ordinal))
+            {
+                // Claude Code no longer has the transcript the session resumes: every send would fail the same way.
+                // The next send starts a new conversation (and its new id replaces the saved one).
+                _claudeSessionId = null;
+                await PersistNoticeAsync(
+                    "Claude Code no longer has this session's earlier conversation, so it starts a new one with your next message. "
+                    + "The new conversation doesn't have the earlier messages.").ConfigureAwait(false);
+            }
+            else if (ClaudeCodeMapper.DescribeFailedResult(result) is { } failure && !TurnEndsWithText(failure))
             {
                 // Claude Code writes some failures as an assistant message already, e.g. "Not logged in".
                 await PersistNoticeAsync($"Claude Code stopped: {failure}").ConfigureAwait(false);
