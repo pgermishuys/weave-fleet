@@ -203,6 +203,20 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ResumingASessionClaudeNoLongerHas_SaysSoAndStartsFreshNextTime()
+    {
+        // `claude --resume <id>` when ~/.claude/projects no longer has the transcript (claude 2.1.319).
+        await PumpAsync(
+            """{"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":0,"session_id":"gone-1","errors":["No conversation found with session ID: gone-1"]}""");
+
+        AllText().ShouldHaveSingleItem().ShouldBe(
+            "Claude Code no longer has this session's earlier conversation, so it starts a new one with your next message. "
+            + "The new conversation doesn't have the earlier messages.");
+        // Resuming it again would fail the same way for ever.
+        _session.ResumeToken.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task PromptBlockedByHook_SaysWhy()
     {
         await PumpAsync(Fixture("prompt-blocked-by-hook.jsonl"));
