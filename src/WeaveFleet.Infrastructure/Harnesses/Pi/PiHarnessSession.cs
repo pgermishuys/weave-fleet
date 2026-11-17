@@ -177,8 +177,22 @@ internal sealed class PiHarnessSession : IHarnessSession
         if (!response.Success)
             _mapper.Prompting(null);
         EnsureSuccess(response);
+        // An extension command can handle the prompt itself (Pi 0.99+: disposition "handled"): no run starts, so no
+        // agent_start or agent_end will come to end a Running status.
+        if (IsHandledByExtension(response))
+        {
+            _mapper.Prompting(null);
+            return;
+        }
+
         _status = HarnessSessionStatus.Running;
     }
+
+    private static bool IsHandledByExtension(PiResponseEvent response) =>
+        response.Data is { ValueKind: JsonValueKind.Object } data
+        && data.TryGetProperty("disposition", out var disposition)
+        && disposition.ValueKind == JsonValueKind.String
+        && disposition.GetString() == "handled";
 
     /// <summary>
     /// Compacts the session's context with Pi's compact command. Pi answers only once the compaction is done, so the

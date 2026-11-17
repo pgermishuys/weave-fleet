@@ -95,6 +95,23 @@ public sealed class PiHarnessSessionTests
     }
 
     [Fact]
+    public async Task send_prompt_an_extension_command_handled_leaves_status_idle()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var promptTask = session.SendPromptAsync("/my-command", null, cts.Token);
+        await harness.ReadCommandAsync(cts.Token);
+
+        // Pi 0.99+ answers a prompt an extension command handled with disposition "handled" and starts no run.
+        await harness.WriteResponseAsync(null, "prompt", true, new { disposition = "handled" }, cts.Token);
+        await promptTask;
+
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
+    }
+
+    [Fact]
     public async Task send_prompt_failed_response_without_id_throws_pi_error_and_leaves_status_idle()
     {
         await using var harness = CreateHarness();
