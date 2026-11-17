@@ -1,3 +1,4 @@
+import { randomId } from "@/lib/random-id";
 import { readLineCount } from "@/lib/attached-files";
 import { reactive, computed, type ComputedRef } from "vue";
 
@@ -27,7 +28,7 @@ export function useDraftFiles(sessionId: string) {
 
   function addFile(file: File, pasted = false): void {
     const list = ensureEntry(sessionId);
-    list.push({ id: crypto.randomUUID(), file, name: file.name, size: file.size, pasted });
+    list.push({ id: randomId(), file, name: file.name, size: file.size, pasted });
     const entry = list[list.length - 1];
     // Counted after it's shown; a file that was removed meanwhile is left alone.
     void readLineCount(file).then((lines) => {

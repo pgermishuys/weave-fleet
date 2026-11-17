@@ -2,6 +2,7 @@
  * What mission control sends to a session's own machine besides answers (`lib/push/answer.ts`): the nudge, and the
  * reads behind the peek. No Vue.
  */
+import { randomId } from "@/lib/random-id";
 import type { SessionNow } from "@/lib/mission-control";
 import type { AnswerRequest, AnswerTarget } from "@/lib/push/answer";
 
@@ -17,7 +18,7 @@ function headers(target: AnswerTarget): Record<string, string> {
  */
 export function nudgeRequest(target: AnswerTarget, sessionId: string, text: string, working: boolean, steers: boolean): AnswerRequest {
   const queued = working && !steers;
-  const body = queued ? { text } : { text, userMessageId: crypto.randomUUID(), ...(working ? { delivery: "steer" } : {}) };
+  const body = queued ? { text } : { text, userMessageId: randomId(), ...(working ? { delivery: "steer" } : {}) };
   return {
     url: `${target.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/${queued ? "queue" : "prompt"}`,
     init: { method: "POST", headers: headers(target), credentials: target.baseUrl ? "omit" : "include", body: JSON.stringify(body) },
