@@ -323,6 +323,25 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public void a_message_the_page_does_not_hold_is_answered_by_the_newest_turn_only()
+    {
+        // The harness keeps its own ids, so the sent message isn't in the page. Its turn wrote no text; the reply above
+        // belongs to the turn before and must not be handed to the asker as this one's.
+        HarnessMessage[] page =
+        [
+            Message("h1", "user", "Earlier ask."),
+            Message("h2", "assistant", "Earlier answer."),
+            Message("h3", "user", "The watched ask."),
+            new() { Id = "h4", Role = "assistant", Parts = [], Timestamp = DateTimeOffset.UnixEpoch },
+        ];
+
+        SessionUpdateSender.LastReply(page, "not-in-page").ShouldBeNull();
+        // Still the newest turn's reply when it has one, and the whole page when it has no user message at all.
+        SessionUpdateSender.LastReply([.. page, Message("h5", "assistant", "Now answered.")], "not-in-page").ShouldBe("Now answered.");
+        SessionUpdateSender.LastReply(page[1..2], "not-in-page").ShouldBe("Earlier answer.");
+    }
+
+    [Fact]
     public void a_long_reply_is_cut_at_a_word()
     {
         var reply = string.Join(' ', Enumerable.Repeat("word", 400));

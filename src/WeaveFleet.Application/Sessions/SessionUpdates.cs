@@ -545,6 +545,20 @@ public sealed class SessionUpdateSender(
         }
 
         var found = start > 0;
+        if (!found)
+        {
+            // Not in the page (a harness that keeps its own ids): only the newest turn can be the answer, so an older
+            // turn's reply isn't handed over as this one's.
+            for (var i = page.Count - 1; i >= 0; i--)
+            {
+                if (page[i].Role == "user")
+                {
+                    start = i + 1;
+                    break;
+                }
+            }
+        }
+
         var end = page.Count;
         for (var i = start; found && i < page.Count; i++)
         {
