@@ -14,6 +14,7 @@ import { sessionSkillNames, skillNamesIn } from "@/lib/skill-mentions";
 import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachineTarget } from "@/lib/machine-target";
+import { tidyPrompt } from "@/lib/prompt-text";
 
 export interface SentPromptImage {
   url: string;
@@ -184,11 +185,10 @@ function buildDeliveredPromptCounts(messages: readonly AccumulatedMessage[]): Ma
     }
 
     // A message with @ sessions came back with Fleet's block for the agent after what was typed.
-    const text = stripSessionReferences(message.parts
+    const text = tidyPrompt(stripSessionReferences(message.parts
       .filter((part): part is Extract<AccumulatedMessage["parts"][number], { type: "text" }> => part.type === "text")
       .map((part) => part.text)
-      .join("\n\n"))
-      .trim();
+      .join("\n\n")));
 
     if (!text) {
       continue;
@@ -566,7 +566,7 @@ export function useSendPrompt(sessionId: string) {
 
     const isRetry = typeof overrideText === "string";
     const typed = draft.text;
-    const body = (isRetry ? overrideText : typed).trim();
+    const body = tidyPrompt(isRetry ? overrideText : typed);
     if (!body && (!attachments || attachments.length === 0)) {
       return false;
     }

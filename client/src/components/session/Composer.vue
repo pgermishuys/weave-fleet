@@ -67,6 +67,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
 import { Spinner } from "@/components/ui/spinner";
+import { tidyPrompt } from "@/lib/prompt-text";
 
 defineOptions({
   name: "SessionComposer",
@@ -913,7 +914,7 @@ function handleSend(steer = false): void {
     }
     queueDraft(
       draft.text,
-      slashCommand ? text : formatTerminalContext(terminalContexts.value, text),
+      slashCommand ? text : formatTerminalContext(terminalContexts.value, tidyPrompt(draft.text)),
       slashCommand
         ? { kind: "command", command: slashCommand.command, arguments: slashCommand.args || undefined, ...queueChoices() }
         : { kind: "prompt", ...queueChoices() },

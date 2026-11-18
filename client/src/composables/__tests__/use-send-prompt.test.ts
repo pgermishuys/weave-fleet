@@ -336,10 +336,24 @@ describe("use-send-prompt effort", () => {
 })
 
 describe("use-send-prompt picks the harness no longer lists", () => {
-  function sentBody(): { agent?: string; model?: unknown } {
+  function sentBody(): { text?: string; agent?: string; model?: unknown } {
     const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
-    return (promptCall?.[1] as { body: { agent?: string; model?: unknown } }).body
+    return (promptCall?.[1] as { body: { text?: string; agent?: string; model?: unknown } }).body
   }
+
+  it("keeps the indent of a prompt that starts with an indented line, in what is sent and in the bubble", async () => {
+    const sessionId = "session-indent"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("\n\n    if (ready) {\n        go()\n    }  \n\n")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    const expected = "    if (ready) {\n        go()\n    }"
+    expect(sentBody().text).toBe(expected)
+    expect(useSentPrompts(sessionId).sentPrompts.value[0]?.body).toBe(expected)
+  })
 
   it("sends the agent and model as picked instead of swapping them for the first listed", async () => {
     const sessionId = "session-gone-picks"
