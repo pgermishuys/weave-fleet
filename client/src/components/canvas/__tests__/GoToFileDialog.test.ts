@@ -5,8 +5,9 @@ import GoToFileDialog from "@/components/canvas/GoToFileDialog.vue";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useGoToFileStore } from "@/stores/go-to-file";
 
-const { files, queries, showRightPanel } = vi.hoisted(() => ({
+const { files, failure, queries, showRightPanel } = vi.hoisted(() => ({
   files: { value: [] as string[] },
+  failure: { value: undefined as string | undefined },
   queries: [] as (string | null)[],
   showRightPanel: vi.fn(),
 }));
@@ -23,7 +24,7 @@ vi.mock("@/composables/use-find-files", async () => {
           return q ? files.value.filter((path) => path.toLowerCase().includes(q.toLowerCase())) : result.value;
         }),
         isLoading: vueRef(false),
-        error: vueRef(undefined),
+        error: computed(() => failure.value),
       };
     },
   };
@@ -45,6 +46,7 @@ vi.mock("@/components/ui/dialog", () => {
 describe("GoToFileDialog", () => {
   beforeEach(() => {
     files.value = ["src/middleware/auth.ts", "src/utils/token.ts", "docs/auth.md", "src/components/"];
+    failure.value = undefined;
     showRightPanel.mockReset();
   });
 
@@ -70,6 +72,18 @@ describe("GoToFileDialog", () => {
 
     const items = wrapper.findAll('[role="option"]').map((item) => item.attributes("data-testid"));
     expect(items).toEqual(["go-to-file-item-src/middleware/auth.ts", "go-to-file-item-docs/auth.md"]);
+    wrapper.unmount();
+  });
+
+  it("says the search failed instead of saying no file matches", async () => {
+    files.value = [];
+    failure.value = "HTTP 500";
+    const wrapper = await opened();
+    await wrapper.get('[data-testid="go-to-file-input"]').setValue("auth");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("HTTP 500");
+    expect(wrapper.text()).not.toContain("No files match.");
     wrapper.unmount();
   });
 
