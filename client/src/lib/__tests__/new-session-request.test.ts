@@ -100,6 +100,12 @@ describe("titleFromMessage", () => {
 });
 
 describe("buildCreateSessionRequest", () => {
+  it("sends the first message with the indent of its first line", () => {
+    const request = build({ message: "\n\n    def total(rows):\n        return 0  \n" });
+    expect(request.options.initialPrompt).toBe("    def total(rows):\n        return 0");
+    expect(request.options.title).toBe("def total(rows):");
+  });
+
   describe("repository", () => {
     it("new worktree: no branch, so the naming templates name it on the server", () => {
       const request = build({ message: "Fix the login redirect" });
@@ -337,8 +343,8 @@ describe("buildCreateSessionRequest", () => {
       expect(request.options).not.toHaveProperty("tags");
     });
 
-    it("trims the message", () => {
-      expect(build({ message: "\n  Fix it  \n" }).options.initialPrompt).toBe("Fix it");
+    it("drops blank lines around the message and trailing spaces, not the first line's indent", () => {
+      expect(build({ message: "\n  Fix it  \n" }).options.initialPrompt).toBe("  Fix it");
     });
 
     it("titles the session after the message when no title is typed", () => {

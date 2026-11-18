@@ -156,8 +156,17 @@ describe("seedSentPrompt (a new session's first message)", () => {
     seedSentPrompt(sessionId, "  Fix the login redirect \n", 1_000)
 
     expect(sentPrompts.value).toHaveLength(1)
-    expect(sentPrompts.value[0]).toMatchObject({ body: "Fix the login redirect", createdAt: 1_000, status: "pending" })
+    expect(sentPrompts.value[0]).toMatchObject({ body: "  Fix the login redirect", createdAt: 1_000, status: "pending" })
     expect(hasPendingPrompts.value).toBe(true)
+  })
+
+  it("keeps the indent of the first line, as the message was sent", () => {
+    const sessionId = "session-seeded-indent"
+    const { sentPrompts } = useSentPrompts(sessionId)
+
+    seedSentPrompt(sessionId, "\n    def total(rows):\n        return 0 \n", 1_000)
+
+    expect(sentPrompts.value[0]?.body).toBe("    def total(rows):\n        return 0")
   })
 
   it("gives way to the history's copy, so it never shows twice", () => {

@@ -596,8 +596,25 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
         runtime.SpawnCalls.ShouldHaveSingleItem().InitialPrompt.ShouldBeNull();
         var (text, options) = _defaultSession.SendPromptCalls.ShouldHaveSingleItem();
-        text.ShouldBe("Fix the login redirect");
+        text.ShouldBe("  Fix the login redirect");
         options.ShouldNotBeNull().MessageId.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_KeepsTheIndentOfTheFirstLine()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "\n\n    def total(rows):\n        return 0  \n\n"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var (text, _) = _defaultSession.SendPromptCalls.ShouldHaveSingleItem();
+        text.ShouldBe("    def total(rows):\n        return 0");
     }
 
     [Fact]

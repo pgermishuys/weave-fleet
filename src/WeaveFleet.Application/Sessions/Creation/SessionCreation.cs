@@ -699,7 +699,7 @@ public sealed partial class SessionCreation(
     {
         var normalizedInitialPrompt = string.IsNullOrWhiteSpace(initialPrompt)
             ? null
-            : initialPrompt.Trim();
+            : TidyPrompt(initialPrompt);
 
         if (contextEnvelope is null)
         {
@@ -713,6 +713,21 @@ public sealed partial class SessionCreation(
         }
 
         return $"{sourcePrompt}\n\n{normalizedInitialPrompt}";
+    }
+
+    /// <summary>Blank lines before the first line and spaces after the last go; the first line's indent stays.</summary>
+    private static string TidyPrompt(string text)
+    {
+        var start = 0;
+        while (start < text.Length)
+        {
+            var lineEnd = text.IndexOf('\n', start);
+            if (lineEnd < 0 || !string.IsNullOrWhiteSpace(text[start..lineEnd]))
+                break;
+            start = lineEnd + 1;
+        }
+
+        return text[start..].TrimEnd();
     }
 
     private static string BuildSourcePrompt(ContextEnvelope contextEnvelope, ProvenanceRecord provenance)

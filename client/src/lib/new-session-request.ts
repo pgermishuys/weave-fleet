@@ -1,3 +1,4 @@
+import { tidyPrompt } from "@/lib/prompt-text";
 import type { CreateSessionResponse, ModelReference, SessionListItem, SessionSourceSelection } from "@/api/client";
 import type { CreateSessionOptions } from "@/composables/use-session-actions";
 import type { ImageAttachment } from "@/lib/client-types";
@@ -188,7 +189,7 @@ function directorySource(path: string): SessionSourceSelection {
 
 /** Turns the new-session page's choices into the arguments for `createSession`. */
 export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessionRequestResult {
-  const message = state.message.trim();
+  const message = tidyPrompt(state.message);
   const preset = state.gitHubPreset ?? null;
   const { folder, workspace } = state;
 
