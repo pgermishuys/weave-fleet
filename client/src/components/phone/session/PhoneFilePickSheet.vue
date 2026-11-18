@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
 import { FileText, Search } from "lucide-vue-next";
+import { ErrorNote } from "@/components/ui/error-note";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { useFindFiles } from "@/composables/use-find-files";
 
@@ -9,7 +10,7 @@ const props = defineProps<{ open: boolean; sessionId: string }>();
 const emit = defineEmits<{ (event: "pick", path: string): void; (event: "close"): void }>();
 
 const query = shallowRef("");
-const { files, isLoading } = useFindFiles(() => props.sessionId, () => (props.open ? query.value : null));
+const { files, isLoading, error } = useFindFiles(() => props.sessionId, () => (props.open ? query.value : null));
 watch(() => props.open, (open) => {
   if (open) query.value = "";
 });
@@ -44,6 +45,12 @@ watch(() => props.open, (open) => {
     >
       Looking…
     </p>
+    <ErrorNote
+      v-if="error && files.length === 0"
+      message="Couldn't search for files."
+      :reason="error"
+      class="pfs__error"
+    />
     <div
       v-if="files.length"
       class="ph-card"
@@ -71,6 +78,10 @@ watch(() => props.open, (open) => {
 <style scoped>
 .pfs__search {
   margin-bottom: 12px;
+}
+
+.pfs__error {
+  margin: 0 16px 12px;
 }
 
 .pfs__looking {
