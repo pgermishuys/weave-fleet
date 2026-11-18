@@ -452,9 +452,12 @@ public sealed partial class WorkspaceService(
         var checkedOutBranches = BranchSet(await GetCheckedOutBranchesAsync(sourceDir), caseInsensitive);
         // Where branch names live in files (macOS, Windows), "Fix/Login" and "fix/login" are one ref to git even
         // though `show-ref` of one can miss the other when it is packed; the list of branches settles it either way.
-        var localBranches = caseInsensitive ? BranchSet(await ListLocalBranchesAsync(sourceDir), true) : null;
+        var localBranchNames = (await ListLocalBranchesAsync(sourceDir)).ToList();
+        var localBranches = caseInsensitive ? BranchSet(localBranchNames, true) : null;
         async Task<bool> BranchExistsAsync(string name)
             => (localBranches?.Contains(name) ?? false) || await RefExistsAsync(sourceDir, $"refs/heads/{name}");
+        // Branches are files in git, so `fix` and `fix/login` can't both exist ("cannot lock ref").
+        bool ClashesAtASlash(string name) => BranchesClashAtASlash(name, localBranchNames, caseInsensitive);
 
         var reuseExistingBranch = baseBranch is null
             && !checkedOutBranches.Contains(requestedBranch)
@@ -463,8 +466,8 @@ public sealed partial class WorkspaceService(
         var branchName = requestedBranch;
         if (!reuseExistingBranch)
         {
-            for (var n = 2; checkedOutBranches.Contains(branchName) || await BranchExistsAsync(branchName); n++)
-                branchName = $"{requestedBranch}-{n}";
+            for (var n = 2; checkedOutBranches.Contains(branchName) || await BranchExistsAsync(branchName) || ClashesAtASlash(branchName); n++)
+                branchName = NumberedBranch(requestedBranch, n, localBranchNames, caseInsensitive);
         }
 
         // Resolved (and fetched) before anything is created, so an unknown base leaves nothing behind.
@@ -648,6 +651,31 @@ public sealed partial class WorkspaceService(
     /// <summary>Branch names compared the way the file system will: <c>Fix/Login</c> is <c>fix/login</c> where case folds.</summary>
     internal static HashSet<string> BranchSet(IEnumerable<string> names, bool caseInsensitive)
         => names.ToHashSet(caseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    /// <summary>
+    /// The <paramref name="n"/>th other name for a branch that can't be used as it is: <c>fix/login-2</c>, or, when
+    /// an existing branch <c>fix</c> is in the way of <c>fix/login</c>, <c>fix-2/login</c> (a suffix at the end
+    /// would still sit under <c>fix</c>).
+    /// </summary>
+    internal static string NumberedBranch(string requested, int n, IEnumerable<string> existing, bool caseInsensitive)
+    {
+        var comparison = caseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var parent = existing
+            .Where(b => requested.StartsWith(b + "/", comparison))
+            .OrderBy(b => b.Length)
+            .FirstOrDefault();
+        return parent is null
+            ? $"{requested}-{n}"
+            : $"{requested[..parent.Length]}-{n}{requested[parent.Length..]}";
+    }
+
+    /// <summary>True when <paramref name="name"/> sits under an existing branch (<c>fix</c> and <c>fix/login</c>) or one sits under it.</summary>
+    internal static bool BranchesClashAtASlash(string name, IEnumerable<string> existing, bool caseInsensitive)
+    {
+        var comparison = caseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return existing.Any(b =>
+            b.StartsWith(name + "/", comparison) || name.StartsWith(b + "/", comparison));
+    }
 
     private static async Task<IEnumerable<string>> ListLocalBranchesAsync(string sourceDir)
         => ParseLines(await RunGitAsync(sourceDir, "for-each-ref", "--format=%(refname:short)", "refs/heads"));
