@@ -596,7 +596,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
         runtime.SpawnCalls.ShouldHaveSingleItem().InitialPrompt.ShouldBeNull();
         var (text, options) = _defaultSession.SendPromptCalls.ShouldHaveSingleItem();
-        text.ShouldBe("Fix the login redirect");
+        text.ShouldBe("  Fix the login redirect");
         options.ShouldNotBeNull().MessageId.ShouldNotBeNullOrWhiteSpace();
     }
 
