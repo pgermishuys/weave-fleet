@@ -20,10 +20,14 @@ import { startWithoutModsFromAddress } from "@/lib/mods/safe-mode-start";
 import { startServiceWorker } from "@/composables/use-service-worker";
 import { captureInstallPrompt } from "@/lib/phone/install-prompt";
 import { installStaleChunkReload } from "@/lib/stale-chunk-reload";
+import { installImeEnterGuard } from "@/lib/ime-enter-guard";
 import { router } from "./router";
 
 // A tab left open across an update has chunk URLs the new build no longer serves; reload once to pick them up.
 installStaleChunkReload();
+
+// Enter that confirms an IME composition must not reach any Enter-to-submit field.
+installImeEnterGuard();
 
 // Decide which machine this page works in before anything asks a server for something.
 restoreActiveMachine();
