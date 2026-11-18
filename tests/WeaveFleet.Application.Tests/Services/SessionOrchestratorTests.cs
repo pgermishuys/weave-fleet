@@ -601,6 +601,23 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_KeepsTheIndentOfTheFirstLine()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "\n\n    def total(rows):\n        return 0  \n\n"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var (text, _) = _defaultSession.SendPromptCalls.ShouldHaveSingleItem();
+        text.ShouldBe("    def total(rows):\n        return 0");
+    }
+
+    [Fact]
     public async Task CreateSessionAsync_WithInitialPrompt_SavesTheMessageUnderTheIdTheHarnessWasGiven()
     {
         ConfigureHarnessAndScratchProject();

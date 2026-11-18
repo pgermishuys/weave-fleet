@@ -362,7 +362,7 @@ export function seedSentPrompt(
   sessionReferences: readonly SessionReference[] = [],
   images: readonly SentPromptImage[] = [],
 ): void {
-  const text = body.trim();
+  const text = tidyPrompt(body);
   if (!text) {
     return;
   }
