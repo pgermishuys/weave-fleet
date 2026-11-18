@@ -113,6 +113,39 @@ public sealed partial class OpenCode2BackgroundLiveTests
         (await Delegations(id)).Single(d => d.ParentToolCallId == "call_rw_sub").Status.ShouldBe("cancelled");
     }
 
+    [OpenCode2Fact]
+    public async Task A_foreground_shell_that_passes_its_timeout_is_running_work_not_an_error()
+    {
+        // OpenCode 2.3.0 moves a foreground command that outlives its timeout to the background (it no longer kills it).
+        const string prompt = "Run the slow build. (timed-out shell)";
+        fleet.Answer(request =>
+        {
+            if (LlmRequest.Starts(request, prompt))
+                return ToolCall("call_to_shell", "shell", new { command = "echo build-started; sleep 300; echo never-printed", description = "A slow build", timeout = 1500 });
+            if (LlmRequest.Continues(request, prompt))
+                return new ScriptedLlmResponse { Text = "The build is still going." };
+            return null;
+        });
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("timed-out-shell"), "Timed-out shell", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+        var work = await WaitForAsync(events, async () => (await Work(id)).SingleOrDefault(w => w.Kind == WorkKinds.Shell), cts.Token);
+        work.Status.ShouldBe("running");
+        work.Background.ShouldBeTrue();
+        work.CanStop.ShouldBeTrue();
+        work.ToolCallId.ShouldBe("call_to_shell");
+        var card = LatestParts<ToolMessageEventPart>(events, id).Single(p => p.CallId == "call_to_shell");
+        card.State.ShouldBeOfType<ToolRunningState>();
+
+        var stopped = await WithOrchestratorAsync(o => o.StopWorkAsync(id, work.Id, cts.Token));
+        stopped.IsSuccess.ShouldBeTrue(stopped.IsFailure ? stopped.Error.Description : null);
+    }
+
     private async Task<IReadOnlyList<RunningWorkItem>> Work(string sessionId)
     {
         using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);

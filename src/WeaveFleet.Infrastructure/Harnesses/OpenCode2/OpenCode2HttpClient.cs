@@ -806,13 +806,40 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         if (response.IsSuccessStatusCode)
             return;
 
-        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        var body = ReadableBody(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
         if (body.Length > 500)
             body = body[..500];
         throw new HttpRequestException(
             $"OpenCode 2 couldn't {action}: {(int)response.StatusCode} {response.ReasonPhrase}. {body}".TrimEnd(),
             inner: null,
             response.StatusCode);
+    }
+
+    /// <summary>
+    /// What an error body says to a person: V2 answers a failure with JSON (<c>{"_tag":…,"message":…,"ref":…}</c>), so its
+    /// <c>message</c> is shown (with the <c>ref</c> that finds it in the server log), and any other body as it is.
+    /// </summary>
+    internal static string ReadableBody(string body)
+    {
+        if (!body.AsSpan().TrimStart().StartsWith("{", StringComparison.Ordinal))
+            return body;
+
+        try
+        {
+            if (JsonNode.Parse(body) is JsonObject error && error["message"] is JsonValue message && message.TryGetValue<string>(out var text)
+                && !string.IsNullOrWhiteSpace(text))
+            {
+                return error["ref"] is JsonValue reference && reference.TryGetValue<string>(out var id) && !string.IsNullOrWhiteSpace(id)
+                    ? $"{text.Trim()} (ref {id})"
+                    : text.Trim();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON after all: shown as it is.
+        }
+
+        return body;
     }
 
     public void Dispose()

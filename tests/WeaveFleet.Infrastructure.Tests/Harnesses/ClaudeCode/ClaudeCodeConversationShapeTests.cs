@@ -87,6 +87,19 @@ public sealed class ClaudeCodeConversationShapeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_user_line_echoed_with_a_new_uuid_is_not_a_second_prompt_or_a_new_turn()
+    {
+        // Claude Code re-mints the uuid of a steered follow-up (Orca opened a stray turn on it). Fleet saves the prompt it
+        // sent itself and reads no user line's text at the top level, so an echo, whatever its uuid, adds nothing.
+        var events = await PumpAsync(
+            """{"type":"user","uuid":"minted-by-claude-1","session_id":"s1","message":{"role":"user","content":[{"type":"text","text":"Also check the tests"}]}}""",
+            """{"type":"user","uuid":"minted-by-claude-2","session_id":"s1","message":{"role":"user","content":[{"type":"text","text":"Also check the tests"}]}}""");
+
+        _messages.All.ShouldBeEmpty();
+        events.ShouldNotContain(e => e.Type == EventTypes.MessageUpdated || e.Type == EventTypes.MessagePartUpdated);
+    }
+
+    [Fact]
     public async Task Thinking_with_no_text_streams_nothing_and_saves_nothing()
     {
         var events = await PumpAsync(Fixture("partial-messages.jsonl"));

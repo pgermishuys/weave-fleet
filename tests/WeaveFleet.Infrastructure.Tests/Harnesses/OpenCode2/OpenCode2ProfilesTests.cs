@@ -67,11 +67,11 @@ public sealed class OpenCode2ProfilesTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{ "experimental": { "image_generate": true, "schedules": true }, "timezone": "Africa/Johannesburg" }""")]
-    [InlineData("""{ "experimental": { "image_generate": { "model": "openai/gpt-image-2" }, "schedules": false } }""")]
+    [InlineData("""{ "experimental": { "image_generate": true, "automations": true }, "timezone": "Africa/Johannesburg" }""")]
+    [InlineData("""{ "experimental": { "image_generate": { "model": "openai/gpt-image-2" }, "automations": false } }""")]
     public void Experimental_keys_of_2_2_1_read_as_known_settings(string profile)
     {
-        // image_generate is a bool or an object, schedules a bool, timezone a top-level IANA name (OpenCode 2.2.1).
+        // image_generate is a bool or an object, automations a bool, timezone a top-level IANA name (OpenCode 2.2.1).
         OpenCode2Profiles.ReadSettings(profile, out var settings).ShouldBeNull();
 
         using (settings)
