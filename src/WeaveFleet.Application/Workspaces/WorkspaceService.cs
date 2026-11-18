@@ -480,9 +480,11 @@ public sealed partial class WorkspaceService(
         var worktreeDir = ResolveFreeWorktreeDirectory(worktreesRoot, folderName);
         Directory.CreateDirectory(worktreesRoot);
 
+        // A big repository's checkout is most of the wait; git writes the files on every core when asked to.
+        var checkoutWorkers = await ParallelCheckoutArgsAsync(sourceDir);
         if (reuseExistingBranch)
         {
-            await RunGitAsync(sourceDir, "worktree", "add", worktreeDir, branchName);
+            await RunGitAsync(sourceDir, [.. checkoutWorkers, "worktree", "add", worktreeDir, branchName]);
         }
         else
         {
@@ -490,11 +492,20 @@ public sealed partial class WorkspaceService(
             string[] args = baseRef is null
                 ? ["worktree", "add", "-b", branchName, worktreeDir]
                 : ["worktree", "add", "--no-track", "-b", branchName, worktreeDir, baseRef];
-            await RunGitAsync(sourceDir, args);
+            await RunGitAsync(sourceDir, [.. checkoutWorkers, .. args]);
         }
 
         return (worktreeDir, branchName);
     }
+
+    /// <summary>
+    /// <c>-c checkout.workers=0</c> (every core; git 2.32 and later, older git ignores it) unless the user or
+    /// the repository set their own. Git only goes parallel past 100 files, so a small repository is untouched.
+    /// </summary>
+    private static async Task<string[]> ParallelCheckoutArgsAsync(string sourceDir)
+        => await TryRunGitAsync(sourceDir, "config", "--get", "checkout.workers") is null
+            ? ["-c", "checkout.workers=0"]
+            : [];
 
     /// <summary>A leading <c>~</c> in a typed root, which the <c>{home}</c> token resolves for itself.</summary>
     private static string ExpandHome(string path)
