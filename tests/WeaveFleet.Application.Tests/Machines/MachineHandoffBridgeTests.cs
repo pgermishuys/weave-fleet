@@ -123,7 +123,9 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         message.GetProperty("fromMachineName").GetString().ShouldBe("kestrel");
         message.GetProperty("fromSessionId").GetString().ShouldBe(Sender);
         message.GetProperty("fromTitle").GetString().ShouldBe("Fix login flake");
-        message.GetProperty("text").GetString().ShouldBe("Run them on fix/login-flake.");
+        message.GetProperty("text").GetString().ShouldBe(
+            "Run them on fix/login-flake.\n\nStarted by the session \"Fix login flake\" on kestrel. Answer it with fleet_message, sessionId s-sender, "
+            + "machine kestrel; that works once kestrel is in this machine's list under Settings › Machines.");
         _atlas.Requests.ShouldAllBe(request => request.Token == FakeMachine.Token);
     }
 
@@ -187,6 +189,20 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         before.IsSuccess.ShouldBeFalse();
         reply.IsSuccess.ShouldBeTrue(reply.Error?.Message);
         _atlas.Requests.Count(request => request.Request == "POST /api/machine/peer/sessions/s-remote/message").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Answering_a_machine_this_one_doesnt_list_says_how_to_add_it()
+    {
+        var caller = new HarnessCanvasCaller(Sender, UserId);
+
+        var reply = await _bridge.MessageAsync(caller, "andromeda", "s-starter", "Done.", notifyWhenDone: false);
+
+        reply.IsSuccess.ShouldBeFalse();
+        reply.Error!.Kind.ShouldBe(CanvasErrorKind.NotFound);
+        reply.Error.Message.ShouldBe(MachineHandoffBridge.NotPairedMessage("andromeda"));
+        reply.Error.Message.ShouldContain("Settings › Machines");
+        _atlas.Requests.ShouldBeEmpty();
     }
 
     [Fact]
