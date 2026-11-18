@@ -165,7 +165,7 @@ public sealed class MachineHandoffBridge(
             if (started is null)
                 return Refused($"Fleet couldn't start it: {startError}");
 
-            var (delivered, messageError) = await remote.MessageAsync(machine, token, started.SessionId, sender, task, ct).ConfigureAwait(false);
+            var (delivered, messageError) = await remote.MessageAsync(machine, token, started.SessionId, sender, task + StartedByNote(sender), ct).ConfigureAwait(false);
             if (delivered is null)
             {
                 return Refused(
@@ -284,6 +284,8 @@ public sealed class MachineHandoffBridge(
                     (machine, token, error) = any;
             }
 
+            if (machine is null && replyTo is not null && (await remote.FindAsync(machineName, includeNever: true).ConfigureAwait(false)).Machine is null)
+                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.NotFound, NotPairedMessage(machineName.Trim()));
             if (machine is null)
                 return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.NotFound, error!);
             return await run(machine, token!).ConfigureAwait(false);
@@ -387,6 +389,19 @@ public sealed class MachineHandoffBridge(
     private static string ReplyNote(bool watching, string machine) => watching
         ? "Fleet will send you its reply when it's done, as a new message; you don't need to check on it."
         : $"Its reply stays in that session: read it with fleet_session_read, machine {machine}.";
+
+    /// <summary>
+    /// Tells a session where its task came from and how to answer. Pairing goes one way: the machine that started the
+    /// session holds this machine's token, and the answer only works when this machine holds that machine's token too.
+    /// </summary>
+    internal static string StartedByNote(RemotePeerSender from)
+        => $"\n\nStarted by the session \"{from.Title}\" on {from.MachineName}. Answer it with fleet_message, sessionId {from.SessionId}, "
+            + $"machine {from.MachineName}; that works once {from.MachineName} is in this machine's list under Settings › Machines.";
+
+    /// <summary>What a session reads when it answers a machine this one doesn't list.</summary>
+    internal static string NotPairedMessage(string machine)
+        => $"This machine doesn't list {machine}, so Fleet can't reach it to deliver a reply. The user adds {machine} under Settings › Machines on this machine "
+            + $"(Add a machine, with the pairing link that `fleet node pair` prints on {machine}). Until then, {machine} reads this session with fleet_session_read.";
 
     private static string TooOld(string machine) => $"Fleet on {machine} is too old to take work from an agent here. Update it there.";
 
