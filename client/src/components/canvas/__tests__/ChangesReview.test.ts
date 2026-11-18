@@ -1,4 +1,4 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { computed, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -60,12 +60,21 @@ function respond(path: string): Response {
 
 let pinia = createPinia();
 
+// Every panel a test mounts is unmounted after it. A panel left mounted keeps fetching and searching the shared
+// diffs for the tests after it, which under load (CI, a busy machine) pushed those past the 5 s test timeout.
+const mountedPanels: VueWrapper[] = [];
+afterEach(() => {
+  for (const panel of mountedPanels.splice(0)) panel.unmount();
+});
+
 function mountReview(options: { attachTo?: HTMLElement } = {}) {
-  return mount(ChangesReview, {
+  const wrapper = mount(ChangesReview, {
     props: { sessionId: "s1" },
     global: { plugins: [pinia], provide: { sharedDiffs } },
     ...options,
   });
+  mountedPanels.push(wrapper);
+  return wrapper;
 }
 
 /** Answers the confirm the last revert asked, the way a click on its action would. */
@@ -426,7 +435,8 @@ describe("ChangesReview", () => {
     }, 30000);
   });
 
-  describe("find in changes", () => {
+  // Each of these mounts ten file diffs: give them room when the machine is busy.
+  describe("find in changes", { timeout: 20_000 }, () => {
     const highlights = new Map<string, Range[]>();
     beforeEach(() => {
       highlights.clear();
