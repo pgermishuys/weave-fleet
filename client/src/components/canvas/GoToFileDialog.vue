@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { Search } from "lucide-vue-next";
+import { ErrorNote } from "@/components/ui/error-note";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useFindFiles } from "@/composables/use-find-files";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -131,6 +132,13 @@ function onKeydown(event: KeyboardEvent): void {
         >
           Searching…
         </p>
+        <ErrorNote
+          v-else-if="items.length === 0 && query.trim() && search.error.value"
+          message="Couldn't search for files."
+          :reason="search.error.value"
+          compact
+          class="go-to-file__error"
+        />
         <p
           v-else-if="items.length === 0"
           class="go-to-file__empty"
