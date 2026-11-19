@@ -31,7 +31,7 @@ public static class TailscaleChecks
         {
             TailscaleStates.Running when listenerCoversTailnet => new(state, "Tailscale is on", $"Phones on your tailnet can reach {machineName}.", true, false),
             TailscaleStates.Running => new(state, "Fleet isn't listening on Tailscale yet",
-                $"Tailscale is running here, but {machineName} only listens on this machine. Turn it on so phones on your tailnet can reach it.", false, true),
+                $"Tailscale is running here, but Fleet only listens on {machineName} itself. Turn it on so phones on your tailnet can reach it.", false, true),
             TailscaleStates.Stopped => new(state, "Tailscale is switched off on this machine",
                 "Switch it on in the Tailscale app (or run tailscale up), then check again.", false, false),
             TailscaleStates.SignedOut => new(state, "Tailscale isn't signed in on this machine",

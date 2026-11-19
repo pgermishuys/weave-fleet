@@ -103,7 +103,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
   - Needs piece 5. J4, J7, J9, J10, J13. M–L.
 - [ ] **7. On a new server.** `install.sh --join '<address>#CODE'`, and a one-time 30-minute join code from Add a
   machine → On a new server. Needs pieces 5 and 6. J5. M.
-- [ ] **8. Away from home (decision 6A).**
+- [x] **8. Away from home (decision 6A).**
   - Tailscale checks on both ends, with "Turn on" for the listener.
   - The phone's reach rows and messages.
   - The warning when adding a Tailscale-only machine.
