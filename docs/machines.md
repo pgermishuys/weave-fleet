@@ -914,9 +914,28 @@ on any machine and it loses its keys on every machine. A machine that was off he
   the rest with the time it was added (`Introduction.since`), which clears the removal on each machine that holds one. A
   machine introducing *itself* has no such time, so a forgotten machine can't talk its way back in. Times are each
   machine's own clock; a removal dated more than five minutes ahead is taken as now.
-- **Not yet.** A machine told it was forgotten drops the machine that told it, but not machines it has that didn't tell
-  it (a forgotten machine that was reached by only some). Their keys for it are revoked by the ones that forgot it, so it
-  can't reach them; its list shows them as not answering until removed there.
+- **Leaving the Fleet whole.** The removal sent to the forgotten machine carries `fleet`: the ids of the other machines in
+  the forgetter's list. The forgotten machine (atlas) drops the machine that told it and, with it, every machine it learned
+  through that Fleet (the ones in `fleet`, and any it or they introduced), their keys it made and the phones' keys on them.
+  So atlas's list is empty of hangar and workbench even when hangar couldn't tell workbench to tell atlas. A machine atlas
+  added by itself that isn't in that Fleet stays: atlas is a machine of its own now. No removal is kept for the dropped
+  machines (they weren't forgotten), so atlas can be joined to another Fleet later.
+
+### The Machines page
+
+Settings → Machines is two lists and, behind each machine's **Manage** button, its own page.
+
+- **Your machines.** Every machine this client knows, each with one line on how a phone reaches it (`lib/machine-reach-line.ts`,
+  with the rules of `lib/phone-reach.ts`): "Reaches your phone over Tailscale and the home network", "Only on Tailscale",
+  "Only this machine" (the desktop app before it lets others reach it), "Off since 08:40" or "Not reachable".
+- **Phones and browsers.** The phones and browsers that have keys on this machine, with Add your phone and Remove. With
+  Your Fleet on, Remove says it reaches every machine and a screen's keys are on every machine, so any machine's list shows it.
+- **A machine's page** (`MachinePage.vue`, titled with the machine and a "‹ Machines" trail): rename, Work here, Forget,
+  agents sending work, jobs, the key this browser holds for it (New token) and its addresses in order. The machine this
+  client is signed in to also holds the access token, its addresses and who may reach it (the old "Let other devices reach
+  This machine" block).
+- With Your Fleet off the page is the same, and only the Fleet-wide wording goes (Forget and Remove say they affect this
+  machine's list only).
 
 ### The native phone app
 

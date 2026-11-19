@@ -108,7 +108,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
   - The phone's reach rows and messages.
   - The warning when adding a Tailscale-only machine.
   - Needs pieces 3 and 4. J3. M.
-- [ ] **9. Machines page.** "Your machines" plus "Phones and browsers", a reach line per machine, and the advanced parts
+- [x] **9. Machines page.** (this PR) "Your machines" plus "Phones and browsers", a reach line per machine, and the advanced parts
   (token, addresses, own address) on each machine's page. It replaces "Let other devices reach This machine". Needs
   piece 5. M.
 - [ ] **10. Phone first (J11).** The phone app's "I don't have Fleet yet" with "Send me the link" / "Copy the line".

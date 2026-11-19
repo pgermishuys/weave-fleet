@@ -19,6 +19,7 @@ import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.v
 import { useSettingsMachine } from "@/composables/use-settings-machine";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
+import { useMachinePage } from "@/composables/use-machine-page";
 import PluginPage from "@/components/settings/PluginPage.vue";
 import PluginsOverview from "@/components/settings/PluginsOverview.vue";
 import { pluginManifests } from "@/plugins/registry";
@@ -61,7 +62,14 @@ const pluginId = computed(() =>
   activeSection.value.startsWith(PLUGIN_PREFIX) ? activeSection.value.slice(PLUGIN_PREFIX.length) : null,
 );
 
+// A machine's own page (Settings → Machines) is titled with the machine and leads back to the list.
+const machinePage = useMachinePage();
+const openMachine = computed(() =>
+  activeSection.value === "machines" ? machines.entries.find((entry) => entry.key === machinePage.openKey.value) ?? null : null);
+const trail = computed(() => openMachine.value ? [{ label: "Machines", onSelect: machinePage.close }] : undefined);
+
 const header = computed(() => {
+  if (openMachine.value) return { title: openMachine.value.name, line: "Everything about this machine: how it is reached, and what it keeps." };
   if (pluginId.value) {
     const descriptor = pluginManifests.get(pluginId.value)?.descriptor;
     return { title: descriptor?.displayName ?? "Plugin", line: descriptor?.description ?? "" };
@@ -94,6 +102,7 @@ watch(
     <PageHeader
       :title="header.title"
       :description="header.line"
+      :trail="trail"
     >
       <template
         v-if="settingsMachine.enabled.value"

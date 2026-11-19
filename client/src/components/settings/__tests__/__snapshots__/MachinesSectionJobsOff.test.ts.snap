@@ -4,7 +4,7 @@ exports[`Settings → Machines with Jobs off > renders as it always did and asks
 "<div data-v-bdf3156a="" class="grid gap-6" data-testid="machines-section">
   <section data-v-bdf3156a="" id="settings-group-machines" class="scroll-mt-4" data-setting-group="machines">
     <div class="mb-2 flex items-baseline justify-between gap-3 px-1">
-      <h2 class="text-sm font-semibold text-text">Machines</h2>
+      <h2 class="text-sm font-semibold text-text">Your machines</h2>
       <!--v-if-->
     </div>
     <div class="divide-y divide-border overflow-hidden rounded-card border border-border bg-card-bg">
@@ -24,42 +24,31 @@ exports[`Settings → Machines with Jobs off > renders as it always did and asks
       </div>
       <!--v-if-->
       <!--v-if-->
-      <ul data-v-bdf3156a="" class="divide-y divide-border" aria-label="Machines">
+      <ul data-v-bdf3156a="" class="divide-y divide-border" aria-label="Your machines">
         <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="home"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--ok" aria-hidden="true"></span>
-          <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">atlas <span data-v-bdf3156a="" class="machine-card__os">linux</span><span data-v-bdf3156a="" class="machine-card__live">Live</span></span><span data-v-bdf3156a="" class="machine-card__url">this machine</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--ok">live</span>
-            <!--v-if-->
-            <!--v-if-->
-            <!--v-if-->
-            <!--v-if-->
+          <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">atlas <span data-v-bdf3156a="" class="machine-card__os">linux</span><span data-v-bdf3156a="" class="machine-card__live">Live</span></span><span data-v-bdf3156a="" class="machine-card__url">this machine</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--ok">live</span><span data-v-bdf3156a="" class="machine-card__state" data-testid="machine-reach-line">Only this machine</span>
             <!--v-if-->
           </div>
           <div data-v-bdf3156a="" class="machine-card__actions">
-            <!--v-if--><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button>
-            <!--v-if-->
-            <!--v-if-->
+            <!--v-if--><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60" aria-label="atlas's page" data-testid="machine-manage"> Manage </button>
           </div>
         </li>
         <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--bad" aria-hidden="true"></span>
           <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">mini <span data-v-bdf3156a="" class="machine-card__os">macos</span>
-            <!--v-if--></span><span data-v-bdf3156a="" class="machine-card__url">http://100.64.12.40:2113</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--bad">mini answered 404.</span>
-            <!--v-if-->
-            <!--v-if-->
-            <!--v-if-->
-            <!--v-if-->
+            <!--v-if--></span><span data-v-bdf3156a="" class="machine-card__url">http://100.64.12.40:2113</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--bad">mini answered 404.</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--bad" data-testid="machine-reach-line">Not reachable</span>
             <!--v-if-->
           </div>
-          <div data-v-bdf3156a="" class="machine-card__actions"><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-open"> Work here </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> New token </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-error/60 hover:text-error-text disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-forget"> Forget </button></div>
+          <div data-v-bdf3156a="" class="machine-card__actions"><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-open"> Work here </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60" aria-label="mini's page" data-testid="machine-manage"> Manage </button></div>
         </li>
       </ul>
     </div>
   </section>
-  <section data-v-bdf3156a="" id="settings-group-phones" class="scroll-mt-4" data-setting-group="phones" data-testid="machine-access">
+  <section data-v-bdf3156a="" id="settings-group-phones" class="scroll-mt-4" data-setting-group="phones" data-testid="machine-phones-group">
     <div class="mb-2 flex items-baseline justify-between gap-3 px-1">
-      <h2 class="text-sm font-semibold text-text">Let other devices reach atlas</h2>
-      <p class="text-xs text-muted">Phones and devices, and the access token.</p>
+      <h2 class="text-sm font-semibold text-text">Phones and browsers</h2>
+      <p class="text-xs text-muted">The phones and browsers that have keys on this machine.</p>
     </div>
     <div class="divide-y divide-border overflow-hidden rounded-card border border-border bg-card-bg">
-      <!--v-if-->
       <p data-v-bdf3156a="" class="px-4 py-3 text-sm text-muted">This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines.</p>
     </div>
   </section>

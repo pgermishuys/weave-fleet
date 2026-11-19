@@ -5,6 +5,7 @@ import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnectio
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useMachinePage } from "@/composables/use-machine-page";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
 
 const routerNavigate = vi.hoisted(() => vi.fn());
@@ -52,6 +53,12 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+/** A machine's own page: the advanced parts, opened from its row's Manage button. */
+async function openPage(wrapper: VueWrapper, key: string): Promise<void> {
+  await wrapper.get(`[data-testid='machine-card'][data-machine='${key}'] [data-testid='machine-manage']`).trigger("click");
+  await flushPromises();
+}
+
 function capabilitiesOf(wrapper: VueWrapper, key: string): string | null {
   const row = wrapper.find(`[data-testid='machine-card'][data-machine='${key}']`);
   const line = row.find("[data-testid='machine-capabilities']");
@@ -79,6 +86,7 @@ describe("Settings → Machines", () => {
 
   afterEach(() => {
     setActiveMachine(null);
+    useMachinePage().close();
     vi.unstubAllGlobals();
   });
 
@@ -87,20 +95,23 @@ describe("Settings → Machines", () => {
       const wrapper = mount(MachinesSection);
       await flushPromises();
       const card = () => wrapper.find(`[data-testid='machine-card'][data-machine='${mini.id}']`);
+      await openPage(wrapper, mini.id);
 
       confirmAction.mockResolvedValueOnce(false);
-      await card().get("[data-testid='machine-forget']").trigger("click");
+      await wrapper.get("[data-testid='machine-forget']").trigger("click");
       await flushPromises();
       expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
         title: "Forget mini?",
         confirmLabel: "Forget machine",
         destructive: true,
       }));
-      expect(card().exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machine-page']").exists()).toBe(true);
 
       confirmAction.mockResolvedValueOnce(true);
-      await card().get("[data-testid='machine-forget']").trigger("click");
+      await wrapper.get("[data-testid='machine-forget']").trigger("click");
       await flushPromises();
+      // Forgotten: its page closes and the list no longer has it.
+      expect(wrapper.find("[data-testid='machine-page']").exists()).toBe(false);
       expect(card().exists()).toBe(false);
     });
 
@@ -111,7 +122,8 @@ describe("Settings → Machines", () => {
       await flushPromises();
 
       confirmAction.mockResolvedValueOnce(false);
-      await wrapper.get(`[data-testid='machine-card'][data-machine='${mini.id}'] [data-testid='machine-forget']`).trigger("click");
+      await openPage(wrapper, mini.id);
+      await wrapper.get("[data-testid='machine-forget']").trigger("click");
       await flushPromises();
 
       expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -131,6 +143,7 @@ describe("Settings → Machines", () => {
       };
       const wrapper = mount(MachinesSection);
       await flushPromises();
+      await openPage(wrapper, HOME_MACHINE_KEY);
       const replace = () => wrapper.findAll("button").find((button) => button.text().includes("Replace token"))!;
 
       confirmAction.mockResolvedValueOnce(false);
@@ -389,7 +402,8 @@ describe("Settings → Machines", () => {
       const wrapper = mount(MachinesSection);
       await flushPromises();
 
-      const card = wrapper.get(`[data-testid='machine-card'][data-machine='${mini.id}']`);
+      await openPage(wrapper, mini.id);
+      const card = wrapper.get("[data-testid='machine-page']");
       expect(card.get(".machine-card__state").text()).toBe("Fleet isn't running on mini");
       const steps = card.findAll("[data-step-state]").map((step) => [step.attributes("data-step-state"), step.text()]);
       expect(steps.map(([state]) => state)).toEqual(["ok", "ok", "failed", "notChecked"]);
@@ -402,6 +416,7 @@ describe("Settings → Machines", () => {
       const wrapper = mount(MachinesSection);
       await flushPromises();
 
+      await openPage(wrapper, mini.id);
       routes["http://100.64.12.40:2113/api/sessions"] = () => json([]);
       await wrapper.get("[data-testid='machine-diagnosis-retry']").trigger("click");
       await flushPromises();
@@ -633,7 +648,7 @@ describe("Settings → Machines: agents sending work", () => {
   });
 
   function control(wrapper: VueWrapper, key: string) {
-    return wrapper.find(`[data-testid='machine-card'][data-machine='${key}'] [data-testid='machine-agent-work']`);
+    return wrapper.find(`[data-testid='machine-page'][data-machine='${key}'] [data-testid='machine-agent-work']`);
   }
 
   it("asks by default on each other machine's card, says its level, and saves Always or Never", async () => {
@@ -642,8 +657,12 @@ describe("Settings → Machines: agents sending work", () => {
     await useMachinesStore().refreshMachine(mini.id);
     await flushPromises();
 
-    // This machine is where agents send work from: no setting on its card.
+    // This machine is where agents send work from: no setting on its page.
+    await openPage(wrapper, HOME_MACHINE_KEY);
     expect(control(wrapper, HOME_MACHINE_KEY).exists()).toBe(false);
+    useMachinePage().close();
+    await flushPromises();
+    await openPage(wrapper, mini.id);
     const mine = control(wrapper, mini.id);
     expect(mine.text()).toContain("Agents here can send it work");
     expect(mine.find("[data-testid='machine-agent-work-ask']").attributes("aria-checked")).toBe("true");
@@ -673,6 +692,7 @@ describe("Settings → Machines: agents sending work", () => {
     await flushPromises();
     await useMachinesStore().refreshMachine(mini.id);
     await flushPromises();
+    await openPage(wrapper, mini.id);
 
     expect(control(wrapper, mini.id).find("[data-testid='machine-agent-work-level']").text()).toBe("Work there runs under mini's level: unknown.");
   });
@@ -721,6 +741,7 @@ describe("Settings → Machines: addresses", () => {
   async function mountList(): Promise<VueWrapper> {
     const wrapper = mount(MachinesSection);
     await flushPromises();
+    await openPage(wrapper, studio.id);
     return wrapper;
   }
 
@@ -779,5 +800,88 @@ describe("Settings → Machines: addresses", () => {
     expect(wrapper.findAll("[data-testid='machine-address'] .route__kind").map((kind) => kind.text()))
       .toEqual(["Tailscale", "Tailscale IP", "Local network", "Host name"]);
     expect(wrapper.find("[role='alert']").text()).toContain("changed meanwhile");
+  });
+});
+
+describe("Settings → Machines: your machines, and phones and browsers", () => {
+  const studio: MachineConnection = {
+    id: "dddddddddddddddddddddddddddddddd",
+    name: "workbench",
+    baseUrl: "http://workbench.tail4f2a.ts.net:2113",
+    token: "workbench-token-0123456789",
+    os: "linux",
+    addedAt: "2026-10-01T00:00:00.000Z",
+    addresses: [
+      { url: "http://workbench.tail4f2a.ts.net:2113", kind: "tailnet", learned: false, lastResult: "ok" },
+      { url: "http://100.88.14.3:2113", kind: "tailnet-ip", learned: true, lastResult: "ok" },
+    ],
+  };
+  const access = { token: "owner-token-0123456789", tokenSource: "saved", host: "0.0.0.0", port: 2113, remoteReachable: true, requiresToken: true, addresses: [{ url: "http://192.168.1.20:2113", kind: "lan", learned: true }] };
+  const devices = [
+    { id: "dev-1", name: "Maya's iPhone", platform: "ios", createdAt: "2026-11-01T00:00:00.000Z", lastUsedAt: "2026-11-18T00:00:00.000Z", pairedVia: null, kind: "device" },
+    { id: "dev-2", name: "workbench", platform: null, createdAt: "2026-11-02T00:00:00.000Z", lastUsedAt: "2026-11-18T00:00:00.000Z", pairedVia: null, kind: "machine" },
+  ];
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setActiveMachine(null);
+    setActivePinia(createPinia());
+    saveMachines([studio]);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input).split("?")[0];
+      if (url === "/api/machine") return json(atlasInfo);
+      if (url === "/api/machine/access") return json(access);
+      if (url === "/api/machine/devices") return json({ devices });
+      if (url === `${studio.baseUrl}/api/machine`) return json({ ...atlasInfo, id: studio.id, name: "workbench" });
+      if (url === `${studio.baseUrl}/api/sessions`) return json([]);
+      return json({ error: "no route" }, 404);
+    }));
+  });
+
+  afterEach(() => {
+    setActiveMachine(null);
+    useMachinePage().close();
+    vi.unstubAllGlobals();
+  });
+
+  it("gives every machine a line on how a phone reaches it, and takes out 'Let other devices reach'", async () => {
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+
+    const lineOf = (key: string) => wrapper.get(`[data-testid='machine-card'][data-machine='${key}'] [data-testid='machine-reach-line']`).text();
+    expect(lineOf(studio.id)).toBe("Only on Tailscale");
+    expect(lineOf(HOME_MACHINE_KEY)).toBe("Reaches your phone on the home network");
+    expect(wrapper.text()).toContain("Your machines");
+    expect(wrapper.text()).toContain("Phones and browsers");
+    expect(wrapper.text()).not.toContain("Let other devices reach");
+  });
+
+  it("lists the phones and browsers with keys, and leaves out another machine's key", async () => {
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+
+    const rows = wrapper.get("[data-testid='machine-phones-group']").findAll("[data-testid='device-row']");
+    expect(rows.map((row) => row.text())).toEqual([expect.stringContaining("Maya's iPhone")]);
+  });
+
+  it("keeps the token and addresses off the list, on the machine's own page", async () => {
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    expect(wrapper.find("[data-testid='machine-access-token']").exists()).toBe(false);
+
+    await openPage(wrapper, HOME_MACHINE_KEY);
+    expect(wrapper.find("[data-testid='machine-access-token']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='machines-add']").exists()).toBe(false);
+  });
+
+  it("says Fleet-wide removal only when Your Fleet is on", async () => {
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    expect(wrapper.get("[data-testid='machine-phones-group']").text()).not.toContain("on every machine");
+
+    usePreferencesStore().preferences = { YourFleet: "true" };
+    await flushPromises();
+    expect(wrapper.get("[data-testid='machine-phones-group']").text()).toContain("Remove one and it loses them on every machine.");
   });
 });
