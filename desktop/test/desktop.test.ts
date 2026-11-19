@@ -1,6 +1,9 @@
+import * as fs from "node:fs";
 import * as net from "node:net";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
-import { isLoopbackHttpUrl, parseInstance } from "../src/instance";
+import { isLoopbackHttpUrl, machineFileFor, parseAccessToken, parseInstance, readAccessToken, signIn } from "../src/instance";
 import { classifyLink } from "../src/links";
 import { resolvePaths } from "../src/paths";
 import { buildServerEnv, pickPort, restartDelay } from "../src/server";
@@ -47,7 +50,12 @@ describe("instance file", () => {
   const valid = { pid: 42, url: "http://127.0.0.1:2113/", version: "0.24.0", databasePath: "/home/me/.weave/fleet.db", desktop: false, startedAt: "2026-09-14T12:00:00Z" };
 
   it("reads what the server writes", () => {
-    expect(parseInstance(JSON.stringify(valid))).toEqual({ ...valid, url: "http://127.0.0.1:2113" });
+    expect(parseInstance(JSON.stringify(valid))).toEqual({ ...valid, url: "http://127.0.0.1:2113", requiresToken: false });
+  });
+
+  it("knows a Fleet that wants its key even from this computer (a node)", () => {
+    expect(parseInstance(JSON.stringify({ ...valid, requiresToken: true }))?.requiresToken).toBe(true);
+    expect(parseInstance(JSON.stringify({ ...valid, requiresToken: "yes" }))?.requiresToken).toBe(false);
   });
 
   it.each([
@@ -66,6 +74,58 @@ describe("instance file", () => {
     expect(isLoopbackHttpUrl("http://[::1]:5000")).toBe(true);
     expect(isLoopbackHttpUrl("http://localhost:5000")).toBe(true);
     expect(isLoopbackHttpUrl("http://192.168.1.10:5000")).toBe(false);
+  });
+});
+
+describe("the key of the Fleet running here", () => {
+  const key = "MVrTPB67r4BYDD-vhHCn56pZKngtOOO1BXngIJ3sbNA";
+
+  it("is in the machine file beside the database", () => {
+    expect(machineFileFor("/home/me/.weave/fleet.db")).toBe(path.join("/home/me/.weave", "fleet.machine.json"));
+    expect(machineFileFor("/data/profiles/work/atlas.db")).toBe(path.join("/data/profiles/work", "atlas.machine.json"));
+  });
+
+  it("is read from what the server saves", () => {
+    expect(parseAccessToken(JSON.stringify({ id: "bf36", name: null, accessToken: key, publicUrl: null }))).toBe(key);
+  });
+
+  it.each([
+    ["not JSON", "{"],
+    ["no key", JSON.stringify({ id: "bf36" })],
+    ["a key that isn't text", JSON.stringify({ accessToken: 12 })],
+    ["a half-written key", JSON.stringify({ accessToken: "short" })],
+    ["a list", "[]"],
+  ])("is not taken from %s", (_name, json) => {
+    expect(parseAccessToken(json)).toBeNull();
+  });
+
+  it("is read from disk, and null when the file is missing", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fleet-key-"));
+    try {
+      expect(await readAccessToken(path.join(dir, "fleet.db"))).toBeNull();
+      fs.writeFileSync(path.join(dir, "fleet.machine.json"), JSON.stringify({ accessToken: key }));
+      expect(await readAccessToken(path.join(dir, "fleet.db"))).toBe(key);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("signs the window in by posting it to the Fleet's login", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const accepted = await signIn("http://127.0.0.1:6262", key, async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response(null, { status: 200 });
+    });
+    expect(accepted).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("http://127.0.0.1:6262/auth/token-login");
+    expect(calls[0]!.init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({ token: key });
+  });
+
+  it("reports a key Fleet turned away, or a Fleet that didn't answer", async () => {
+    expect(await signIn("http://127.0.0.1:6262", key, async () => new Response(null, { status: 401 }))).toBe(false);
+    expect(await signIn("http://127.0.0.1:6262", key, async () => Promise.reject(new Error("refused")))).toBe(false);
   });
 });
 

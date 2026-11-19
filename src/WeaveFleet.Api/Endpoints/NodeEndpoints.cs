@@ -47,6 +47,10 @@ public static class NodeEndpoints
         foreach (var path in new[] { "/", "/add-machine" })
             app.MapGet(path, (HttpContext http) =>
             {
+                // This computer's own desktop app gets the web app at the same addresses.
+                if (WebAppIndex(http) is { } webApp)
+                    return webApp;
+
                 if (!http.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase))
                     return Results.Ok(new NodeNoteResponse(
                         "fleet-node",
@@ -62,6 +66,56 @@ public static class NodeEndpoints
             })
             .AllowAnonymous()
             .ExcludeFromDescription();
+
+        return app;
+    }
+
+    /// <summary>
+    /// Whether the request came from this computer itself: over loopback and not through a proxy. Same test as the
+    /// loopback sign-in bypass, so a reverse proxy or Tailscale serve in front of a node never counts.
+    /// </summary>
+    internal static bool IsFromThisComputer(HttpContext http) =>
+        LoopbackAuthPolicy.IsLoopbackRequest(http) && !LoopbackAuthPolicy.CameThroughProxy(http.Request);
+
+    /// <summary>index.html for a request from this computer, or null for anyone else (or when the release has no web app).</summary>
+    private static IResult? WebAppIndex(HttpContext http)
+    {
+        if (!IsFromThisComputer(http))
+            return null;
+
+        var index = http.RequestServices.GetRequiredService<IWebHostEnvironment>().WebRootFileProvider.GetFileInfo("index.html");
+        if (!index.Exists)
+            return null;
+
+        http.Response.Headers.CacheControl = "no-cache";
+        return Results.File(index.CreateReadStream(), "text/html; charset=utf-8");
+    }
+
+    /// <summary>
+    /// Serves the web app to this computer only, so the desktop app can show a node that runs here (one computer, one
+    /// machine). Everyone else still gets <see cref="MapNodeNote"/>. The web app's files are public in the release; what
+    /// stays behind the access token is every API call, and the app signs in with the key in the node's machine file.
+    /// </summary>
+    public static WebApplication UseWebAppForThisComputer(this WebApplication app)
+    {
+        var options = WebAppEndpoints.StaticFileOptions();
+        app.UseWhen(IsFromThisComputer, branch =>
+        {
+            branch.UseStaticFiles(options);
+        });
+
+        // A page of the web app (/settings, /sessions/…): index.html for this computer, nothing for anyone else.
+        // A RequestDelegate, not a handler, like MapUnknownServerPaths.
+        app.MapFallback(http =>
+        {
+            if (WebAppIndex(http) is { } webApp)
+                return webApp.ExecuteAsync(http);
+
+            http.Response.StatusCode = StatusCodes.Status404NotFound;
+            return Task.CompletedTask;
+        })
+        .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]))
+        .AllowAnonymous();
 
         return app;
     }

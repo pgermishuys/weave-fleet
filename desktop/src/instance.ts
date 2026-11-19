@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 
 /** What a running Fleet writes to `fleet.instance.json` (FleetInstanceInfo on the server). */
 export interface FleetInstance {
@@ -8,6 +9,8 @@ export interface FleetInstance {
   databasePath: string;
   desktop: boolean;
   startedAt: string;
+  /** Whether even this computer needs the machine's key (a `fleet node` does). Missing from older Fleets: false. */
+  requiresToken: boolean;
 }
 
 /** Parses an instance file, or returns null for anything that isn't one. */
@@ -29,6 +32,7 @@ export function parseInstance(json: string): FleetInstance | null {
     databasePath: typeof record.databasePath === "string" ? record.databasePath : "",
     desktop: record.desktop === true,
     startedAt: typeof record.startedAt === "string" ? record.startedAt : "",
+    requiresToken: record.requiresToken === true,
   };
 }
 
@@ -76,4 +80,51 @@ export async function findRunningFleet(instanceFile: string): Promise<FleetInsta
   const instance = await readInstance(instanceFile);
   if (!instance || !isProcessAlive(instance.pid)) return null;
   return (await isReady(instance.url)) ? instance : null;
+}
+
+/** Fleet's smallest access token (MachineIdentityStore.MinimumTokenLength), so a half-written file isn't taken as a key. */
+const MINIMUM_TOKEN_LENGTH = 32;
+
+/** The machine's identity file, next to its database: `fleet.db` has `fleet.machine.json` (MachineIdentityStore). */
+export function machineFileFor(databasePath: string): string {
+  const { dir, name } = path.parse(databasePath);
+  return path.join(dir, `${name}.machine.json`);
+}
+
+/** The access token in a machine identity file, or null when it holds none. */
+export function parseAccessToken(json: string): string | null {
+  try {
+    const value: unknown = JSON.parse(json);
+    const token = typeof value === "object" && value !== null ? (value as Record<string, unknown>).accessToken : undefined;
+    return typeof token === "string" && token.length >= MINIMUM_TOKEN_LENGTH ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The key of the Fleet running here, read as the user that runs it (the file is the user's own). Null if unreadable. */
+export async function readAccessToken(databasePath: string): Promise<string | null> {
+  try {
+    return parseAccessToken(await fs.readFile(machineFileFor(databasePath), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signs `fetchImpl`'s cookie jar in to the Fleet at `url` with its key (`POST /auth/token-login`), so the window can
+ * open it without the page asking for one. Resolves to whether Fleet accepted the key.
+ */
+export async function signIn(url: string, token: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const response = await fetchImpl(`${url}/auth/token-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }

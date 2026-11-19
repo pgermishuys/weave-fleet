@@ -19,21 +19,27 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// </summary>
 public sealed class NodeModeEndpointTests :
     IClassFixture<NodeModeEndpointTests.Server>,
-    IClassFixture<NodeModeEndpointTests.WebAppServer>
+    IClassFixture<NodeModeEndpointTests.WebAppServer>,
+    IClassFixture<NodeModeEndpointTests.ElsewhereServer>
 {
     private readonly ApiWebApplicationFactory _node;
     private readonly ApiWebApplicationFactory _webApp;
+    private readonly ApiWebApplicationFactory _elsewhere;
 
-    public NodeModeEndpointTests(Server node, WebAppServer webApp)
+    public NodeModeEndpointTests(Server node, WebAppServer webApp, ElsewhereServer elsewhere)
     {
         _node = node.Factory;
         _webApp = webApp.Factory;
+        _elsewhere = elsewhere.Factory;
     }
+
+    // `_node` gets every request from this computer, like the desktop app's window. `_elsewhere` gets them from
+    // another machine: the web app is not for that caller.
 
     [Fact]
     public async Task A_browser_at_the_root_gets_a_page_saying_what_this_is()
     {
-        var factory = _node;
+        var factory = _elsewhere;
         using var client = CreateClient(factory);
         client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 
@@ -57,7 +63,7 @@ public sealed class NodeModeEndpointTests :
     [Fact]
     public async Task A_pairing_link_opened_in_a_browser_gets_the_same_page()
     {
-        using var client = CreateClient(_node);
+        using var client = CreateClient(_elsewhere);
         client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
 
         var response = await client.GetAsync("/add-machine");
@@ -69,7 +75,7 @@ public sealed class NodeModeEndpointTests :
     [Fact]
     public async Task Anything_else_at_the_root_gets_a_json_note()
     {
-        var factory = _node;
+        var factory = _elsewhere;
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/");
@@ -91,7 +97,7 @@ public sealed class NodeModeEndpointTests :
     [InlineData("/pair")]
     public async Task Web_app_paths_are_not_found(string path)
     {
-        var factory = _node;
+        var factory = _elsewhere;
         using var client = CreateClient(factory, Token(factory));
 
         var response = await client.GetAsync(path);
@@ -181,6 +187,64 @@ public sealed class NodeModeEndpointTests :
         error.GetProperty("error").GetString()!.ShouldContain("needs a Fleet with the web app");
     }
 
+    // ── The web app, for this computer's own desktop app ──────────────────────
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/index.html")]
+    [InlineData("/sessions/9b2d")]
+    [InlineData("/settings")]
+    public async Task This_computer_gets_the_web_app(string path)
+    {
+        using var client = CreateClient(_node);
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+
+        var response = await client.GetAsync(path);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).ShouldContain("<div id=\"app\">");
+    }
+
+    [Theory]
+    [InlineData("X-Forwarded-For", "203.0.113.9")]
+    [InlineData("Tailscale-User-Login", "alex@example.com")]
+    public async Task A_request_that_came_through_a_proxy_is_not_from_this_computer(string header, string value)
+    {
+        using var client = CreateClient(_node);
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+        client.DefaultRequestHeaders.Add(header, value);
+
+        var root = await client.GetAsync("/");
+        var deepLink = await client.GetAsync("/sessions/9b2d");
+
+        (await root.Content.ReadAsStringAsync()).ShouldContain("Fleet machine");
+        deepLink.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task The_web_app_on_a_node_still_needs_the_key_for_everything_it_asks()
+    {
+        using var client = CreateClient(_node);
+
+        (await client.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await client.PostAsJsonAsync("/auth/token-login", new { token = "not-the-key-not-the-key-not-the-key" })).StatusCode
+            .ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task The_key_in_the_machine_file_signs_the_app_in()
+    {
+        var identity = _node.Services.GetRequiredService<MachineIdentityStore>();
+        var key = JsonDocument.Parse(await File.ReadAllTextAsync(identity.FilePath)).RootElement.GetProperty("accessToken").GetString()!;
+        key.ShouldBe(Token(_node));
+
+        using var client = _node.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
+        var login = await client.PostAsJsonAsync("/auth/token-login", new { token = key });
+
+        login.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await client.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
     // ── What it prints at startup ─────────────────────────────────────────────
 
     [Fact]
@@ -221,6 +285,19 @@ public sealed class NodeModeEndpointTests :
     public sealed class Server : IDisposable
     {
         public ApiWebApplicationFactory Factory { get; } = CreateNode();
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class ElsewhereServer : IDisposable
+    {
+        // Requests carry no loopback address, like one from another machine.
+        public ApiWebApplicationFactory Factory { get; } = new(
+            authEnabled: false,
+            tokenAuthEnabled: true,
+            host: "127.0.0.1",
+            requireToken: true,
+            serveUi: false);
 
         public void Dispose() => Factory.Dispose();
     }

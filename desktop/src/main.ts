@@ -1,7 +1,8 @@
 import * as path from "node:path";
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, nativeTheme, screen, shell } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell } from "electron";
 import * as electronUpdater from "electron-updater";
-import { findRunningFleet } from "./instance";
+import * as os from "node:os";
+import { findRunningFleet, readAccessToken, signIn, type FleetInstance } from "./instance";
 import { classifyLink } from "./links";
 import { buildAppMenu, showContextMenu } from "./menu";
 import { resolvePaths } from "./paths";
@@ -27,6 +28,8 @@ let tray: Tray | null = null;
 let server: FleetServer | null = null;
 /** The Fleet the window shows, and whether the app started it (and so stops it on quit). */
 let fleet: { url: string; owned: boolean } | null = null;
+/** A Fleet already running here that waits for the person to say the app may use it (see useRunningFleet). */
+let waitingOn: FleetInstance | null = null;
 let quitting = false;
 let updates: Updates;
 
@@ -59,6 +62,13 @@ async function start(): Promise<void> {
   });
   ipcMain.handle("fleet-desktop:open-logs", () => shell.openPath(app.getPath("logs")));
   ipcMain.handle("fleet-desktop:retry", () => connect());
+  ipcMain.handle("fleet-desktop:use-running-fleet", async () => {
+    if (!waitingOn) return;
+    const instance = waitingOn;
+    waitingOn = null;
+    settings.update({ useRunningFleet: true });
+    await openRunning(instance);
+  });
   ipcMain.handle("fleet-desktop:get-update-state", () => updates.state);
   ipcMain.handle("fleet-desktop:check-for-updates", () => updates.check());
   ipcMain.handle("fleet-desktop:install-update", (_event, options?: { confirmed?: unknown }) => installUpdate(options?.confirmed === true));
@@ -79,7 +89,7 @@ async function connect(): Promise<void> {
   showPage("splash.html", { status: "Starting Fleet…" });
   const running = await findRunningFleet(paths.instanceFile);
   if (running) {
-    open({ url: running.url, owned: false });
+    await useRunning(running);
     return;
   }
 
@@ -108,7 +118,7 @@ async function onServerEvent(event: FleetServerEvent): Promise<void> {
       for (let attempt = 0; attempt < 60; attempt++) {
         const running = await findRunningFleet(paths.instanceFile);
         if (running) {
-          open({ url: running.url, owned: false });
+          await useRunning(running);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -123,6 +133,38 @@ async function onServerEvent(event: FleetServerEvent): Promise<void> {
       showError(event.message);
       break;
   }
+}
+
+/**
+ * One computer, one machine: a Fleet that already runs here is the one the app shows, never a second one on the same
+ * data. A `fleet node` asks for its key on every request and serves its web app only to this computer, so the app
+ * says so first (once), then signs in with the key it reads from the node's machine file, as the same user.
+ */
+async function useRunning(running: FleetInstance): Promise<void> {
+  if (!running.requiresToken) {
+    open({ url: running.url, owned: false });
+    return;
+  }
+  if (!settings.get().useRunningFleet) {
+    waitingOn = running;
+    showPage("running-fleet.html", { host: os.hostname(), version: running.version, since: running.startedAt });
+    return;
+  }
+  await openRunning(running);
+}
+
+/** Signs in to the Fleet running here with its key, then shows it. */
+async function openRunning(running: FleetInstance): Promise<void> {
+  const token = await readAccessToken(running.databasePath || paths.databasePath);
+  if (!token) {
+    showError("Fleet runs on this computer, but the app can't read its key. The key is in fleet.machine.json beside its database.");
+    return;
+  }
+  if (!(await signIn(running.url, token, (input, init) => session.defaultSession.fetch(input as string, init)))) {
+    showError("Fleet runs on this computer, but it didn't accept the key the app read. If you set WEAVE_FLEET_AUTH_TOKEN for it, restart it without that variable.");
+    return;
+  }
+  open({ url: running.url, owned: false });
 }
 
 function open(target: NonNullable<typeof fleet>): void {
