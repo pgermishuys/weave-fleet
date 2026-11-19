@@ -15,6 +15,8 @@ import {
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
+import ReachDialog from "@/components/settings/ReachDialog.vue";
+import { useMachineReach } from "@/composables/use-machine-reach";
 import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
 import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
@@ -350,13 +352,25 @@ const isReplacing = shallowRef(false);
 
 const homeName = computed(() => home.value?.name ?? "This machine");
 
+// The desktop app listens on this machine only until someone lets others reach it.
+const reach = useMachineReach();
+const reachOpen = shallowRef(false);
+const reachLabel = computed(() => {
+  const state = reach.state.value;
+  if (!state?.available) return null;
+  return { off: null, "tailscale-and-home": "Tailscale and home network", home: "Home network only", own: state.ownAddress ?? "Your own address" }[state.mode];
+});
+
 async function loadAccess(): Promise<void> {
   accessError.value = null;
   try {
     const loaded = await machines.loadHomeAccess();
     isDevice.value = loaded === "device";
     access.value = loaded === "device" ? null : loaded;
-    if (access.value) void refreshDevices();
+    if (access.value) {
+      void refreshDevices();
+      void reach.load();
+    }
   } catch (error) {
     accessError.value = error instanceof Error ? error.message : String(error);
   } finally {
@@ -908,6 +922,12 @@ onUnmounted(() => stopPolling?.());
       hint="Phones and devices, and the access token."
       data-testid="machine-access"
     >
+      <ReachDialog
+        v-if="reach.state.value?.available"
+        v-model:open="reachOpen"
+        :machine-name="homeName"
+        @changed="loadAccess"
+      />
       <ErrorNote
         v-if="accessError"
         :message="accessError"
@@ -940,6 +960,7 @@ onUnmounted(() => stopPolling?.());
             :device-names="deviceNames"
             @refresh="refreshDevices"
             @saved-url="onPublicUrlSaved"
+            @reach-changed="loadAccess"
           />
           <DevicesList
             :devices="devices"
@@ -948,8 +969,43 @@ onUnmounted(() => stopPolling?.());
           />
         </div>
 
+        <div
+          v-if="reach.state.value?.available && reach.state.value.mode === 'off'"
+          class="flex flex-wrap items-center gap-3 px-4 py-3"
+          data-testid="machine-access-loopback"
+        >
+          <p class="max-w-prose text-sm text-muted">
+            Reachable from <b class="text-text">this machine only</b>. Turn it on to use {{ homeName }} from your phone
+            or another machine.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="machine-reach-open"
+            @click="reachOpen = true"
+          >
+            Let others reach {{ homeName }}
+          </Button>
+        </div>
+        <div
+          v-else-if="reachLabel"
+          class="flex flex-wrap items-center gap-3 px-4 py-3"
+          data-testid="machine-access-reach"
+        >
+          <p class="max-w-prose text-sm text-muted">
+            Reachable from other devices: <b class="text-text">{{ reachLabel }}</b>. Each one needs its own key.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="machine-reach-open"
+            @click="reachOpen = true"
+          >
+            Change
+          </Button>
+        </div>
         <p
-          v-if="!access.remoteReachable && !access.requiresToken"
+          v-else-if="!access.remoteReachable && !access.requiresToken"
           class="max-w-prose px-4 py-3 text-sm text-muted"
           data-testid="machine-access-loopback"
         >

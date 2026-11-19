@@ -59,6 +59,7 @@ exports[`Settings → Machines with Jobs off > renders as it always did and asks
       <p class="text-xs text-muted">Phones and devices, and the access token.</p>
     </div>
     <div class="divide-y divide-border overflow-hidden rounded-card border border-border bg-card-bg">
+      <!--v-if-->
       <p data-v-bdf3156a="" class="px-4 py-3 text-sm text-muted">This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines.</p>
     </div>
   </section>

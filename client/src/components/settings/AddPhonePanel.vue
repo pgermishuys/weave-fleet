@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onUnmounted, shallowRef, watch } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { AlertCircle, Check, Circle, Copy, Smartphone } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import QrCode from "@/components/settings/QrCode.vue";
+import ReachDialog from "@/components/settings/ReachDialog.vue";
+import { useMachineReach } from "@/composables/use-machine-reach";
 import { createPairingCode, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
 import { choosePhoneBaseUrl, supportsInstall } from "@/lib/pairing";
 import { phoneReadiness } from "@/lib/phone-readiness";
@@ -18,7 +20,7 @@ const props = defineProps<{
   machineName: string;
   publicUrl: string | null;
   addresses: readonly { url: string; kind?: string }[];
-  /** Fleet asks every request for a token (`--require-token`). */
+  /** Fleet asks every request for a token, this machine's own included (`--require-token`). */
   requiresToken: boolean;
   /** The port Fleet listens on, for the commands in the checklist. */
   port: number;
@@ -31,6 +33,8 @@ const emit = defineEmits<{
   (event: "refresh"): void;
   /** The phone address was saved. */
   (event: "saved-url", url: string): void;
+  /** Someone let others reach this machine (or stopped), so its addresses changed. */
+  (event: "reach-changed"): void;
 }>();
 
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
@@ -45,7 +49,14 @@ const editingUrl = shallowRef(false);
 let devicesAtStart: string[] = [];
 let timer: ReturnType<typeof setInterval> | null = null;
 
-const suggestedUrl = computed(() => choosePhoneBaseUrl(props.publicUrl, window.location, props.addresses));
+const reach = useMachineReach();
+const reachOpen = shallowRef(false);
+/** The desktop app listens on this machine only until someone lets others reach it: "Add your phone" asks first. */
+const needsReach = computed(() => !!reach.state.value?.available && reach.state.value.mode === "off");
+/** What the phone can open: the addresses Fleet listens on, else the ones just opened by letting others reach it. */
+const addressesNow = computed(() => props.addresses.length ? props.addresses : reach.state.value?.listening ?? []);
+
+const suggestedUrl = computed(() => choosePhoneBaseUrl(props.publicUrl, window.location, addressesNow.value));
 const host = computed(() => {
   try {
     return code.value ? new URL(code.value.payload.url).host : "";
@@ -59,9 +70,10 @@ const insecure = computed(() => !!code.value && !supportsInstall(code.value.payl
 const readiness = computed(() => phoneReadiness({
   machineName: props.machineName,
   phoneUrl: props.publicUrl ?? suggestedUrl.value ?? null,
-  addresses: props.addresses,
+  addresses: addressesNow.value,
   requiresToken: props.requiresToken,
   port: props.port,
+  reach: !reach.state.value?.available ? "unavailable" : reach.state.value.mode === "off" ? "off" : "on",
 }));
 const ready = computed(() => readiness.value.every((item) => item.ok));
 const copied = shallowRef<string | null>(null);
@@ -78,7 +90,17 @@ async function copyCommand(command: string): Promise<void> {
   }
 }
 
+function onReachChanged(): void {
+  emit("reach-changed");
+  // It was asked for by "Add your phone": carry on with the code.
+  if (reach.state.value?.mode !== "off") void start();
+}
+
 async function start(baseUrl = phoneUrl.value || suggestedUrl.value || ""): Promise<void> {
+  if (needsReach.value) {
+    reachOpen.value = true;
+    return;
+  }
   if (!baseUrl) {
     // Nothing a phone could open is known yet (a loopback page, no saved address): ask for it first.
     editingUrl.value = true;
@@ -149,6 +171,7 @@ watch(() => props.deviceNames, (names) => {
   close();
 });
 
+onMounted(() => void reach.load());
 onUnmounted(stopTimer);
 </script>
 
@@ -157,6 +180,12 @@ onUnmounted(stopTimer);
     class="add-phone"
     data-testid="add-phone"
   >
+    <ReachDialog
+      v-if="reach.state.value?.available"
+      v-model:open="reachOpen"
+      :machine-name="machineName"
+      @changed="onReachChanged"
+    />
     <div
       v-if="!code && editingUrl"
       class="add-phone__card"

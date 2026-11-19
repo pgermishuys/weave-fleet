@@ -92,6 +92,7 @@ public static class EndpointExtensions
         apiScope.MapAdminEndpoints();
         apiScope.MapMachineEndpoints(fleetOptions);
         apiScope.MapDeviceEndpoints(fleetOptions);
+        apiScope.MapReachEndpoints(fleetOptions);
         apiScope.MapPushEndpoints(fleetOptions);
         apiScope.MapMachinesEndpoints(fleetOptions);
         apiScope.MapMachinePeerEndpoints(fleetOptions);
