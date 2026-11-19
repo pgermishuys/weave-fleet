@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ErrorNote } from "@/components/ui/error-note";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import TailscaleCheckNote from "@/components/settings/TailscaleCheckNote.vue";
 import { useMachineReach } from "@/composables/use-machine-reach";
 import { reachChoices } from "@/lib/reach-choices";
 import type { ReachMode } from "@/lib/reach-api";
@@ -154,6 +155,11 @@ async function apply(mode: ReachMode): Promise<void> {
           </span>
         </label>
       </div>
+
+      <TailscaleCheckNote
+        v-if="reach.state.value?.tailscale && choice === 'tailscale-and-home'"
+        :check="reach.state.value.tailscale"
+      />
 
       <ErrorNote
         v-if="error"

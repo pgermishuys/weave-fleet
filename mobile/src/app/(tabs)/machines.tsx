@@ -7,7 +7,8 @@ import { Heading, PanelPage } from "~/ui/page";
 import { manager, useFleet } from "~/fleet/hooks";
 import type { ConnectionState } from "~/fleet/hub";
 import { moveAddress } from "~/fleet/routes-core";
-import { AddressList, Button, Card, Icon, RouteLine, Text } from "~/kit";
+import { reachNote } from "@fleet/lib/phone-reach";
+import { AddressList, Button, Card, Icon, ReachNoteView, RouteLine, Text } from "~/kit";
 import { useTheme } from "~/theme";
 
 const WORDS: Record<ConnectionState, string> = {
@@ -28,7 +29,7 @@ function confirmRemove(name: string, remove: () => void) {
 }
 
 export default function Machines() {
-  const { machines } = useFleet();
+  const { machines, tailnet, everOnTailnet } = useFleet();
   const { color } = useTheme();
   const [saving, setSaving] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -49,7 +50,9 @@ export default function Machines() {
     <PanelPage>
     <Heading title="Machines" />
     <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 4, gap: 12 }}>
-      {machines.map((m) => (
+      {machines.map((m) => {
+        const note = reachNote(m, tailnet, everOnTailnet);
+        return (
         <Card key={m.machineId} tone={m.state === "signed-out" ? "waiting" : "default"}>
           <View style={{ gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -60,6 +63,7 @@ export default function Machines() {
             </View>
             {m.state === "connected" && m.addresses.length > 1
               ? <RouteLine addresses={m.addresses} inUse={m.baseUrl} />
+              : note ? <ReachNoteView note={note} />
               : <Text tone={m.state === "connected" ? "running" : m.state === "signed-out" ? "error" : "muted"} size={14}>{WORDS[m.state]}</Text>}
           </View>
           <AddressList
@@ -68,7 +72,8 @@ export default function Machines() {
           />
           {errors[m.machineId] ? <Text tone="error" size={13}>{errors[m.machineId]}</Text> : null}
         </Card>
-      ))}
+        );
+      })}
       <Button label="Pair another machine" icon="plus" testID="pair-another" onPress={() => router.push("/pair")} />
     </ScrollView>
     </PanelPage>

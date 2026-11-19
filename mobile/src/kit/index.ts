@@ -12,3 +12,4 @@ export { ModelChip, Notice, OptionRow, SearchField, WhereLine, type WherePart } 
 export { InterruptedCard, InterruptionBanner } from "./interrupted";
 export { JoinedBanner } from "./joined";
 export { AddressList, RouteLine } from "./addresses";
+export { PairWarningView, ReachNoteView, openTailscale } from "./reach";
