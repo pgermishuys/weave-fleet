@@ -117,6 +117,15 @@ and `--profile` like `fleet node`: use the ones the node was started with.
 
 With an address typed, the master-token form is still there under **Advanced**.
 
+### Found: a machine that is waiting
+
+While `fleet node pair` (or `fleet node up`, which runs it) has a live code, the machine tells Tailscale and the home network it is waiting. In the Fleet you work from, Settings → Machines → Add a machine opens on **Found**: it lists the waiting machines, with where it saw each one. You check the code and add it; nothing is pasted.
+
+- **What is said.** The machine's id, its name, its port and the first four characters of its code, never anything that adds it. The rest of the code is typed from the terminal, so the machine you add is the one in front of you. Adding goes through the same path as a pasted link (`POST /api/machines/pair`).
+- **Tailscale.** Fleet asks `tailscale status --json` (the reader `MachineCandidates` uses too) and asks each online peer, on Fleet's port, `GET /api/pairing/waiting`.
+- **Home network.** A one-second UDP broadcast on port 6263 while the code is live (`FLEET_FOUND_PORT` changes it). It is a plain datagram, not mDNS: nothing to install and no admin rights on Windows, macOS or Linux, and no clash with the system's own mDNS responder on port 5353. Fleet listens only while Found is open, and asks only the address that sent it (this computer, the home network or Tailscale) and only believes it when that address answers with the same machine id.
+- **Stops.** When the code is used or runs out.
+
 ### Set a machine up from here (over SSH)
 
 No command on the other machine: if you can `ssh` to it, Fleet sets it up. Settings → Machines → **Add a machine** →

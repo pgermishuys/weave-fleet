@@ -188,6 +188,28 @@ public sealed class MachinePairingEndpointTests : IClassFixture<MachinePairingEn
     }
 
     [Fact]
+    public async Task A_machine_with_a_live_code_says_it_is_waiting_with_the_first_half_of_it_and_stops_when_the_code_is_used()
+    {
+        await using var factory = CreateNode();
+        using var owner = Client(factory, MasterToken(factory));
+        using var anyone = Client(factory);
+
+        (await anyone.GetAsync("/api/pairing/waiting")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        var manualCode = await NewCodeAsync(owner);
+        var waiting = await anyone.GetAsync("/api/pairing/waiting");
+        waiting.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await waiting.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("hint").GetString().ShouldBe(manualCode[..4]);
+        body.GetProperty("machineId").GetString().ShouldNotBeNullOrEmpty();
+        body.GetProperty("name").GetString().ShouldNotBeNullOrEmpty();
+        (await waiting.Content.ReadAsStringAsync()).ShouldNotContain(manualCode, Case.Sensitive, "the whole code is never said");
+
+        (await anyone.PostAsJsonAsync("/api/pairing/redeem", new { manualCode, deviceName = "studio-mac", kind = "machine" })).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await anyone.GetAsync("/api/pairing/waiting")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task Making_a_code_needs_the_master_token()
     {
         var factory = _node;

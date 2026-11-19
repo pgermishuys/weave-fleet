@@ -119,7 +119,12 @@ public static class NodePairCommand
         await output.WriteLineAsync();
         await output.WriteLineAsync($"    {link}");
         await output.WriteLineAsync();
-        await output.WriteLineAsync("In the Fleet you work from, open Settings → Machines → Add a machine and paste it.");
+        await output.WriteLineAsync($"Waiting: {name} is telling Tailscale and your home network it's here, for 10 minutes. Nobody has to paste anything:");
+        await output.WriteLineAsync($"in the Fleet you work from, open Settings → Machines → Add a machine → Found, pick {name} and check it shows this code:");
+        await output.WriteLineAsync();
+        await output.WriteLineAsync($"    {code}");
+        await output.WriteLineAsync();
+        await output.WriteLineAsync("Or paste the link in Add a machine: paste the link there.");
         await output.WriteLineAsync("The link works once and expires in 10 minutes. It adds this machine with a key of its own,");
         await output.WriteLineAsync("which you can remove here later.");
         if (addresses.Count > 1)

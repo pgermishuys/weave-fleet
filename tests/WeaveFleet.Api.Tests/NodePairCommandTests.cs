@@ -17,7 +17,8 @@ public sealed class NodePairCommandTests
 
         exit.ShouldBe(0, error);
         output.ShouldContain("    http://100.64.90.72:2113/add-machine#7K3M-Q9ZD");
-        output.ShouldContain("paste it");
+        output.ShouldContain("Found");
+        output.ShouldContain("paste the link");
         output.ShouldContain("10 minutes");
         output.ShouldContain("Also reachable at");
         output.ShouldContain("    http://falcon:2113");

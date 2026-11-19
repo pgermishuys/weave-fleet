@@ -372,6 +372,12 @@ public static class DependencyInjection
             sp.GetRequiredService<WeaveFleet.Application.Machines.ITailscale>()));
         services.AddSingleton<WeaveFleet.Application.Machines.MachineCandidates>(sp => new WeaveFleet.Application.Machines.MachineCandidates(
             sp.GetRequiredService<WeaveFleet.Application.Machines.ITailscale>()));
+        // Found (Add a machine): a machine waiting to be added announces itself on the home network and over Tailscale; this one looks.
+        services.AddSingleton(_ => WeaveFleet.Infrastructure.Machines.LanAnnouncementOptions.FromEnvironment());
+        services.AddSingleton<WeaveFleet.Application.Machines.WaitingMachine>();
+        services.AddSingleton<WeaveFleet.Application.Machines.ILanListener, WeaveFleet.Infrastructure.Machines.UdpLanListener>();
+        services.AddSingleton<WeaveFleet.Application.Machines.FoundMachines>();
+        services.AddHostedService<WeaveFleet.Infrastructure.Machines.LanAnnouncer>();
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
         // Sessions there that a session here waits to hear from are followed over the watcher's connections.
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessionTurns>();
