@@ -20,13 +20,13 @@ public static class ReachEndpoints
 
         var group = app.MapGroup("/api/machine/reach").WithTags("Machine");
 
-        group.MapGet("", async (IServiceProvider services, TailnetName tailnet, CancellationToken ct) =>
-            Results.Ok(await ToResponseAsync(services.GetService<ReachListeners>(), fleetOptions, tailnet, ct)))
+        group.MapGet("", async (IServiceProvider services, TailnetName tailnet, ITailscale tailscale, CancellationToken ct) =>
+            Results.Ok(await ToResponseAsync(services.GetService<ReachListeners>(), fleetOptions, tailnet, tailscale, ct)))
             .Produces<ReachResponse>(200)
             .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
             .WithName("GetMachineReach");
 
-        group.MapPut("", async (SetReachRequest request, IServiceProvider services, MachineIdentityStore identities, TailnetName tailnet, CancellationToken ct) =>
+        group.MapPut("", async (SetReachRequest request, IServiceProvider services, MachineIdentityStore identities, TailnetName tailnet, ITailscale tailscale, CancellationToken ct) =>
         {
             var reach = services.GetService<ReachListeners>();
             if (reach is null)
@@ -51,7 +51,7 @@ public static class ReachEndpoints
             if (request.Mode == ReachModes.Own)
                 identities.Update(current => current with { PublicUrl = ownAddress });
 
-            return Results.Ok(await ToResponseAsync(reach, fleetOptions, tailnet, ct));
+            return Results.Ok(await ToResponseAsync(reach, fleetOptions, tailnet, tailscale, ct));
         })
         .Produces<ReachResponse>(200)
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
@@ -60,19 +60,22 @@ public static class ReachEndpoints
         return app;
     }
 
-    private static async Task<ReachResponse> ToResponseAsync(ReachListeners? reach, FleetOptions options, TailnetName tailnet, CancellationToken ct)
+    private static async Task<ReachResponse> ToResponseAsync(ReachListeners? reach, FleetOptions options, TailnetName tailnet, ITailscale tailscale, CancellationToken ct)
     {
         if (reach is null)
-            return new ReachResponse(false, ReachModes.Off, null, options.Port + 1, [], []);
+            return new ReachResponse(false, ReachModes.Off, null, options.Port + 1, [], [], null);
 
         var name = await tailnet.GetAsync(ct);
+        var covered = reach.Listening.Any(address => address.Kind == "tailnet");
+        var check = TailscaleChecks.Read(await tailscale.StatusJsonAsync(ct), "this machine", covered);
         return new ReachResponse(
             true,
             reach.Settings.Mode,
             reach.Settings.OwnAddress,
             reach.OwnPort ?? options.Port + 1,
             reach.HasListeners ? MachineEndpoints.ReachableAddresses(options, name, reach) : [],
-            Found(reach, options, name));
+            Found(reach, options, name),
+            check);
     }
 
     /// <summary>What the choices would listen on: the tailnet name and IP, then each home network address.</summary>
@@ -93,8 +96,9 @@ public static class ReachEndpoints
 /// <param name="OwnAddress">For <c>own</c>: the address the person gave.</param>
 /// <param name="OwnPort">The loopback port that always asks for a key, for a tunnel or proxy to send to when the mode is <c>own</c>.</param>
 /// <param name="Listening">Where other devices can reach it now, best first. Empty when off.</param>
+/// <param name="Tailscale">Whether Tailscale is installed, running and signed in here, and whether the listener covers it. Null when not available.</param>
 /// <param name="Found">The addresses on this machine's networks, <c>tailnet</c> first then <c>lan</c>: what the choices would use.</param>
-public sealed record ReachResponse(bool Available, string Mode, string? OwnAddress, int OwnPort, IReadOnlyList<MachineAddress> Listening, IReadOnlyList<MachineAddress> Found);
+public sealed record ReachResponse(bool Available, string Mode, string? OwnAddress, int OwnPort, IReadOnlyList<MachineAddress> Listening, IReadOnlyList<MachineAddress> Found, TailscaleCheck? Tailscale);
 
 /// <summary>Sets where the desktop app can be reached.</summary>
 /// <param name="Mode">One of <c>off</c>, <c>tailscale-and-home</c>, <c>home</c>, <c>own</c>.</param>

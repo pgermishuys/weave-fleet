@@ -4,6 +4,7 @@ import { interruptedEntries, interruptionOf, type InterruptedEntry, type Interru
 import { applySessionsEvent, sectionSessions, type SessionSection } from "~/fleet/session-list";
 import { machineApi, type MachineApi, type SessionListItem } from "~/fleet/api";
 import { MachineHub, type ConnectionState } from "~/fleet/hub";
+import { phoneTailnet, type PhoneTailnet } from "@fleet/lib/phone-reach";
 import type { Machine, MachinesStore } from "~/fleet/machines-core";
 import { isYourFleetOn, machineFromGrant, machinesToJoin, Roster, type JoinedNotice } from "~/fleet/your-fleet-core";
 import {
@@ -19,10 +20,16 @@ export interface MachineView {
   /** Every address, in the order to try them, with what came of the phone's last try of each. */
   addresses: MachineAddress[];
   state: ConnectionState;
+  /** When the connection went down, as a timestamp; null while it is up or before the phone saw it fail. */
+  offlineSince: number | null;
 }
 
 export interface FleetSnapshot {
   machines: MachineView[];
+  /** Whether this phone is on the tailnet, inferred from which addresses answer. */
+  tailnet: PhoneTailnet;
+  /** This phone has reached a machine over Tailscale before, so the app is installed. */
+  everOnTailnet: boolean;
   sections: SessionSection[];
   /** Sessions a restart cut off, on every machine. */
   interrupted: InterruptedEntry[];
@@ -45,6 +52,7 @@ interface Conn {
   recheckTimer: ReturnType<typeof setInterval> | null;
   picking: Promise<boolean> | null;
   moving: boolean;
+  offlineSince: number | null;
   /** What came of the last probe of each address, for the machine screen. */
   outcomes: Record<string, ProbeOutcome>;
   outcomesAt: Date | null;
@@ -56,7 +64,7 @@ export class FleetManager {
   private conns = new Map<string, Conn>();
   private listeners = new Set<() => void>();
   private foreground = true;
-  private cached: FleetSnapshot = { machines: [], sections: [], interrupted: [], loading: false, joined: [] };
+  private cached: FleetSnapshot = { machines: [], tailnet: "unknown", everOnTailnet: false, sections: [], interrupted: [], loading: false, joined: [] };
   private joined: JoinedNotice[] = [];
   private joining = new Set<string>();
 
@@ -101,13 +109,19 @@ export class FleetManager {
       recheckTimer: null,
       picking: null,
       moving: false,
+      offlineSince: null,
       outcomes: {},
       outcomesAt: null,
       home: null,
       api: machineApi(route, () => conn.hub.markSignedOut(), () => this.pick(conn)),
       // Each time it's (back) up: read the list, learn the addresses, and look for a better one (the phone may have
       // joined another network while it was in the background).
-      hub: this.makeHub(route, () => this.publish(), () => {
+      hub: this.makeHub(route, (state) => {
+        // The time the connection went down, kept until it is up again.
+        if (state === "connected") conn.offlineSince = null;
+        else if (state === "offline" && conn.offlineSince === null) conn.offlineSince = Date.now();
+        this.publish();
+      }, () => {
         void this.refetch(conn);
         void this.learn(conn).then(() => this.tryBetter(conn));
         void this.joinFleet(conn);
@@ -377,15 +391,21 @@ export class FleetManager {
 
   private publish() {
     const conns = [...this.conns.values()];
+    const views: MachineView[] = conns.map((c) => ({
+      machineId: c.machine.machineId,
+      machineName: c.machine.machineName,
+      baseUrl: c.route.baseUrl,
+      addresses: c.outcomesAt ? recordOutcomes(this.addressesOf(c), c.outcomes, c.outcomesAt) : this.addressesOf(c),
+      state: c.hub.state,
+      offlineSince: c.offlineSince,
+    }));
+    const tailnet = phoneTailnet(views);
+    if (tailnet === "on") void this.store.markTailnetSeen();
     this.cached = {
+      tailnet,
+      everOnTailnet: this.store.tailnetSeen || tailnet === "on",
       interrupted: interruptedEntries(conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, items: c.items }))),
-      machines: conns.map((c) => ({
-        machineId: c.machine.machineId,
-        machineName: c.machine.machineName,
-        baseUrl: c.route.baseUrl,
-        addresses: c.outcomesAt ? recordOutcomes(this.addressesOf(c), c.outcomes, c.outcomesAt) : this.addressesOf(c),
-        state: c.hub.state,
-      })),
+      machines: views,
       sections: sectionSessions(conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, items: c.items }))),
       joined: this.joined,
       loading: conns.some((c) => !c.loaded && c.hub.state !== "signed-out" && c.hub.state !== "offline"),

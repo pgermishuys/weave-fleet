@@ -6,16 +6,21 @@ import { router } from "expo-router";
 import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { pairWarning, type PairWarning } from "@fleet/lib/phone-reach";
+import { useFleet } from "~/fleet/hooks";
 import { machines, useMachines } from "~/fleet/machines";
 import { previewPairing, redeemPairing, targetFromScan, targetFromTyped, type PairingTarget } from "~/fleet/pairing";
 import { isTailscale, kindOf } from "~/fleet/routes-core";
-import { Button, Card, Icon, Text } from "~/kit";
+import { Button, Card, Icon, PairWarningView, Text } from "~/kit";
 import { useTheme } from "~/theme";
 
 export default function Pair() {
   const { color, font, radius } = useTheme();
   const insets = useSafeAreaInsets();
   const paired = useMachines();
+  const { tailnet, everOnTailnet } = useFleet();
+  // A code for a machine that is only on Tailscale, scanned on a phone that isn't: warned about first, then tried anyway if asked.
+  const [warned, setWarned] = useState<{ target: PairingTarget; warning: PairWarning } | null>(null);
   const [address, setAddress] = useState("");
   const [code, setCode] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -26,7 +31,17 @@ export default function Pair() {
   const [permission, askPermission] = useCameraPermissions();
   const scanned = useRef(false);
 
-  async function preview(next: PairingTarget) {
+  async function preview(next: PairingTarget, skipWarning = false) {
+    if (!skipWarning) {
+      const host = (() => { try { return new URL(next.baseUrl).hostname.split(".")[0]; } catch { return "This machine"; } })();
+      const warning = pairWarning(host, next.addresses ?? [next.baseUrl], tailnet, everOnTailnet);
+      if (warning) {
+        scanned.current = false;
+        setWarned({ target: next, warning });
+        return;
+      }
+    }
+    setWarned(null);
     setBusy(true);
     setError(null);
     try {
@@ -109,7 +124,15 @@ export default function Pair() {
             <Icon name="back" size={22} color={color.text} />
           </Pressable>
         )}
-        {target ? (
+        {warned ? (
+          <>
+            <Text size={24} weight="bold">Before you connect</Text>
+            <PairWarningView warning={warned.warning} />
+            {error && <Text tone="error">{error}</Text>}
+            <Button label="Try anyway" variant="ghost" loading={busy} onPress={() => void preview(warned.target, true)} testID="pair-try-anyway" />
+            <Button label="Back" variant="ghost" onPress={() => setWarned(null)} />
+          </>
+        ) : target ? (
           <>
             <Text size={24} weight="bold">Connect this phone to {machineName}?</Text>
             <Text tone="muted">{target.baseUrl}</Text>

@@ -16,6 +16,7 @@ import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
 import ReachDialog from "@/components/settings/ReachDialog.vue";
+import TailscaleCheckNote from "@/components/settings/TailscaleCheckNote.vue";
 import { useMachineReach } from "@/composables/use-machine-reach";
 import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
@@ -1001,6 +1002,12 @@ onUnmounted(() => stopPolling?.());
           >
             Change
           </Button>
+        </div>
+        <div
+          v-if="reach.state.value?.mode === 'tailscale-and-home' && reach.state.value.tailscale && !reach.state.value.tailscale.covered"
+          class="px-4 py-3"
+        >
+          <TailscaleCheckNote :check="reach.state.value.tailscale" />
         </div>
         <p
           v-else-if="!access.remoteReachable && !access.requiresToken"

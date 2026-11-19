@@ -11,6 +11,16 @@ export interface ReachAddress {
   kind: "tailnet" | "lan" | "hostname";
 }
 
+/** What Fleet found about Tailscale on this machine. `canTurnOn`: Tailscale is fine and only the listener is missing. */
+export interface TailscaleCheck {
+  state: "missing" | "stopped" | "signed-out" | "running";
+  headline: string;
+  detail: string;
+  /** The reach listener already covers the Tailscale address. */
+  covered: boolean;
+  canTurnOn: boolean;
+}
+
 export interface ReachState {
   /** False for a Fleet that isn't the desktop app's own: nothing can be changed. */
   available: boolean;
@@ -22,6 +32,8 @@ export interface ReachState {
   listening: ReachAddress[];
   /** The addresses on this machine's networks, Tailscale first: what the choices would use. */
   found: ReachAddress[];
+  /** Null for a Fleet that can't change reach; absent on an older one. */
+  tailscale?: TailscaleCheck | null;
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {

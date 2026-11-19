@@ -344,6 +344,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(MachineAccessResponse))]
 [JsonSerializable(typeof(MachineAddress))]
 [JsonSerializable(typeof(ReachResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.Machines.TailscaleCheck))]
 [JsonSerializable(typeof(SetReachRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.Machines.MachineCapabilities))]
 [JsonSerializable(typeof(WeaveFleet.Application.Machines.MachineHarness))]

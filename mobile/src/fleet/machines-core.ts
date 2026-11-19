@@ -24,6 +24,8 @@ export interface KeyValueStorage {
 }
 
 const INDEX_KEY = "fleet.machines.v1";
+// Set once this phone has reached a machine over Tailscale: the app is installed, so a later miss means it is off.
+const TAILNET_SEEN_KEY = "fleet.tailnet-seen.v1";
 // SecureStore keys allow letters, digits, ".", "-" and "_".
 const keyOf = (machineId: string) => `fleet.machine.${machineId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
 
@@ -32,6 +34,8 @@ export class MachinesStore {
   private list: Machine[] = [];
   private listeners = new Set<() => void>();
   loaded = false;
+  /** True once this phone has reached a machine over Tailscale. */
+  tailnetSeen = false;
 
   constructor(private storage: KeyValueStorage) {}
 
@@ -42,6 +46,7 @@ export class MachinesStore {
       return raw ? (JSON.parse(raw) as Machine) : null;
     }));
     this.list = found.filter((machine): machine is Machine => machine !== null);
+    this.tailnetSeen = (await this.storage.get(TAILNET_SEEN_KEY)) === "1";
     this.loaded = true;
     this.emit();
     return this.list;
@@ -71,6 +76,13 @@ export class MachinesStore {
     this.list = this.list.map((m) => (m.machineId === machineId ? next : m));
     await this.storage.set(keyOf(machineId), JSON.stringify(next));
     this.emit();
+  }
+
+  /** Remembers that this phone has been on the tailnet. No change event: it only changes what a miss is called. */
+  async markTailnetSeen(): Promise<void> {
+    if (this.tailnetSeen) return;
+    this.tailnetSeen = true;
+    await this.storage.set(TAILNET_SEEN_KEY, "1");
   }
 
   async remove(machineId: string): Promise<void> {
