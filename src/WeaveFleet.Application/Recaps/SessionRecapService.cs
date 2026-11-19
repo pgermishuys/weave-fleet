@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
@@ -355,7 +356,7 @@ public sealed partial class SessionRecapService(
     };
 
     private static string Truncate(string text, int maxLength = MaxLength)
-        => text.Length <= maxLength ? text : string.Concat(text.AsSpan(0, maxLength - 1).TrimEnd(), "…");
+        => text.Length <= maxLength ? text : string.Concat(TextCut.Head(text, maxLength - 1).AsSpan().TrimEnd(), "…");
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Wrote a recap for session {SessionId}")]
     private partial void LogRecapWritten(string sessionId);

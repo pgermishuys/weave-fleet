@@ -11,6 +11,7 @@ using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -346,7 +347,7 @@ public sealed partial class ProblemReportService(
         return string.IsNullOrEmpty(commit) || commit == "unknown" ? version : $"{version} ({commit[..Math.Min(8, commit.Length)]})";
     }
 
-    private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
+    private static string Truncate(string value, int max) => value.Length <= max ? value : TextCut.Head(value, max);
 
     private static async Task<T?> ReadAsync<T>(
         HttpResponseMessage response, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type, CancellationToken ct)

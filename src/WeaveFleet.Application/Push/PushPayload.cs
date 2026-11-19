@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.Push;
 
@@ -37,7 +38,7 @@ public sealed record PushPayload(
     public static string Clip(string text, int max)
     {
         var trimmed = text.ReplaceLineEndings(" ").Trim();
-        return trimmed.Length <= max ? trimmed : string.Concat(trimmed.AsSpan(0, max - 1).TrimEnd(), "…");
+        return trimmed.Length <= max ? trimmed : string.Concat(TextCut.Head(trimmed, max - 1).AsSpan().TrimEnd(), "…");
     }
 }
 

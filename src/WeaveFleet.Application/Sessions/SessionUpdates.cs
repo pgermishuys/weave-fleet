@@ -5,6 +5,7 @@ using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -586,7 +587,7 @@ public sealed class SessionUpdateSender(
             return text;
 
         var cut = text.LastIndexOf(' ', MaxReplyLength);
-        var shortened = text[..(cut > MaxReplyLength / 2 ? cut : MaxReplyLength)].TrimEnd() + "…";
+        var shortened = TextCut.Head(text, cut > MaxReplyLength / 2 ? cut : MaxReplyLength).TrimEnd() + "…";
         return sessionId is null
             ? shortened
             : $"{shortened}\n(Cut short. Read the rest with fleet_session_read, sessionId {sessionId}{(machine is null ? "" : $", machine {machine}")}.)";
