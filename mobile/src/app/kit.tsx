@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  AddressList, Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
+  AddressList, PairWarningView, ReachNoteView, Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
   PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, RouteLine, SearchField, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
   ToolBox, ToolRow, UserBubble, WhereLine, type GlyphStatus,
 } from "~/kit";
@@ -137,6 +137,24 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
             <Text weight="semibold" size={16}>hangar</Text>
             <RouteLine addresses={ADDRESSES.slice(0, 1)} inUse={ADDRESSES[0].url} />
             <AddressList addresses={ADDRESSES.slice(0, 1)} inUse={ADDRESSES[0].url} />
+          </Card>
+        </Section>
+
+        <Section label="Away from home">
+          <Card>
+            <Text weight="semibold" size={16}>atlas</Text>
+            <ReachNoteView note={{ kind: "tailscale-only", headline: "Out of reach from this phone", detail: "atlas is only on Tailscale", action: { kind: "get", label: "Get Tailscale" } }} />
+          </Card>
+          <Card>
+            <Text weight="semibold" size={16}>atlas</Text>
+            <ReachNoteView note={{ kind: "tailscale-only", headline: "Out of reach from this phone", detail: "atlas is only on Tailscale", action: { kind: "turn-on", label: "Turn on Tailscale" } }} />
+          </Card>
+          <Card>
+            <Text weight="semibold" size={16}>hangar</Text>
+            <ReachNoteView note={{ kind: "offline", headline: "Off since 08:40", detail: null, action: null }} />
+          </Card>
+          <Card tone="waiting">
+            <PairWarningView warning={{ title: "atlas is only on Tailscale", body: "This phone can't reach it without Tailscale. Install Tailscale, sign in with the same account as atlas, then connect.", action: { kind: "get", label: "Get Tailscale" } }} />
           </Card>
         </Section>
 
