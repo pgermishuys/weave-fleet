@@ -62,6 +62,10 @@ public sealed class FoundMachinesTests
         public Task<IReadOnlyList<DeviceGrant>> ListRevokedGrantsAsync() => throw new NotSupportedException();
         public Task MarkGrantRevokedAsync(string deviceId, string machineId, DateTimeOffset at) => throw new NotSupportedException();
         public Task DeleteGrantAsync(string deviceId, string machineId) => throw new NotSupportedException();
+        public Task<IReadOnlyList<FleetRemoval>> ListRemovalsAsync() => throw new NotSupportedException();
+        public Task<FleetRemoval?> GetRemovalAsync(string id) => throw new NotSupportedException();
+        public Task SaveRemovalAsync(FleetRemoval removal) => throw new NotSupportedException();
+        public Task DeleteRemovalAsync(string id) => throw new NotSupportedException();
     }
 
     private static FoundMachines Make(Network network, string? tailscale, ILanListener lan, IRemoteMachineRepository? roster = null, FakeTimeProvider? time = null) =>
