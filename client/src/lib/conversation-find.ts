@@ -1,3 +1,4 @@
+import { shortcutKey } from "./shortcut-key";
 /**
  * Find in this conversation: what the find bar searches, and how a hit is marked on screen.
  *
@@ -83,7 +84,7 @@ export function focusKeepsFindKey(target: EventTarget | null): boolean {
 
 /** Ctrl+F (⌘F on a Mac) with nothing else held. */
 export function isFindShortcut(event: KeyboardEvent, apple: boolean): boolean {
-  return event.key.toLowerCase() === "f" && !event.shiftKey && !event.altKey && (apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
+  return shortcutKey(event) === "f" && !event.shiftKey && !event.altKey && (apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 }
 
 // ─── Marks ──────────────────────────────────────────────────────────────────

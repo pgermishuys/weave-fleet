@@ -5,6 +5,7 @@
  * folded and lines past a long diff's "Show more". A match there opens what hides it when the bar steps to it. The marks
  * are drawn with the CSS Custom Highlight API under their own names, so they never clear the conversation's.
  */
+import { shortcutKey } from "@/lib/shortcut-key";
 import { countOccurrences, rangesIn } from "@/lib/conversation-find";
 import type { ReviewItem } from "@/lib/diff-review";
 
@@ -61,7 +62,7 @@ export function findChangesHits(files: readonly FindFile[], query: string): Chan
 /** Ctrl/⌘G and F3 step through the matches, with Shift going back, as in a file tab. Returns the direction, or 0. */
 export function stepShortcut(event: KeyboardEvent, apple: boolean): 1 | -1 | 0 {
   const mod = apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  const isStep = (event.key === "F3" && !event.ctrlKey && !event.metaKey) || (mod && event.key.toLowerCase() === "g");
+  const isStep = (event.key === "F3" && !event.ctrlKey && !event.metaKey) || (mod && shortcutKey(event) === "g");
   if (!isStep || event.altKey) return 0;
   return event.shiftKey ? -1 : 1;
 }

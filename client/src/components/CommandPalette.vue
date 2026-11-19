@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { shortcutKey } from "@/lib/shortcut-key";
 import { computed, shallowRef } from "vue";
 import { ChevronLeft } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
@@ -92,7 +93,7 @@ function handleSelect(command: Command): void {
 function handleInputKeyDown(event: KeyboardEvent): void {
   const currentValue = event.target instanceof HTMLInputElement ? event.target.value : "";
 
-  if (event.key.toLowerCase() === "k" && (isApplePlatform() ? event.metaKey : event.ctrlKey)) {
+  if (shortcutKey(event) === "k" && (isApplePlatform() ? event.metaKey : event.ctrlKey)) {
     event.preventDefault();
     handleOpenChange(false);
     return;

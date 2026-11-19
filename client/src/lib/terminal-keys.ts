@@ -1,4 +1,5 @@
 import type { GlobalShortcut } from "@/lib/command-registry";
+import { shortcutKey } from "@/lib/shortcut-key";
 import { matchesKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 
 /**
@@ -21,7 +22,7 @@ export function terminalKeyOwner(event: KeyboardEvent, isMac: boolean, passThrou
   if (passThrough.some((shortcut) => matchesKeyboardShortcut(event, shortcut))) return "fleet";
 
   if (!isMac && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey) {
-    const key = event.key.toLowerCase();
+    const key = shortcutKey(event);
     if (key === "c") return "copy";
     if (key === "v") return "paste";
   }
