@@ -69,11 +69,27 @@ export async function pickPort(preferred: number | undefined): Promise<number> {
   });
 }
 
+/**
+ * Whether nothing listens on the port, on any address. Binding 127.0.0.1 alone isn't enough: on Windows it succeeds
+ * while another process holds 0.0.0.0 on the same port, and loopback calls then reach the newcomer instead of the Fleet
+ * that was running. So also ask the port itself: anything that accepts a loopback connection owns it.
+ */
 function canListen(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
+    const probe = net.connect({ port, host: "127.0.0.1" });
+    probe.setTimeout(1000);
+    probe.once("connect", () => {
+      probe.destroy();
+      resolve(false);
+    });
+    const notListening = () => {
+      probe.destroy();
+      const server = net.createServer();
+      server.once("error", () => resolve(false));
+      server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
+    };
+    probe.once("error", notListening);
+    probe.once("timeout", notListening);
   });
 }
 
