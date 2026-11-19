@@ -11,7 +11,7 @@ import { useFleet } from "~/fleet/hooks";
 import { machines, useMachines } from "~/fleet/machines";
 import { previewPairing, redeemPairing, targetFromScan, targetFromTyped, type PairingTarget } from "~/fleet/pairing";
 import { isTailscale, kindOf } from "~/fleet/routes-core";
-import { Button, Card, Icon, PairWarningView, Text } from "~/kit";
+import { Button, Card, Icon, NoFleetYet, PairWarningView, Text } from "~/kit";
 import { useTheme } from "~/theme";
 
 export default function Pair() {
@@ -24,6 +24,7 @@ export default function Pair() {
   const [address, setAddress] = useState("");
   const [code, setCode] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [noFleet, setNoFleet] = useState(false);
   const [target, setTarget] = useState<PairingTarget | null>(null);
   const [machineName, setMachineName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -147,6 +148,11 @@ export default function Pair() {
             <Button label="Connect" variant="primary" loading={busy} onPress={() => void connect()} testID="connect" />
             <Button label="Back" variant="ghost" onPress={() => setTarget(null)} />
           </>
+        ) : noFleet ? (
+          <>
+            <NoFleetYet />
+            <Button label="Back" variant="ghost" onPress={() => setNoFleet(false)} testID="no-fleet-back" />
+          </>
         ) : (
           <>
             <Text size={28} weight="bold">Connect to your Fleet</Text>
@@ -161,6 +167,7 @@ export default function Pair() {
               </View>
             </Card>
             {error && <Text tone="error">{error}</Text>}
+            <Button label="I don't have Fleet yet" variant="ghost" testID="no-fleet" onPress={() => setNoFleet(true)} />
           </>
         )}
       </ScrollView>

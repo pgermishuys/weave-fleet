@@ -310,6 +310,8 @@ const MACHINE_WORD_OK = [
   /\bSends a link to the computer\b/,
   /\bwhile Fleet is open on a computer\b/,
   /\bAdd machines from Fleet on a computer\b/,
+  /\bOn my computer\b/, // the desk, as against a server: "Where will Fleet run?" on the phone
+  /\bGet Fleet for your computer\b/, // the share sheet text, sent to the desk
 ];
 
 const SMALL = new Set(["a", "an", "and", "or", "of", "the", "to", "in", "on", "for", "at", "by", "with", "vs", "as", "from",
