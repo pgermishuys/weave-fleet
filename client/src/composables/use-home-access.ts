@@ -1,13 +1,13 @@
-import { computed, shallowRef } from "vue";
+import { computed, shallowRef, type Ref } from "vue";
 import { useMachinesStore, type MachineAccess } from "@/stores/machines";
 import { useMachineReach } from "@/composables/use-machine-reach";
-import { listDevices, type PairedDevice } from "@/lib/devices-api";
+import { listDevices, listFleetScreens, type NotAnsweringMachine, type PairedDevice } from "@/lib/devices-api";
 
 /**
  * How other devices reach the machine this client is signed in to (its token, addresses, who may reach it) and the
  * phones and browsers that have keys on it. Owner only: a paired device sees none of it.
  */
-export function useHomeAccess() {
+export function useHomeAccess(yourFleetOn?: Readonly<Ref<boolean>>) {
   const machines = useMachinesStore();
   const reach = useMachineReach();
   const access = shallowRef<MachineAccess | null>(null);
@@ -19,7 +19,23 @@ export function useHomeAccess() {
   /** Phones and browsers: every screen that has keys here. Another machine's key is not a screen. */
   const screens = computed(() => devices.value.filter((device) => device.kind !== "machine"));
 
+  /** Your Fleet: the machines that didn't answer, so their phones and browsers may be missing from the list. */
+  const notAnswering = shallowRef<NotAnsweringMachine[]>([]);
+
   async function refreshDevices(): Promise<void> {
+    // With Your Fleet on, every machine is asked and each phone or browser shows once. If that can't be had (an older Fleet,
+    // or it was switched off meanwhile), this machine's own list stands in.
+    if (yourFleetOn?.value) {
+      try {
+        const fleet = await listFleetScreens();
+        devices.value = fleet.screens;
+        notAnswering.value = fleet.notAnswering;
+        return;
+      } catch {
+        // fall through
+      }
+    }
+    notAnswering.value = [];
     try {
       devices.value = await listDevices();
     } catch {
@@ -44,5 +60,5 @@ export function useHomeAccess() {
     }
   }
 
-  return { access, isDevice, loaded, error, devices, screens, load, refreshDevices, reach };
+  return { access, isDevice, loaded, error, devices, screens, notAnswering, load, refreshDevices, reach };
 }

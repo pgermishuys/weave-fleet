@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { shallowRef } from "vue";
 import { Button } from "@/components/ui/button";
-import { removeDevice, type PairedDevice } from "@/lib/devices-api";
+import { removeDevice, removeFleetScreen, type PairedDevice } from "@/lib/devices-api";
 import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
 import { ErrorNote } from "@/components/ui/error-note";
 import { confirmAction } from "@/components/ui/confirm";
@@ -18,6 +18,8 @@ const props = defineProps<{
   thisComputer: string;
   /** Phones and browsers only: leaves out the row for the machine itself. */
   hideThisMachine?: boolean;
+  /** Your Fleet: machines that didn't answer, so what they hold isn't in the list. */
+  notAnswering?: readonly string[];
 }>();
 
 const emit = defineEmits<{ (event: "removed", id: string): void }>();
@@ -28,6 +30,8 @@ const error = shallowRef<string | null>(null);
 function added(device: PairedDevice): string {
   const date = formatDate(device.createdAt);
   if (device.kind === "machine") return `Machine, paired ${date}`;
+  // The Fleet-wide list says which machine it connected through.
+  if (device.fleetWide) return device.throughName ? `Connected through ${device.throughName}, added ${date}` : `Added ${date}`;
   return device.pairedVia ? `Added ${date} from another machine` : `Added ${date}`;
 }
 
@@ -55,7 +59,7 @@ async function remove(device: PairedDevice): Promise<void> {
   busy.value = device.id;
   error.value = null;
   try {
-    await removeDevice(device.id);
+    await (device.fleetWide ? removeFleetScreen(device.id) : removeDevice(device.id));
     emit("removed", device.id);
   } catch (failure) {
     error.value = failure instanceof Error ? failure.message : String(failure);
@@ -117,6 +121,13 @@ async function remove(device: PairedDevice): Promise<void> {
         </Button>
       </li>
     </ul>
+    <p
+      v-if="notAnswering?.length"
+      class="text-xs text-muted"
+      data-testid="devices-not-answering"
+    >
+      {{ notAnswering.join(", ") }} {{ notAnswering.length === 1 ? "isn't" : "aren't" }} answering, so what {{ notAnswering.length === 1 ? "it holds" : "they hold" }} isn't shown.
+    </p>
     <ErrorNote
       v-if="error"
       :message="error"

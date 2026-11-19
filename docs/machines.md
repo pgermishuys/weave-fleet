@@ -935,6 +935,23 @@ on any machine and it loses its keys on every machine. A machine that was off he
   added by itself that isn't in that Fleet stays: atlas is a machine of its own now. No removal is kept for the dropped
   machines (they weren't forgotten), so atlas can be joined to another Fleet later.
 
+### One list of screens (Your Fleet, fourth slice)
+
+A phone or browser has one identity across the Fleet: its device on the machine it paired with (none for a browser) and
+the keys the other machines made for it (`devices.made_for` is its phone id or `screen:{id}`, `paired_via` the machine it
+connected through). With Your Fleet on, Settings → Machines lists each once.
+
+- `GET /api/machine/screens` (owner): this machine asks every machine in its list for `GET /api/machine/screens/local`
+  (the machine token or a machine-kind key; what that machine holds, other machines' keys left out), then groups by identity.
+  The name and platform are the phone's own when a machine holds the phone itself, otherwise the key's name without
+  " via home". Last seen is the latest on any machine. A machine that doesn't answer within five seconds (or is too old to
+  know the route) is in `notAnswering` and the page says so; the rest still list.
+- `DELETE /api/machine/screens/{id}` (owner) removes by that identity, with the removal of the section above.
+- **Why ask rather than copy.** The list changes whenever a phone is used, so a copy would be stale or would need a sync
+  of its own, and removals already cover the part that has to be exact. Asking costs one small request per machine each
+  time the page opens, and nothing new is stored.
+- With Your Fleet off the endpoints answer 403 and the page lists this machine's own devices as before.
+
 ### The Machines page
 
 Settings → Machines is two lists and, behind each machine's **Manage** button, its own page.
@@ -943,7 +960,9 @@ Settings → Machines is two lists and, behind each machine's **Manage** button,
   with the rules of `lib/phone-reach.ts`): "Reaches your phone over Tailscale and the home network", "Only on Tailscale",
   "Only this machine" (the desktop app before it lets others reach it), "Off since 08:40" or "Not reachable".
 - **Phones and browsers.** The phones and browsers that have keys on this machine, with Add your phone and Remove. With
-  Your Fleet on, Remove says it reaches every machine and a screen's keys are on every machine, so any machine's list shows it.
+  Your Fleet on, the list is the whole Fleet's: each phone or browser shows once, with its own name, its platform, the
+  machine it connected through and when it was last seen on any machine. Remove reaches every machine, and any machine's
+  list shows it. See "One list of screens" below.
 - **A machine's page** (`MachinePage.vue`, titled with the machine and a "‹ Machines" trail): rename, Work here, Forget,
   agents sending work, jobs, the key this browser holds for it (New token) and its addresses in order. The machine this
   client is signed in to also holds the access token, its addresses and who may reach it (the old "Let other devices reach

@@ -574,6 +574,117 @@ public sealed class FleetRosterTests
         return response;
     }
 
+    [Fact]
+    public async Task A_phone_paired_with_workbench_is_listed_once_on_hangar_with_its_own_name_and_where_it_connected()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        var (phone, phoneToken) = await workbench.Devices.IssueAsync("Alex's iPhone", "ios");
+        using var phoneClient = Client(workbench, phoneToken);
+        await GrantAsync(phoneClient, hangar, null, null);
+        await GrantAsync(phoneClient, atlas, null, null);
+
+        var list = await ScreensAsync(hangar);
+
+        var screen = list.Screens.ShouldHaveSingleItem();
+        screen.Id.ShouldBe(phone.Id);
+        screen.Name.ShouldBe("Alex's iPhone", "the phone's own name, not \"Alex's iPhone via workbench\"");
+        screen.Platform.ShouldBe("ios");
+        screen.ThroughId.ShouldBe(workbench.Id);
+        screen.ThroughName.ShouldBe("workbench");
+        screen.Machines.Order().ShouldBe(new[] { hangar.Id, atlas.Id, workbench.Id }.Order());
+        list.NotAnswering.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_browser_that_connected_to_atlas_is_listed_on_hangar_by_the_name_it_gave()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        using var ownerOnAtlas = Client(atlas, atlas.OwnerToken);
+        await GrantAsync(ownerOnAtlas, hangar, "abc123", "Chrome on a phone");
+        await GrantAsync(ownerOnAtlas, workbench, "abc123", "Chrome on a phone");
+
+        var list = await ScreensAsync(hangar);
+
+        var screen = list.Screens.ShouldHaveSingleItem();
+        screen.Id.ShouldBe("screen:abc123");
+        screen.Name.ShouldBe("Chrome on a phone");
+        screen.ThroughId.ShouldBe(atlas.Id, "it signed in on atlas");
+        screen.ThroughName.ShouldBe("atlas");
+        screen.Machines.Order().ShouldBe(new[] { hangar.Id, workbench.Id }.Order());
+        // Atlas itself lists it too, since the keys are on the other machines: any machine's page shows it.
+        (await ScreensAsync(workbench)).Screens.ShouldHaveSingleItem().Id.ShouldBe("screen:abc123");
+    }
+
+    [Fact]
+    public async Task A_machine_that_does_not_answer_is_named_and_the_rest_still_list()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        using var ownerOnWorkbench = Client(workbench, workbench.OwnerToken);
+        await GrantAsync(ownerOnWorkbench, hangar, "abc123", "Chrome");
+        await GrantAsync(ownerOnWorkbench, atlas, "abc123", "Chrome");
+        world.Router.Down.Add("atlas");
+
+        var list = await ScreensAsync(hangar);
+
+        list.NotAnswering.ShouldHaveSingleItem().Name.ShouldBe("atlas");
+        var screen = list.Screens.ShouldHaveSingleItem();
+        screen.Id.ShouldBe("screen:abc123");
+        screen.Machines.ShouldBe([hangar.Id], "only hangar's part, atlas isn't heard");
+    }
+
+    [Fact]
+    public async Task Removing_a_screen_from_the_fleet_wide_list_takes_its_keys_on_every_machine()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        var (phone, phoneToken) = await atlas.Devices.IssueAsync("Alex's iPhone", "ios");
+        using var phoneClient = Client(atlas, phoneToken);
+        var keyOnHangar = await GrantAsync(phoneClient, hangar, null, null);
+        var keyOnWorkbench = await GrantAsync(phoneClient, workbench, null, null);
+        (await ScreensAsync(hangar)).Screens.ShouldHaveSingleItem().ThroughId.ShouldBe(atlas.Id, "it connected to atlas");
+
+        using var ownerOnHangar = Client(hangar, hangar.OwnerToken);
+        (await ownerOnHangar.DeleteAsync($"/api/machine/screens/{phone.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await world.SettleAsync();
+
+        (await Probe(atlas, phoneToken)).ShouldBe(HttpStatusCode.Unauthorized, "unpaired from atlas, its home");
+        (await Probe(hangar, keyOnHangar)).ShouldBe(HttpStatusCode.Unauthorized);
+        (await Probe(workbench, keyOnWorkbench)).ShouldBe(HttpStatusCode.Unauthorized);
+        foreach (var machine in new[] { hangar, atlas, workbench })
+            (await ScreensAsync(machine)).Screens.ShouldBeEmpty($"{machine.Name} no longer lists it");
+    }
+
+    [Fact]
+    public async Task The_fleet_wide_list_is_the_owner_s_and_needs_your_fleet()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar");
+        var off = await world.StartAsync("atlas", yourFleet: false);
+        var (_, phoneToken) = await hangar.Devices.IssueAsync("Alex's iPhone", "ios");
+
+        using var phone = Client(hangar, phoneToken);
+        (await phone.GetAsync("/api/machine/screens")).StatusCode.ShouldBe(HttpStatusCode.Forbidden, "a phone isn't the owner");
+        (await phone.GetAsync("/api/machine/screens/local")).StatusCode.ShouldBe(HttpStatusCode.Forbidden, "a phone isn't another machine");
+        (await phone.DeleteAsync("/api/machine/screens/anything")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        using var owner = Client(off, off.OwnerToken);
+        (await owner.GetAsync("/api/machine/screens")).StatusCode.ShouldBe(HttpStatusCode.Forbidden, "Your Fleet is off there");
+        (await owner.GetAsync("/api/machine/screens/local")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await owner.DeleteAsync("/api/machine/screens/anything")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private static async Task<FleetScreenList> ScreensAsync(Node node)
+    {
+        using var owner = Client(node, node.OwnerToken);
+        var response = await owner.GetAsync("/api/machine/screens");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        return (await response.Content.ReadFromJsonAsync<FleetScreenList>(options))!;
+    }
+
     // ---- scaffolding ----
 
     private sealed class Router : HttpMessageHandler

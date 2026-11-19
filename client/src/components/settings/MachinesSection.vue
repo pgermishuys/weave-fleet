@@ -50,8 +50,10 @@ const { enabled: yourFleetOn } = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
 const page = useMachinePage();
 const lines = useMachineLines();
 const { stateLine, capabilityLine, harnessVersions, location } = lines;
-const homeAccess = useHomeAccess();
-const { access, isDevice, loaded: accessLoaded, error: accessError, screens } = homeAccess;
+const homeAccess = useHomeAccess(yourFleetOn);
+// The switch may load after the list: ask again for the other kind of list when it changes.
+watch(yourFleetOn, () => { if (homeAccess.access.value) void homeAccess.refreshDevices(); });
+const { access, isDevice, loaded: accessLoaded, error: accessError, screens, notAnswering } = homeAccess;
 const openEntry = computed(() => entries.value.find((entry) => entry.key === page.openKey.value) ?? null);
 
 // ── Add ──────────────────────────────────────────────────────────────────────
@@ -584,6 +586,7 @@ onUnmounted(() => {
           :devices="screens"
           :this-computer="thisComputer"
           :everywhere="yourFleetOn"
+          :not-answering="notAnswering.map((machine) => machine.name)"
           hide-this-machine
           @removed="homeAccess.refreshDevices()"
         />
