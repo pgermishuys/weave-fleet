@@ -2,6 +2,7 @@ import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/t
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
@@ -101,6 +102,23 @@ describe("Settings → Machines", () => {
       await card().get("[data-testid='machine-forget']").trigger("click");
       await flushPromises();
       expect(card().exists()).toBe(false);
+    });
+
+    it("forgetting a machine, saying it reaches every machine when Your Fleet is on", async () => {
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      usePreferencesStore().preferences = { YourFleet: "true" };
+      await flushPromises();
+
+      confirmAction.mockResolvedValueOnce(false);
+      await wrapper.get(`[data-testid='machine-card'][data-machine='${mini.id}'] [data-testid='machine-forget']`).trigger("click");
+      await flushPromises();
+
+      expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: "Forget mini on every machine in your Fleet?",
+        confirmLabel: "Forget mini",
+        destructive: true,
+      }));
     });
 
     it("replacing this machine's token, and replaces nothing when cancelled", async () => {

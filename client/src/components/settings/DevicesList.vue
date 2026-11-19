@@ -10,8 +10,10 @@ import { confirmAction } from "@/components/ui/confirm";
  * Settings → Machines → This machine → Devices with access: this computer, then each paired device with when it
  * was added and last seen, and Remove. Removing one signs out only that device.
  */
-defineProps<{
+const props = defineProps<{
   devices: readonly PairedDevice[];
+  /** Your Fleet (Labs) is on: removing a phone or a browser reaches every machine. */
+  everywhere?: boolean;
   /** How this computer is signed in, for its row. */
   thisComputer: string;
 }>();
@@ -32,12 +34,21 @@ function lastSeen(device: PairedDevice): string {
 }
 
 async function remove(device: PairedDevice): Promise<void> {
-  const confirmed = await confirmAction({
-    title: `Remove ${device.name}?`,
-    body: "It loses access to this machine at once. Other devices aren't affected.",
-    confirmLabel: device.kind === "machine" ? "Remove machine" : "Remove device",
-    destructive: true,
-  });
+  // A phone or a browser (not another machine's key) goes from every machine when Your Fleet is on.
+  const reachesAll = props.everywhere === true && device.kind !== "machine";
+  const confirmed = await confirmAction(reachesAll
+    ? {
+        title: `Remove ${device.name} on every machine in your Fleet?`,
+        body: "It loses its keys on every machine at once, even on machines that are off now: they hear when they're back. It isn't given new ones.",
+        confirmLabel: `Remove ${device.name}`,
+        destructive: true,
+      }
+    : {
+        title: `Remove ${device.name}?`,
+        body: "It loses access to this machine at once. Other devices aren't affected.",
+        confirmLabel: device.kind === "machine" ? "Remove machine" : "Remove device",
+        destructive: true,
+      });
   if (!confirmed) return;
   busy.value = device.id;
   error.value = null;

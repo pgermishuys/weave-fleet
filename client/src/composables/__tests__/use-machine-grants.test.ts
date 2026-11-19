@@ -82,12 +82,14 @@ describe("useMachineGrants", () => {
 describe("useMachineGrants on a screen that isn't a paired phone (Your Fleet)", () => {
   let grantBodies: string[];
   let yourFleet: string;
+  let removedAtHome = false;
 
   beforeEach(async () => {
     await clearCredentials();
     localStorage.clear();
     grantBodies = [];
     yourFleet = "true";
+    removedAtHome = false;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
       const url = String(input);
       if (url === "/api/preferences") return new Response(JSON.stringify({ YourFleet: yourFleet }), { status: 200 });
@@ -96,6 +98,7 @@ describe("useMachineGrants on a screen that isn't a paired phone (Your Fleet)", 
       if (machineId) {
         expect(new Headers(init.headers).get("Authorization")).toBeNull();
         grantBodies.push(String(init.body));
+        if (removedAtHome) return new Response(JSON.stringify({ error: "This device was removed from your Fleet." }), { status: 403 });
         return new Response(JSON.stringify({ machineId, baseUrl: `https://${machineId}.ts.net`, token: `fdt_${machineId}.${grantBodies.length}` }), { status: 200 });
       }
       return new Response("{}", { status: 404 });
@@ -123,6 +126,19 @@ describe("useMachineGrants on a screen that isn't a paired phone (Your Fleet)", 
 
     expect(await grants.renewGrant("falcon")).toBe("fdt_falcon.2");
     expect(await grants.renewGrant("falcon")).toBeNull();
+  });
+
+  it("stops asking once home says the screen was removed from the Fleet", async () => {
+    removedAtHome = true;
+    const grants = useMachineGrants();
+
+    await grants.ensureGrants([falcon, osprey]);
+    await grants.ensureGrants([falcon]);
+
+    expect(grantBodies).toHaveLength(1);
+    expect(grants.problems.value.falcon).toBe("This device was removed from your Fleet.");
+    expect(await grants.renewGrant("falcon")).toBeNull();
+    expect(grantBodies).toHaveLength(1);
   });
 
   it("does nothing with Your Fleet off", async () => {

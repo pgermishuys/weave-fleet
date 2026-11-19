@@ -106,6 +106,38 @@ public sealed class InMemoryRemoteMachineRepository : IRemoteMachineRepository
         return Task.CompletedTask;
     }
 
+    private readonly Dictionary<string, FleetRemoval> _removals = new(StringComparer.Ordinal);
+
+    public Task<IReadOnlyList<FleetRemoval>> ListRemovalsAsync()
+    {
+        lock (_gate)
+            return Task.FromResult<IReadOnlyList<FleetRemoval>>([.. _removals.Values]);
+    }
+
+    public Task<FleetRemoval?> GetRemovalAsync(string id)
+    {
+        lock (_gate)
+            return Task.FromResult(_removals.GetValueOrDefault(id));
+    }
+
+    public Task SaveRemovalAsync(FleetRemoval removal)
+    {
+        lock (_gate)
+        {
+            if (!_removals.TryGetValue(removal.Id, out var existing) || removal.RemovedAt > existing.RemovedAt)
+                _removals[removal.Id] = removal;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteRemovalAsync(string id)
+    {
+        lock (_gate)
+            _removals.Remove(id);
+        return Task.CompletedTask;
+    }
+
     public Task DeleteGrantAsync(string deviceId, string machineId)
     {
         lock (_gate)

@@ -147,8 +147,12 @@ public static class MachinesEndpoints
         .WithName("CheckRemoteMachine");
 
         // Phones' tokens on the machine go first, while there's still a token to remove them with.
-        group.MapDelete("/{id}", async (string id, RemoteMachineService machines, DeviceGrantService grants, CancellationToken cancellationToken) =>
+        group.MapDelete("/{id}", async (string id, RemoteMachineService machines, DeviceGrantService grants, FleetRemovals removals, CancellationToken cancellationToken) =>
         {
+            // Your Fleet (Labs): forgetting a machine forgets it on every machine.
+            if (await removals.IsEnabledAsync())
+                return await removals.ForgetMachineAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine."));
+
             await grants.RemoveGrantsOnAsync(id, cancellationToken);
             return await machines.DeleteAsync(id) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine."));
         })
@@ -200,7 +204,9 @@ public static class MachinesEndpoints
                 ? Results.Ok(new DeviceGrantResponse(grant.MachineId, grant.BaseUrl, grant.Token))
                 : result.Failure == GrantFailure.NoSuchMachine
                     ? Results.NotFound(new ErrorResponse(result.Error!))
-                    : Results.Json(new ErrorResponse(result.Error!), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status502BadGateway);
+                    : result.Failure == GrantFailure.Removed
+                        ? Results.Json(new ErrorResponse(result.Error!), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden)
+                        : Results.Json(new ErrorResponse(result.Error!), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status502BadGateway);
         })
         .Produces<DeviceGrantResponse>(200)
         .WithName("CreateDeviceGrant");

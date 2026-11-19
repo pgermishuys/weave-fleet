@@ -33,6 +33,10 @@ public sealed partial class DeviceGrantService(
     /// </summary>
     public async Task<GrantResult> GrantAsync(string deviceId, string deviceName, string? platform, string machineId, CancellationToken cancellationToken, bool isScreen = false)
     {
+        // Removed from the Fleet on some machine (Your Fleet): no machine makes it another key, whichever it asks.
+        if (await repository.GetRemovalAsync(deviceId) is { Kind: FleetRemovalKinds.Grantee })
+            return GrantResult.Fail(GrantFailure.Removed, "This device was removed from your Fleet.");
+
         var machine = await repository.GetAsync(machineId);
         if (machine is null)
             return GrantResult.Fail(GrantFailure.NoSuchMachine, "That machine isn't in this machine's list.");
@@ -55,7 +59,7 @@ public sealed partial class DeviceGrantService(
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{machine.BaseUrl}/api/machine/devices")
         {
             Content = JsonContent.Create(
-                new MintRequest(Clip($"{deviceName} via {homeName}", 60), platform ?? "other", self.Id),
+                new MintRequest(Clip($"{deviceName} via {homeName}", 60), platform ?? "other", self.Id, deviceId),
                 MachinesJsonContext.Default.MintRequest),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", machineToken);
@@ -102,10 +106,11 @@ public sealed partial class DeviceGrantService(
 
             // The phone may have been removed while the other machine was minting. Its removal either already listed
             // this grant or happened before the check below, which then undoes the grant itself.
-            if (!isScreen && await devices.ValidateDeviceAsync(deviceId) is null)
+            var removedMeanwhile = await repository.GetRemovalAsync(deviceId) is { Kind: FleetRemovalKinds.Grantee };
+            if (removedMeanwhile || (!isScreen && await devices.ValidateDeviceAsync(deviceId) is null))
             {
                 await RevokeAsync(machine, new DeviceGrant { DeviceId = deviceId, MachineId = machineId, RemoteDeviceId = minted.DeviceId }, cancellationToken);
-                return GrantResult.Fail(GrantFailure.Refused, "This phone was removed.");
+                return GrantResult.Fail(removedMeanwhile ? GrantFailure.Removed : GrantFailure.Refused, "This device was removed.");
             }
 
             return new GrantResult(new Grant(machine.Id, machine.BaseUrl, minted.Token), null, null);
@@ -123,7 +128,7 @@ public sealed partial class DeviceGrantService(
     /// Removes every phone's token on a machine that's about to leave the list. Returns how many it couldn't: with the
     /// machine gone there's no token left to retry with, so those stay until removed on the machine itself.
     /// </summary>
-    public async Task<int> RemoveGrantsOnAsync(string machineId, CancellationToken cancellationToken)
+    public async Task<int> RemoveGrantsOnAsync(string machineId, CancellationToken cancellationToken, bool keepMachineKeys = false)
     {
         var machine = await repository.GetAsync(machineId);
         if (machine is null)
@@ -132,6 +137,9 @@ public sealed partial class DeviceGrantService(
         var left = 0;
         foreach (var grant in await repository.ListGrantsForMachineAsync(machineId))
         {
+            // Keys made on it for other machines stay when it's only this machine that is leaving the Fleet's list of it.
+            if (keepMachineKeys && grant.DeviceId.StartsWith(FleetRoster.MachinePrefix, StringComparison.Ordinal))
+                continue;
             if (await TryRemoveRemoteAsync(machine, grant.RemoteDeviceId, cancellationToken))
                 await repository.DeleteGrantAsync(grant.DeviceId, grant.MachineId);
             else
@@ -198,6 +206,9 @@ public enum GrantFailure
     NoSuchMachine,
     Unreachable,
     Refused,
+
+    /// <summary>The phone or browser was removed from the Fleet (Your Fleet): it has no keys and gets no more.</summary>
+    Removed,
 }
 
 public sealed record GrantResult(Grant? Grant, GrantFailure? Failure, string? Error)
@@ -205,7 +216,7 @@ public sealed record GrantResult(Grant? Grant, GrantFailure? Failure, string? Er
     public static GrantResult Fail(GrantFailure failure, string error) => new(null, failure, error);
 }
 
-internal sealed record MintRequest(string Name, string Platform, string PairedVia);
+internal sealed record MintRequest(string Name, string Platform, string PairedVia, string MadeFor);
 
 internal sealed record MintResponse(string DeviceId, string Token);
 

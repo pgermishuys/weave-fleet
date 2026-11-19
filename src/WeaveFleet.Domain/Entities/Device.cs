@@ -26,6 +26,12 @@ public sealed record Device
     /// <summary>The device (another machine's key on this one) that asked for this token; null when the owner or a pairing code made it.</summary>
     public string? CreatedBy { get; init; }
 
+    /// <summary>
+    /// What this key was made for (Your Fleet, Labs): the machine whose key it is, or the phone or screen it is a grant
+    /// for. Forgetting that machine or removing that phone revokes it. Null when the owner or a pairing code made it.
+    /// </summary>
+    public string? MadeFor { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>When the device last used its token. The token expires 30 days after this.</summary>

@@ -120,8 +120,10 @@ public static class DeviceEndpoints
             DeviceTokenService devices,
             WeaveFleet.Domain.Repositories.IPushSubscriptionRepository subscriptions,
             WeaveFleet.Application.Machines.DeviceGrantService grants,
+            WeaveFleet.Application.Machines.FleetRemovals removals,
             CancellationToken cancellationToken) =>
         {
+            var removed = (await devices.ListAsync()).FirstOrDefault(d => d.Id == id);
             // A machine in the owner's Fleet (it holds a machine-kind token) removes only the devices it made itself: the keys it
             // asked this machine for. Everything else is the owner's.
             if (!FleetClaims.IsOwner(http.User))
@@ -137,12 +139,17 @@ public static class DeviceEndpoints
             // A removed phone gets no more notifications, and loses the tokens home got it on other machines.
             await subscriptions.DeleteByDeviceAsync(id);
             await grants.RevokeAllAsync(id, cancellationToken);
+
+            // Your Fleet (Labs): the owner removing a phone or a browser removes it from every machine. A key made for it
+            // on another machine goes the same way, through the phone's own id.
+            if (FleetClaims.IsOwner(http.User) && removed is { Kind: DeviceKinds.Device } && await removals.IsEnabledAsync())
+                await removals.RemoveGranteeAsync(removed.MadeFor ?? removed.Id, cancellationToken);
             return Results.NoContent();
         })
         .RequireAuthorization()
         .WithName("RemoveDevice");
 
-        machine.MapPost("/devices", async (HttpContext http, CreateDeviceRequest request, DeviceTokenService devices) =>
+        machine.MapPost("/devices", async (HttpContext http, CreateDeviceRequest request, DeviceTokenService devices, WeaveFleet.Application.Machines.FleetRemovals removals) =>
         {
             // Another machine asks with the machine token it was given, or with the machine-kind device token it got by
             // pairing (that's how a machine added by its pairing code asks). A browser signed in by cookie (even the
@@ -163,7 +170,15 @@ public static class DeviceEndpoints
             if (pairedVia is { Length: > 64 })
                 return Results.BadRequest(new ErrorResponse("pairedVia is a machine id, at most 64 characters."));
 
-            var (device, token) = await devices.IssueAsync(request.Name!.Trim(), NormalizePlatform(request.Platform), string.IsNullOrEmpty(pairedVia) ? null : pairedVia, kind, createdBy);
+            var madeFor = request.MadeFor?.Trim();
+            if (madeFor is { Length: > 128 })
+                return Results.BadRequest(new ErrorResponse("madeFor is an id, at most 128 characters."));
+
+            // A machine, phone or browser that was removed from the Fleet gets no more keys, whoever asks.
+            if (!string.IsNullOrEmpty(madeFor) && await removals.GetAsync(madeFor) is not null)
+                return Results.Json(new ErrorResponse("That was removed from your Fleet."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status409Conflict);
+
+            var (device, token) = await devices.IssueAsync(request.Name!.Trim(), NormalizePlatform(request.Platform), string.IsNullOrEmpty(pairedVia) ? null : pairedVia, kind, createdBy, string.IsNullOrEmpty(madeFor) ? null : madeFor);
             return Results.Ok(new CreateDeviceResponse(device.Id, token));
         })
         .RequireAuthorization()
@@ -183,6 +198,33 @@ public static class DeviceEndpoints
         .RequireAuthorization()
         .Produces<IntroductionAnswer>(200)
         .WithName("IntroduceMachine");
+
+        // Your Fleet (Labs): what was forgotten or removed on any machine. A machine sends what it has, and takes what the
+        // other keeps, whenever they compare lists. Only the machine token or a machine-kind key.
+        machine.MapGet("/removals", async (HttpContext http, WeaveFleet.Application.Machines.FleetRemovals removals, DeviceTokenService devices) =>
+        {
+            if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
+                return Results.Json(new ErrorResponse("Only another machine in your Fleet shares removals."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            return Results.Ok(new WeaveFleet.Application.Machines.RemovalList(await removals.ListAsync()));
+        })
+        .RequireAuthorization()
+        .Produces<WeaveFleet.Application.Machines.RemovalList>(200)
+        .WithName("ListFleetRemovals");
+
+        machine.MapPost("/removals", async (HttpContext http, WeaveFleet.Application.Machines.RemovalBatch batch, WeaveFleet.Application.Machines.FleetRemovals removals, DeviceTokenService devices, CancellationToken cancellationToken) =>
+        {
+            if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
+                return Results.Json(new ErrorResponse("Only another machine in your Fleet sends removals."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            // With Your Fleet off here, this machine keeps no list for others to compare with.
+            if (!await removals.IsEnabledAsync())
+                return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            var applied = await removals.ApplyAsync(batch.Removals ?? [], batch.From?.Trim(), FleetClaims.DeviceIdOf(http.User), cancellationToken);
+            return Results.Ok(new RemovalsAnswer(applied));
+        })
+        .RequireAuthorization()
+        .Produces<RemovalsAnswer>(200)
+        .WithName("SendFleetRemovals");
 
         // A paired phone that's signed in but lost its token asks for a new one: the iPhone Home Screen app starts with a
         // copy of Safari's cookies but none of its storage. The old token stops working.

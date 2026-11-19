@@ -190,6 +190,183 @@ public sealed class FleetRosterTests
         (await owner.DeleteAsync($"/api/machine/devices/{phone.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent, "the owner removes anything");
     }
 
+    // ---- forgetting a machine and removing a phone reach every machine ----
+
+    [Fact]
+    public async Task Forgetting_atlas_on_hangar_drops_it_from_every_list_and_revokes_its_keys()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        var hangarKeyOnAtlas = hangar.KeyFor(atlas);
+        var workbenchKeyOnAtlas = workbench.KeyFor(atlas);
+        var atlasKeyOnHangar = atlas.KeyFor(hangar);
+        (await Probe(atlas, hangarKeyOnAtlas)).ShouldBe(HttpStatusCode.OK);
+
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await world.SettleAsync();
+
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([workbench.Id]);
+        (await workbench.ListAsync()).Select(m => m.Id).ShouldBe([hangar.Id]);
+        (await atlas.ListAsync()).ShouldBeEmpty("atlas was told, and dropped the machines that forgot it");
+        (await Probe(atlas, hangarKeyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized, "hangar's key on atlas");
+        (await Probe(atlas, workbenchKeyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized, "workbench's key on atlas");
+        (await Probe(hangar, atlasKeyOnHangar)).ShouldBe(HttpStatusCode.Unauthorized, "the key atlas used on hangar");
+        (await hangar.Devices.ListAsync()).Where(d => d.MadeFor == atlas.Id).ShouldBeEmpty();
+        (await workbench.Devices.ListAsync()).Where(d => d.MadeFor == atlas.Id).ShouldBeEmpty();
+        (await hangar.Removals.GetAsync(atlas.Id)).ShouldNotBeNull();
+        (await workbench.Removals.GetAsync(atlas.Id)).ShouldNotBeNull("workbench keeps it too");
+    }
+
+    [Fact]
+    public async Task A_machine_that_was_off_applies_the_removal_when_it_is_back_and_does_not_bring_the_machine_back()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+
+        world.Router.Down.Add("workbench");
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await workbench.ListAsync()).Select(m => m.Id).Order().ShouldBe(new[] { hangar.Id, atlas.Id }.Order(), "workbench hasn't heard");
+
+        // Workbench is back and, with a list that still has atlas, compares lists with everyone.
+        world.Router.Down.Remove("workbench");
+        await workbench.SyncAllAsync();
+        await world.SettleAsync();
+
+        (await workbench.ListAsync()).Select(m => m.Id).ShouldBe([hangar.Id], "workbench applied the removal");
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([workbench.Id], "and did not bring atlas back");
+        (await atlas.ListAsync()).ShouldBeEmpty();
+        (await workbench.Removals.GetAsync(atlas.Id)).ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Hangar_tells_a_machine_that_was_off_when_it_answers_again()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+
+        world.Router.Down.Add("workbench");
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        world.Router.Down.Remove("workbench");
+
+        await hangar.Roster.SyncWithAsync(workbench.Id, CancellationToken.None);
+
+        (await workbench.ListAsync()).Select(m => m.Id).ShouldBe([hangar.Id]);
+    }
+
+    [Fact]
+    public async Task A_forgotten_machine_added_back_on_purpose_joins_every_machine_again()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await world.SettleAsync();
+        (await workbench.Removals.GetAsync(atlas.Id)).ShouldNotBeNull();
+
+        await Task.Delay(50);
+        await World.AddAsync(hangar, atlas, byCode: true);
+        (await hangar.Removals.GetAsync(atlas.Id)).ShouldBeNull("adding it by hand clears the removal where it is added");
+        await world.SettleAsync();
+
+        foreach (var machine in new[] { hangar, atlas, workbench })
+        {
+            var others = new[] { hangar, atlas, workbench }.Where(o => o != machine).Select(o => o.Id).Order();
+            (await machine.ListAsync()).Select(m => m.Id).Order().ShouldBe(others, $"{machine.Name}'s list");
+        }
+
+        (await workbench.Removals.GetAsync(atlas.Id)).ShouldBeNull("the machine that added it introduced it after it was forgotten");
+    }
+
+    [Fact]
+    public async Task A_list_that_is_out_of_date_cannot_introduce_a_forgotten_machine()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Workbench still lists atlas as of before hangar forgot it, and introduces it.
+        var introduction = new Introduction(atlas.Id, "atlas", null, atlas.Addresses.ToList(), "fdt_x.y", workbench.Id, DateTimeOffset.UtcNow.AddHours(-1));
+        (await hangar.Roster.AcceptAsync(introduction, CancellationToken.None)).ShouldBe(IntroductionOutcome.Refused);
+        (await hangar.Roster.AcceptAsync(introduction with { Since = null }, CancellationToken.None)).ShouldBe(IntroductionOutcome.Refused);
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([workbench.Id]);
+    }
+
+    [Fact]
+    public async Task Removing_a_browser_on_hangar_takes_its_keys_on_every_machine_and_it_gets_none_back()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        using var ownerOnWorkbench = Client(workbench, workbench.OwnerToken);
+        var keyOnHangar = await GrantAsync(ownerOnWorkbench, hangar, "abc123", "Chrome");
+        var keyOnAtlas = await GrantAsync(ownerOnWorkbench, atlas, "abc123", "Chrome");
+        (await Probe(hangar, keyOnHangar)).ShouldBe(HttpStatusCode.OK);
+        (await Probe(atlas, keyOnAtlas)).ShouldBe(HttpStatusCode.OK);
+
+        // On hangar the browser is the device "Chrome via workbench".
+        var device = (await hangar.Devices.ListAsync()).Single(d => d.MadeFor == "screen:abc123");
+        using var ownerOnHangar = Client(hangar, hangar.OwnerToken);
+        (await ownerOnHangar.DeleteAsync($"/api/machine/devices/{device.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await world.SettleAsync();
+
+        (await Probe(hangar, keyOnHangar)).ShouldBe(HttpStatusCode.Unauthorized);
+        (await Probe(atlas, keyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized, "its key on atlas went too");
+        (await atlas.Devices.ListAsync()).Where(d => d.MadeFor == "screen:abc123").ShouldBeEmpty();
+
+        // Asking again gets a clear "removed", not a fresh key.
+        var again = await ownerOnWorkbench.PostAsJsonAsync($"/api/machines/{atlas.Id}/device-grant", new { screenId = "abc123", name = "Chrome" });
+        again.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await again.Content.ReadAsStringAsync()).ShouldContain("removed");
+        (await atlas.Devices.ListAsync()).Where(d => d.MadeFor == "screen:abc123").ShouldBeEmpty("no new key was made");
+        (await workbench.Machines.GetAsync(atlas.Id)).ShouldNotBeNull("the browser was removed, not the machine");
+    }
+
+    [Fact]
+    public async Task Removing_a_phone_paired_with_workbench_on_atlas_unpairs_it_and_takes_its_keys_everywhere()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        var (phone, phoneToken) = await workbench.Devices.IssueAsync("Alex's iPhone", "ios");
+        using var phoneClient = Client(workbench, phoneToken);
+        var keyOnHangar = await GrantAsync(phoneClient, hangar, null, null);
+        var keyOnAtlas = await GrantAsync(phoneClient, atlas, null, null);
+
+        var onAtlas = (await atlas.Devices.ListAsync()).Single(d => d.MadeFor == phone.Id);
+        using var ownerOnAtlas = Client(atlas, atlas.OwnerToken);
+        (await ownerOnAtlas.DeleteAsync($"/api/machine/devices/{onAtlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await world.SettleAsync();
+
+        (await Probe(workbench, phoneToken)).ShouldBe(HttpStatusCode.Unauthorized, "the phone's own key on its home");
+        (await Probe(hangar, keyOnHangar)).ShouldBe(HttpStatusCode.Unauthorized);
+        (await Probe(atlas, keyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized);
+        (await phoneClient.PostAsJsonAsync($"/api/machines/{hangar.Id}/device-grant", new { })).StatusCode.ShouldBe(HttpStatusCode.Unauthorized, "a removed phone is not handed a new key");
+    }
+
+    [Fact]
+    public async Task A_machine_that_was_off_removes_the_browser_s_key_when_it_is_back()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        using var ownerOnWorkbench = Client(workbench, workbench.OwnerToken);
+        var keyOnAtlas = await GrantAsync(ownerOnWorkbench, atlas, "abc123", "Chrome");
+        await GrantAsync(ownerOnWorkbench, hangar, "abc123", "Chrome");
+
+        world.Router.Down.Add("atlas");
+        var device = (await hangar.Devices.ListAsync()).Single(d => d.MadeFor == "screen:abc123");
+        using var ownerOnHangar = Client(hangar, hangar.OwnerToken);
+        (await ownerOnHangar.DeleteAsync($"/api/machine/devices/{device.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await Probe(atlas, keyOnAtlas)).ShouldBe(HttpStatusCode.OK, "atlas was off, so nobody could take the key yet");
+
+        world.Router.Down.Remove("atlas");
+        await atlas.SyncAllAsync();
+        await world.SettleAsync();
+
+        (await Probe(atlas, keyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
     // ---- scaffolding ----
 
     private sealed class Router : HttpMessageHandler
@@ -232,6 +409,11 @@ public sealed class FleetRosterTests
         public Task<IReadOnlyList<RemoteMachine>> ListAsync() => Machines.ListAsync();
 
         public Task SyncAllAsync() => Roster.SyncAllAsync(CancellationToken.None);
+
+        public FleetRemovals Removals => Factory.Services.GetRequiredService<FleetRemovals>();
+
+        /// <summary>The key this machine holds for <paramref name="other"/>.</summary>
+        public string KeyFor(Node other) => Machines.TokenOf(Machines.ListAsync().GetAwaiter().GetResult().Single(m => m.Id == other.Id));
     }
 
     private sealed class FixedAddresses(List<string> addresses) : ISelfAddresses
@@ -246,6 +428,19 @@ public sealed class FleetRosterTests
         public Router Router { get; } = new();
 
         public Dictionary<string, Node> Machines { get; } = [];
+
+        /// <summary>hangar, atlas and workbench, each listing the other two.</summary>
+        public async Task<(Node Hangar, Node Atlas, Node Workbench)> StartThreeAsync()
+        {
+            var hangar = await StartAsync("hangar");
+            var atlas = await StartAsync("atlas");
+            var workbench = await StartAsync("workbench");
+            await AddAsync(hangar, atlas, byCode: true);
+            await SettleAsync();
+            await AddAsync(atlas, workbench, byCode: true);
+            await SettleAsync();
+            return (hangar, atlas, workbench);
+        }
 
         public async Task<Node> StartAsync(string name, bool yourFleet = true)
         {
@@ -275,9 +470,11 @@ public sealed class FleetRosterTests
         }
 
         /// <summary>The owner adds <paramref name="added"/> on <paramref name="through"/> with its machine token.</summary>
-        public static async Task AddAsync(Node through, Node added)
+        public static async Task AddAsync(Node through, Node added, bool byCode = false)
         {
-            var (machine, error) = await through.Machines.AddAsync($"https://{added.Name}.test", added.OwnerToken, CancellationToken.None);
+            // By code, the key is a machine-kind device the added machine made for it, as `fleet node pair` does; otherwise its owner token.
+            var token = byCode ? (await added.Devices.IssueAsync(through.Name, "other", kind: DeviceKinds.Machine)).Token : added.OwnerToken;
+            var (machine, error) = await through.Machines.AddAsync($"https://{added.Name}.test", token, CancellationToken.None);
             machine.ShouldNotBeNull(error?.Message);
         }
 
@@ -294,6 +491,19 @@ public sealed class FleetRosterTests
             foreach (var node in _nodes)
                 await node.Factory.DisposeAsync();
         }
+    }
+
+    private static async Task<HttpStatusCode> Probe(Node node, string token)
+    {
+        using var client = Client(node, token);
+        return (await client.GetAsync("/api/machines")).StatusCode;
+    }
+
+    /// <summary>A screen (screenId set) or a paired phone asks its home for a key on <paramref name="on"/>.</summary>
+    private static async Task<string> GrantAsync(HttpClient home, Node on, string? screenId, string? name)
+    {
+        var response = await home.PostAsJsonAsync($"/api/machines/{on.Id}/device-grant", new { screenId, name });
+        return (await response.ReadSuccessAsync()).GetProperty("token").GetString()!;
     }
 
     private static HttpClient Client(Node node, string token)

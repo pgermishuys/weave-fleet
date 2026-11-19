@@ -37,6 +37,14 @@ export function machinesNeedingGrants(
     && !credentials.grants.some((grant) => grant.machineId === machine.id));
 }
 
+/** Home says this phone or browser was removed from the Fleet (Your Fleet, Labs): it is given no more keys. */
+export class RemovedFromFleetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RemovedFromFleetError";
+  }
+}
+
 /**
  * Asks home for the phone's own token on `machineId`. Throws with home's reason when it can't. A screen that isn't a
  * paired phone (Your Fleet, Labs) names itself with `screen`, and home keys the token by its id.
@@ -58,7 +66,8 @@ export async function requestGrant(machineId: string, homeToken: string | null, 
     } catch {
       // Keep the general message.
     }
-    throw new Error(message);
+    // 403 is home's "removed"; asking again can't change the answer.
+    throw response.status === 403 ? new RemovedFromFleetError(message) : new Error(message);
   }
   return await response.json() as MachineGrant;
 }
