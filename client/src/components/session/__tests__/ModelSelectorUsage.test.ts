@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computed } from "vue";
 import type { ProviderUsage } from "@/lib/usage-providers";
 
@@ -9,6 +9,7 @@ vi.mock("@/composables/use-usage-limits", () => ({
   useUsageLimits: () => ({ providers: computed(() => usage.providers) }),
 }));
 
+import { formatTime, formatWhen } from "@/lib/format";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import { createModelSelectionKey, type ModelOption } from "@/composables/use-models";
 
@@ -37,6 +38,13 @@ describe("ModelSelector usage bars", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     document.body.innerHTML = "";
+    // Only Date is frozen: the reset time is relative to now, and which day it lands on depends on the hour the test runs.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 0, 14, 10, 0, 0)); // local 10:00; a reset two hours on is 12:00, the same day
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("puts the tightest window's bar on a mapped provider's heading and none on others", async () => {
@@ -53,13 +61,23 @@ describe("ModelSelector usage bars", () => {
   it("dims a nearly used-up provider's models with its reset time, and they stay pickable", async () => {
     usage.providers = [claude(0.97)];
     const wrapper = await open();
-    expect(wrapper.get("[data-testid=model-provider-resets]").text()).toMatch(/^resets \d{1,2}:\d{2}( [AP]M)?$/);
+    expect(wrapper.get("[data-testid=model-provider-resets]").text()).toBe(`resets ${formatTime(inHours(2))}`);
     const dimmed = wrapper.findAll(".selector-dropdown__row--dim");
     expect(dimmed).toHaveLength(5);
     const pick = dimmed[0]!.get("button");
     expect(pick.attributes("disabled")).toBeUndefined();
     await pick.trigger("click");
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual([models[0]!.selectionKey]);
+    wrapper.unmount();
+  });
+
+  it("names the day when the reset falls on another one", async () => {
+    vi.setSystemTime(new Date(2026, 0, 14, 23, 0, 0)); // two hours on is 01:00 tomorrow
+    usage.providers = [claude(0.97)];
+    const wrapper = await open();
+    const text = wrapper.get("[data-testid=model-provider-resets]").text();
+    expect(text).toBe(`resets ${formatWhen(inHours(2))}`);
+    expect(text).not.toBe(`resets ${formatTime(inHours(2))}`);
     wrapper.unmount();
   });
 
