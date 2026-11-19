@@ -44,7 +44,15 @@ public sealed partial class FleetRosterSync(
     public Task StopAsync(CancellationToken cancellationToken)
     {
         machines.Changed -= OnChanged;
-        _stopping.Cancel();
+        try
+        {
+            _stopping.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The container disposed this first; nothing is running then.
+        }
+
         return Task.CompletedTask;
     }
 
@@ -71,7 +79,7 @@ public sealed partial class FleetRosterSync(
                 }
                 while (Volatile.Read(ref _again) == 1 && !_stopping.IsCancellationRequested);
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
             {
             }
             finally
