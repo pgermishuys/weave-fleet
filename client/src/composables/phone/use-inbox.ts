@@ -9,6 +9,9 @@ import { fetchMachineList, unreachableReason, type ListedMachine } from "@/lib/p
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { buildInbox, type InboxMachineState } from "@/lib/phone/inbox";
 import { HIDDEN_CLOSE_MS } from "@/lib/machine-feed";
+
+/** How often an open inbox looks for machines added to your Fleet meanwhile. */
+const ROSTER_CHECK_MS = 30_000;
 import { InboxFeed, type InboxSnapshot } from "@/lib/phone/inbox-feed";
 import {
   permissionAnswerRequest,
@@ -66,6 +69,7 @@ export function useInbox() {
   const loading = shallowRef(true);
   let hiddenSince: number | null = null;
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
+  let rosterTimer: ReturnType<typeof setInterval> | null = null;
 
   const machines = computed<InboxMachineState[]>(() => entries.value.map((entry) => ({
     id: entry.listed.id,
@@ -185,8 +189,22 @@ export function useInbox() {
     return outcome;
   }
 
+  /**
+   * Your Fleet: a machine added to the list since the inbox opened (on any machine) gets its key now, so the phone or
+   * screen lists it without being reopened. Opens again only when the list has a machine the inbox doesn't show.
+   */
+  async function reopenIfRosterGrew(): Promise<boolean> {
+    if (loading.value || entries.value.length === 0) return false;
+    const listed = await fetchMachineList(readCredentialsSync()?.token ?? null).catch(() => [] as ListedMachine[]);
+    const shown = new Set(entries.value.map((entry) => entry.listed.id));
+    if (!listed.some((machine) => !shown.has(machine.id))) return false;
+    await open();
+    return true;
+  }
+
   /** Asks every machine again (pull to refresh). */
   async function refreshAll(): Promise<void> {
+    if (await reopenIfRosterGrew()) return;
     await Promise.all(entries.value.map((entry) => entry.feed?.refresh()));
   }
 
@@ -201,16 +219,18 @@ export function useInbox() {
     const away = hiddenSince === null ? 0 : Date.now() - hiddenSince;
     hiddenSince = null;
     if (away >= HIDDEN_CLOSE_MS) void open();
-    else for (const entry of entries.value) void entry.feed?.refresh();
+    else void reopenIfRosterGrew().then((reopened) => { if (!reopened) for (const entry of entries.value) void entry.feed?.refresh(); });
   }
 
   onMounted(() => {
     void open();
     document.addEventListener("visibilitychange", onVisibility);
+    rosterTimer = setInterval(() => { if (document.visibilityState === "visible") void reopenIfRosterGrew(); }, ROSTER_CHECK_MS);
   });
 
   onUnmounted(() => {
     document.removeEventListener("visibilitychange", onVisibility);
+    if (rosterTimer) clearInterval(rosterTimer);
     if (closeTimer) clearTimeout(closeTimer);
     void close();
   });

@@ -151,6 +151,7 @@ if (reachListeners is not null)
 builder.Services.AddSingleton(new ReachStore(fleetOptions.DatabasePath));
 var loopbackAuthPolicy = new LoopbackAuthPolicy(fleetOptions.Host, fleetOptions.Auth.RequireToken, fleetOptions.Port, reachListeners);
 builder.Services.AddSingleton(loopbackAuthPolicy);
+builder.Services.AddSingleton<WeaveFleet.Application.Machines.ISelfAddresses, WeaveFleet.Api.Auth.SelfAddresses>();
 if (!isTestHost)
 {
     builder.Services.AddLauncherPatchStartupService();

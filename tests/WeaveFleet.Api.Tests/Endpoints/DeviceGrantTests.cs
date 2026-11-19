@@ -212,7 +212,7 @@ public sealed class DeviceGrantTests
         minted.PairedVia.ShouldBe(MachineId(hangar));
         (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().GetGrantAsync("screen:s-1234", MachineId(falcon)))!
             .RemoteDeviceId.ShouldBe(minted.Id);
-        (await hangar.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty("a screen isn't a paired device on hangar");
+        (await hangar.Services.GetRequiredService<DeviceTokenService>().ListAsync()).Where(d => d.Kind == DeviceKinds.Device).ShouldBeEmpty("a screen isn't a paired device on hangar");
     }
 
     [Fact]

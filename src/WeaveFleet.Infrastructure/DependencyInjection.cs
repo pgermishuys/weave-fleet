@@ -337,6 +337,10 @@ public static class DependencyInjection
             .RemoveAllLoggers()
             .AddLogger<WeaveFleet.Infrastructure.Machines.MachineProbeRequestLogger>();
         services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
+        // Your Fleet (Labs): every machine keeps the list, and machines are introduced to each other.
+        services.AddSingleton<WeaveFleet.Application.Machines.FleetRoster>();
+        services.AddSingleton<WeaveFleet.Infrastructure.Machines.FleetRosterSync>();
+        services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.FleetRosterSync>());
         // Scoped: it counts the caller's own sessions.
         services.AddScoped<WeaveFleet.Application.Machines.MachineCapabilitiesReader>();
         // Automations that run on another machine start their sessions and workflow runs there.

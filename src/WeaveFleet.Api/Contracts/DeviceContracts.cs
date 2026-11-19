@@ -77,7 +77,8 @@ public sealed record DeviceListResponse(IReadOnlyList<DeviceSummary> Devices);
 /// may ask.
 /// </summary>
 /// <param name="PairedVia">The id of the machine asking: the phone's home machine.</param>
-public sealed record CreateDeviceRequest(string? Name, string? Platform, string? PairedVia);
+/// <param name="Kind"><c>device</c> (the default) or <c>machine</c>: a key another machine uses to reach this one (Your Fleet, Labs).</param>
+public sealed record CreateDeviceRequest(string? Name, string? Platform, string? PairedVia, string? Kind = null);
 
 /// <summary>A device token made on request.</summary>
 public sealed record CreateDeviceResponse(string DeviceId, string Token);
