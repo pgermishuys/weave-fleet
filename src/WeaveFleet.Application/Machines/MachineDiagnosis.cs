@@ -108,7 +108,7 @@ public static class MachineDiagnoses
             _ when code is >= 300 and < 400 => Problem(3, Redirected, $"{host} sends you elsewhere", $"It answered {code} with another address.",
                 "Use the address it redirects to.", $"{baseUrl} redirects elsewhere. Use the address it redirects to."),
             _ => Problem(3, NotFleet, $"{host} answered {code}", "That isn't how Fleet answers.",
-                "Check the port. Fleet's default is 2113.", $"The machine answered {code}."),
+                "Check the port. Fleet's default is 6262.", $"The machine answered {code}."),
         };
     }
 
@@ -117,7 +117,7 @@ public static class MachineDiagnoses
     {
         var host = name ?? HostOf(baseUrl);
         return Problem(3, NotFleet, $"{host} isn't Fleet", "Something answered, but not with what Fleet says about itself.",
-            "Check the port. Fleet's default is 2113.", "That isn't a Fleet.");
+            "Check the port. Fleet's default is 6262.", "That isn't a Fleet.");
     }
 
     public static MachineProblem VersionMismatchOf(int theirs, int ours, string baseUrl, string? name = null)

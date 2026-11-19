@@ -137,7 +137,7 @@ public sealed class RemoteMachineService(
     {
         var normalized = NormalizeBaseUrl(baseUrl);
         if (normalized is null)
-            return (null, "That isn't an address. Try something like http://100.64.90.72:2113.");
+            return (null, "That isn't an address. Try something like http://100.64.90.72:6262.");
         if (PairingCodeStore.NormalizeManualCode(code) is null)
             return (null, "That isn't a pairing code. It looks like ABCD-EFGH; run fleet node pair on the other machine.");
 

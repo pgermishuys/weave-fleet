@@ -344,7 +344,7 @@ public static class DependencyInjection
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteAutomationRuns.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(2))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(5) });
         // Machines added Over SSH: the user's own ssh, one tunnel each. Registered before the watcher, which connects through them.
-        // FLEET_SSH_EXECUTABLE / FLEET_SSH_NODE_PORT: another ssh, or a node that listens on another port than 2113.
+        // FLEET_SSH_EXECUTABLE / FLEET_SSH_NODE_PORT: another ssh, or a node that listens on another port than 6262.
         services.AddSingleton(_ => new WeaveFleet.Infrastructure.Machines.SshOptions
         {
             Executable = Environment.GetEnvironmentVariable("FLEET_SSH_EXECUTABLE") is { Length: > 0 } ssh ? ssh : "ssh",

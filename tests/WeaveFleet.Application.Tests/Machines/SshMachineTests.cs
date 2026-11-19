@@ -22,6 +22,26 @@ public sealed class SshMachineTests : IDisposable
 
     private SshMachineService Service => new(_home.Service, _tunnels, _runner, new SshInstallOptions { StartPause = TimeSpan.Zero, StartAttempts = 10 });
 
+    [Fact]
+    public void The_tunnel_goes_to_the_port_the_start_command_starts_the_node_on()
+    {
+        // StartCommand passes no --port, so the node listens on the launcher's default; the tunnel must point there.
+        SshMachineService.StartCommand.ShouldNotContain("--port");
+        var launcher = File.ReadAllText(Path.Combine(RepoRoot(), "scripts", "launcher.sh"));
+        var match = System.Text.RegularExpressions.Regex.Match(launcher, @"PORT=""\$\{PORT_OVERRIDE:-\$\{WEAVE_FLEET_PORT:-(\d+)\}\}""");
+        match.Success.ShouldBeTrue("launcher.sh's default port line moved");
+        SshMachineService.NodePort.ShouldBe(int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
+        SshMachineService.NodePort.ShouldBe(new WeaveFleet.Application.Configuration.FleetOptions().Port);
+    }
+
+    private static string RepoRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+            if (File.Exists(Path.Combine(dir.FullName, "scripts", "launcher.sh")))
+                return dir.FullName;
+        throw new InvalidOperationException("No scripts/launcher.sh above " + AppContext.BaseDirectory);
+    }
+
     [Theory]
     [InlineData("alice@falcon", "falcon", "alice", null, "alice@falcon")]
     [InlineData("falcon", "falcon", null, null, "falcon")]
