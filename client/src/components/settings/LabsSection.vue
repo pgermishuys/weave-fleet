@@ -86,6 +86,7 @@ function openRoute(path: string): void {
         title="Your Fleet"
         summary="Connect a phone or browser to one machine and it reaches the others you add there."
         :adds="addsWhenOn(yourFleet.enabled.value, 'Keys for other machines on a browser or phone')"
+        @open="setActiveSection('machines')"
       >
         <template #more>
           A machine keeps the list of the machines you add to it. A browser or phone connected to it gets its own key for each of them, so you don't pair every machine again. Only this machine's list is used for now; copying it between machines comes later.

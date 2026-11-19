@@ -823,3 +823,19 @@ nothing about the id says so.
   (`webApp`). A node doesn't, so its previews can't be opened from the web app yet.
 - The machine token has no scopes. Paired devices get their own tokens with one limit (no managing access); there
   are no finer scopes.
+
+## Your Fleet (Labs, in progress)
+
+Settings → Labs → Your Fleet, off by default. The plan is in `.weave/plans/machines-setup-journeys.md`. This first slice
+changes one thing: a screen signed in as the owner on a machine (a browser, the desktop app's window) can ask that
+machine for its own key on any machine in its list, the way a paired phone does.
+
+- The list is the one this page already describes (`GET /api/machines`); nothing parallel is kept.
+- `POST /api/machines/{id}/device-grant` takes `{ "screenId", "name" }` from the owner when Your Fleet is on. The key is a
+  device token on the other machine named "`name` via `home`". It is recorded under `screen:{screenId}` beside a phone's
+  grants, so removing the machine removes it, and asking again replaces it.
+- A machine added by its pairing code holds a machine-kind device token. Such a token may now also make a device token
+  (`POST /api/machine/devices`) and remove one a machine made (`DELETE /api/machine/devices/{id}` for a device with a
+  home); everything else on those endpoints stays the owner's.
+- The phone pages (`/phone`) of a browser that isn't a paired phone keep the keys in `localStorage["weave:screen-keys"]`,
+  apart from a phone's credentials, so the browser never looks paired (no push subscription).

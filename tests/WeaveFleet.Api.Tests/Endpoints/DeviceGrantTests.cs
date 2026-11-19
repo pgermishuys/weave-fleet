@@ -9,6 +9,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -264,6 +265,43 @@ public sealed class DeviceGrantTests
         (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "has spaces!" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await owner.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
+    }
+
+    // ---- A machine added by its pairing code holds a machine-kind device token, not the machine token ----
+
+    [Fact]
+    public async Task A_machine_added_by_pairing_code_can_make_and_remove_a_screens_key()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        var (_, peerToken) = await falcon.Services.GetRequiredService<DeviceTokenService>().IssueAsync("hangar", "other", kind: DeviceKinds.Machine);
+        await hangar.Services.GetRequiredService<RemoteMachineService>().ImportAsync(
+            [new ImportedMachine(MachineId(falcon), "falcon", "https://falcon.test", peerToken, "linux", null)]);
+        await TurnOnYourFleetAsync(hangar);
+        using var owner = Client(hangar, MachineToken(hangar));
+        var falconToken = (await (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "one" })).ReadSuccessAsync()).GetProperty("token").GetString()!;
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Removing the machine takes the key away, through the peer token.
+        (await owner.DeleteAsync($"/api/machines/{MachineId(falcon)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_peer_machine_token_removes_nothing_but_devices_a_machine_made_and_a_phone_token_makes_nothing()
+    {
+        await using var falcon = Fleet();
+        var devices = falcon.Services.GetRequiredService<DeviceTokenService>();
+        var (_, peerToken) = await devices.IssueAsync("hangar", "other", kind: DeviceKinds.Machine);
+        var (phone, phoneToken) = await devices.IssueAsync("Pixel 9", "android");
+        using var peer = Client(falcon, peerToken);
+
+        (await peer.DeleteAsync($"/api/machine/devices/{phone.Id}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await Client(falcon, phoneToken).PostAsJsonAsync("/api/machine/devices", new { name = "x", platform = "other" })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        var made = await peer.PostAsJsonAsync("/api/machine/devices", new { name = "Chrome via hangar", platform = "other", pairedVia = "hangar-id" });
+        var madeId = (await made.ReadSuccessAsync()).GetProperty("deviceId").GetString();
+        (await peer.DeleteAsync($"/api/machine/devices/{madeId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
     private static async Task TurnOnYourFleetAsync(WebApplicationFactory<Program> factory)
