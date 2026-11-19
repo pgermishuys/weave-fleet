@@ -220,6 +220,18 @@ describe("ports", () => {
       blocker.close();
     }
   });
+
+  it("picks another port when the preferred one is held on all addresses", async () => {
+    // On Windows a 127.0.0.1 bind succeeds beside a 0.0.0.0 holder, so a bind probe alone said "free".
+    const blocker = net.createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, "0.0.0.0", resolve));
+    const taken = (blocker.address() as net.AddressInfo).port;
+    try {
+      expect(await pickPort(taken)).not.toBe(taken);
+    } finally {
+      blocker.close();
+    }
+  });
 });
 
 describe("window bounds", () => {
