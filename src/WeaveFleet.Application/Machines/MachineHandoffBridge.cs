@@ -3,6 +3,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -356,7 +357,7 @@ public sealed class MachineHandoffBridge(
     private static string FirstLine(string text)
     {
         var line = text.Trim().Split('\n', 2)[0].Trim();
-        return line.Length > 200 ? line[..200] + "…" : line;
+        return line.Length > 200 ? TextCut.Head(line, 200) + "…" : line;
     }
 
     /// <summary>The calling session on this machine, as the other machine records it.</summary>

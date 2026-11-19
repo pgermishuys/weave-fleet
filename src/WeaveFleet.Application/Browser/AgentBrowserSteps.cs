@@ -1,4 +1,5 @@
 using System.Text;
+using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.Browser;
 
@@ -135,7 +136,7 @@ public static class AgentBrowserStepText
 
     private static string Quote(string text) => "“" + text + "”";
 
-    private static string Short(string text) => text.Length <= 40 ? text : text[..39] + "…";
+    private static string Short(string text) => text.Length <= 40 ? text : TextCut.Head(text, 39) + "…";
 
     /// <summary>A page's address without the scheme, short enough for a step.</summary>
     private static string Place(string? url)
@@ -145,6 +146,6 @@ public static class AgentBrowserStepText
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             return url;
         var place = uri.Authority + (uri.PathAndQuery == "/" ? string.Empty : uri.PathAndQuery);
-        return place.Length <= 60 ? place : place[..59] + "…";
+        return place.Length <= 60 ? place : TextCut.Head(place, 59) + "…";
     }
 }
