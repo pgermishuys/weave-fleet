@@ -17,5 +17,10 @@ export function downloadShare(): { message: string; url: string } {
   return { message: `Get Fleet for your computer: ${FLEET_DOWNLOAD_URL}`, url: FLEET_DOWNLOAD_URL };
 }
 
-/** What "Copy the line" tells the person next, under the button. */
-export const INSTALL_LINE_NOTE = "Run it on the machine to install Fleet, then run fleet node up.";
+/** What "Share the line" tells the person next, under the button. */
+export const INSTALL_LINE_NOTE = "Send it to the machine and run it there to install Fleet, then run fleet node up.";
+
+/** The share sheet's content for the install line: just the line, so Copy gives something that runs as it is. */
+export function installShare(): { message: string } {
+  return { message: FLEET_INSTALL_LINE };
+}

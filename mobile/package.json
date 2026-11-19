@@ -8,7 +8,6 @@
     "@microsoft/signalr": "^10.0.11",
     "expo": "~58.0.17",
     "expo-camera": "~58.0.12",
-    "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.13",
     "expo-dev-client": "~58.0.14",
     "expo-device": "~58.0.5",

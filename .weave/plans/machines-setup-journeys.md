@@ -111,7 +111,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
 - [x] **9. Machines page.** (this PR) "Your machines" plus "Phones and browsers", a reach line per machine, and the advanced parts
   (token, addresses, own address) on each machine's page. It replaces "Let other devices reach This machine". Needs
   piece 5. M.
-- [x] **10. Phone first (J11).** The phone app's "I don't have Fleet yet" with "Send me the link" / "Copy the line".
+- [x] **10. Phone first (J11).** The phone app's "I don't have Fleet yet" with "Send me the link" / "Share the line".
   The website download page "Where will Fleet run?" lives in the weave-website repo: in a weave-website PR (to follow).
   S–M.
 

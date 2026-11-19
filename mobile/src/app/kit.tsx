@@ -159,7 +159,7 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
         </Section>
 
         <Section label="I don't have Fleet yet">
-          <NoFleetYet onShare={noop} onCopy={noop} />
+          <NoFleetYet onShare={noop} onShareLine={noop} />
         </Section>
 
         <Section label="Permission card">
