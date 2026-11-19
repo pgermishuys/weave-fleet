@@ -121,7 +121,7 @@ public sealed class SshTunnelsTests : IAsyncLifetime
         await Eventually(() => Calls().Length > 0, "ssh to start");
         var arguments = Calls()[0][(Calls()[0].IndexOf(' ') + 1)..];
         arguments.ShouldContain("-N");
-        arguments.ShouldContain($"-L 127.0.0.1:{port}:127.0.0.1:2113");
+        arguments.ShouldContain($"-L 127.0.0.1:{port}:127.0.0.1:{SshMachineService.NodePort}");
         arguments.ShouldContain("BatchMode=yes");
         arguments.ShouldContain("ExitOnForwardFailure=yes");
         arguments.ShouldContain("-p 2222");
