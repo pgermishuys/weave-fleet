@@ -22,7 +22,7 @@ export interface MachineConnection {
   /** What the machine calls itself; the client refreshes it from `GET /api/machine`. */
   name: string;
   /**
-   * Base URL without a trailing slash, e.g. `http://100.64.90.72:2113`: the address home uses. Requests go to
+   * Base URL without a trailing slash, e.g. `http://100.64.90.72:6262`: the address home uses. Requests go to
    * `baseUrlOf(machine)`, the one this tab picked from `addresses` (see `@/lib/machine-routes`).
    */
   baseUrl: string;

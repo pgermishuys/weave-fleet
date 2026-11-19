@@ -12,7 +12,7 @@ namespace WeaveFleet.Application.Machines;
 /// </summary>
 public static class MachineAddresses
 {
-    /// <summary>Its MagicDNS name, e.g. <c>http://studio.tail4f2a.ts.net:2113</c>.</summary>
+    /// <summary>Its MagicDNS name, e.g. <c>http://studio.tail4f2a.ts.net:6262</c>.</summary>
     public const string Tailnet = "tailnet";
 
     /// <summary>Its Tailscale IP, from 100.64.0.0/10.</summary>

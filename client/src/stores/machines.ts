@@ -523,7 +523,7 @@ export const useMachinesStore = defineStore("machines", () => {
     try {
       baseUrl = normalizeBaseUrl(url);
     } catch {
-      throw new Error("That isn't an address. Try something like http://100.64.90.72:2113.");
+      throw new Error("That isn't an address. Try something like http://100.64.90.72:6262.");
     }
     const trimmedToken = token.trim();
     if (!trimmedToken) throw new Error("Paste the machine's access token.");

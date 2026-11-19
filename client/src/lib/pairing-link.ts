@@ -32,7 +32,7 @@ export function parsePairingInput(typed: string): PairingInput | null {
   try {
     baseUrl = normalizeBaseUrl(address.replace(new RegExp(`${LINK_PATH}/?$`), ""));
   } catch {
-    return { kind: "invalid", message: "That isn't a pairing link or an address. A link looks like http://100.64.90.72:2113/add-machine#ABCD-EFGH." };
+    return { kind: "invalid", message: "That isn't a pairing link or an address. A link looks like http://100.64.90.72:6262/add-machine#ABCD-EFGH." };
   }
 
   if (fragment === null) return { kind: "address", baseUrl };

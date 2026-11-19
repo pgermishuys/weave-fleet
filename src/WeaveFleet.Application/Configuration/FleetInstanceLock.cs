@@ -141,7 +141,7 @@ public sealed class FleetInstanceLock : IDisposable
 
 /// <summary>What a running Fleet writes to its instance file.</summary>
 /// <param name="Pid">Fleet's process id.</param>
-/// <param name="Url">Fleet's URL over loopback, e.g. <c>http://127.0.0.1:2113</c>.</param>
+/// <param name="Url">Fleet's URL over loopback, e.g. <c>http://127.0.0.1:6262</c>.</param>
 /// <param name="Version">Fleet's version.</param>
 /// <param name="DatabasePath">The database Fleet is using.</param>
 /// <param name="Desktop">Whether the desktop app started this Fleet.</param>

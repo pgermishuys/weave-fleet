@@ -352,7 +352,7 @@ public sealed record MachineAccessResponse(
     bool RequiresToken,
     IReadOnlyList<MachineAddress> Addresses);
 
-/// <param name="Url">Base URL, e.g. <c>http://100.64.90.72:2113</c>.</param>
+/// <param name="Url">Base URL, e.g. <c>http://100.64.90.72:6262</c>.</param>
 /// <param name="Kind"><c>tailnet</c>, <c>lan</c> or <c>hostname</c>.</param>
 public sealed record MachineAddress(string Url, string Kind);
 #pragma warning restore IL2026

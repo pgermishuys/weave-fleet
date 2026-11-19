@@ -105,7 +105,7 @@ internal static class SshProcess
 }
 
 /// <summary>
-/// One <c>ssh -N -L 127.0.0.1:&lt;port&gt;:127.0.0.1:2113</c> per machine added Over SSH, kept open: if ssh exits it is
+/// One <c>ssh -N -L 127.0.0.1:&lt;port&gt;:127.0.0.1:6262</c> per machine added Over SSH, kept open: if ssh exits it is
 /// started again after a growing pause. Stopped when the machine is removed or Fleet stops; every ssh is also tracked
 /// with the other processes Fleet starts (a Job Object on Windows, a parent watcher on Linux), so none outlives Fleet.
 /// <para>

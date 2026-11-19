@@ -517,7 +517,7 @@ onUnmounted(() => stopPolling?.());
               autocomplete="off"
               spellcheck="false"
               :class="inputClass"
-              placeholder="http://100.64.90.72:2113/add-machine#ABCD-EFGH"
+              placeholder="http://100.64.90.72:6262/add-machine#ABCD-EFGH"
               :disabled="isAdding"
               data-testid="machines-add-link"
             >

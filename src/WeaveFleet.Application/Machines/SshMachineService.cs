@@ -14,8 +14,12 @@ public sealed class SshMachineService(RemoteMachineService machines, ISshTunnels
 {
     private readonly SshInstallOptions _install = install ?? new SshInstallOptions();
 
-    /// <summary>The port a node listens on unless it was started with another.</summary>
-    public const int NodePort = 2113;
+    /// <summary>
+    /// The port a node listens on unless it was started with another: the launcher's default (scripts/launcher.sh,
+    /// <c>FleetOptions.Port</c>), since <see cref="StartCommand"/> passes no <c>--port</c>. Nodes set up from here by
+    /// earlier versions were started the same way, so they listen here too.
+    /// </summary>
+    public const int NodePort = 6262;
 
     // A non-interactive ssh has the short PATH, and the installer puts Fleet in ~/.weave/fleet/bin.
     private const string RemotePath = "env PATH=\"$HOME/.weave/fleet/bin:$PATH\"";

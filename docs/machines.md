@@ -138,7 +138,7 @@ never asks for a password and never trusts an unknown host key on its own (run `
    port and leaves other services alone (see [Keep a node running](#keep-a-node-running); `fleet node uninstall-service`
    removes it). Fleet waits up to 30 seconds for the node to answer.
 4. **Pair and add the machine**: `fleet node pair --json` on the node through SSH gives a one-time code (`code`,
-   `machineName`, `addresses`, `link`); Fleet opens a tunnel, `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:2113 host`, uses
+   `machineName`, `addresses`, `link`); Fleet opens a tunnel, `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:6262 host`, uses
    `http://127.0.0.1:<port>` as the machine's address and redeems the code through it, exactly like a pairing link.
 
 It installs Fleet only, never a harness: set OpenCode, Claude Code and the rest up there the way you would anywhere. The
@@ -152,7 +152,7 @@ Fleet keeps the tunnel open: when ssh exits it starts it again after 1 s, doubli
 "Over SSH as user@host" and shows "Tunnel down" while it's down. Removing the machine, or stopping Fleet, ends the
 tunnel; on Linux a Fleet that is killed outright also ends it within seconds, and on Windows a Job Object does.
 The saved destination (`ssh_destination`, migration 067) brings the tunnel back when Fleet starts, on the same local port
-if it's still free. For a node that listens on another port than 2113, start Fleet with `FLEET_SSH_NODE_PORT`;
+if it's still free. For a node that listens on another port than 6262, start Fleet with `FLEET_SSH_NODE_PORT`;
 `FLEET_SSH_EXECUTABLE` picks another `ssh`.
 
 The API (owner only): `GET /api/machines/candidates` lists the rows and the commands; `POST /api/machines/candidates/probe`
@@ -393,7 +393,7 @@ your tailnet, or the machine's `tailscale serve` address.
 `fleet-not-running`. The connection was refused: the machine is up and Fleet is not. On it, run `fleet node up`.
 
 ### falcon isn't Fleet
-`not-fleet`. Something answered, but not the way Fleet does. Check the port (Fleet's default is 2113).
+`not-fleet`. Something answered, but not the way Fleet does. Check the port (Fleet's default is 6262).
 
 ### falcon sends you elsewhere
 `redirected`. The address redirects; use the address it redirects to.
@@ -463,7 +463,7 @@ and that no firewall blocks the SSH port.
 `service-failed`. Fleet is installed but its background service didn't start. On it, run `fleet node up` in a terminal.
 
 ### Fleet on falcon isn't answering
-`not-starting`. Fleet is installed and started, but nothing answers on port 2113. Its log says why
+`not-starting`. Fleet is installed and started, but nothing answers on port 6262. Its log says why
 (`journalctl --user -u fleet-node`, or `~/Library/Logs/fleet-node.log` on macOS).
 
 Two more headlines come from the browser, not the server. **This page can't call falcon** (`https-page`) shows when
