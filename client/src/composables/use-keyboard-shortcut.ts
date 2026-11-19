@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, toValue, type MaybeRefOrGetter } from "vue";
 import type { GlobalShortcut } from "@/lib/command-registry";
+import { shortcutKey } from "@/lib/shortcut-key";
 
 export interface KeyboardShortcutOptions {
   metaKey?: boolean;
@@ -39,7 +40,7 @@ function normalizeKey(key: string): string {
 }
 
 export function matchesKeyboardShortcut(event: KeyboardEvent, shortcut: GlobalShortcut): boolean {
-  if (normalizeKey(event.key) !== normalizeKey(shortcut.key)) {
+  if (shortcutKey(event) !== normalizeKey(shortcut.key)) {
     return false;
   }
 

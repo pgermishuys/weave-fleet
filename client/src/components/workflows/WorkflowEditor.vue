@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { shortcutKey } from "@/lib/shortcut-key";
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { AlertCircle, AlertTriangle, CheckCircle2, Code2, Play, Save, Sparkles, Workflow as WorkflowIcon } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -134,7 +135,7 @@ function tryIt(): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+  if ((event.metaKey || event.ctrlKey) && shortcutKey(event) === "s") {
     event.preventDefault();
     void save();
   }
