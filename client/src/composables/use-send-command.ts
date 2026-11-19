@@ -1,4 +1,5 @@
 import { computed, readonly, shallowRef } from "vue";
+import { draftAfterRefusal } from "@/lib/refused-draft";
 import type { components } from "@/api/generated/schema";
 import { useDraftState } from "@/composables/use-draft-state";
 import { readPromptErrorMessage, type SessionStatusBeforeSend } from "@/composables/use-send-prompt";
@@ -49,7 +50,7 @@ export function useSendCommand(sessionId: string) {
       sendError.value = message;
       console.error("Failed to send command", caughtError);
       // What was typed comes back, unless something new has been typed since.
-      if (draft.text.length === 0) setText(typed);
+      setText(draftAfterRefusal(typed, draft.text));
     }
   }
 

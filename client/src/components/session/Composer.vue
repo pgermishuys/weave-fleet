@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { draftAfterRefusal } from "@/lib/refused-draft";
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
@@ -496,7 +497,7 @@ function queueDraft(typed: string, text: string, options: QueueOptions): void {
   }
   setText("");
   void enqueue(text, options).then((queued) => {
-    if (!queued && draft.text.length === 0) setText(typed);
+    if (!queued) setText(draftAfterRefusal(typed, draft.text));
   });
 }
 
@@ -812,7 +813,7 @@ function handleSideSend(question: string): void {
   clearTerminalContexts();
   setText("");
   void sideConversation.ask(text, sideQuestionChoice()).then((asked) => {
-    if (!asked && draft.text.length === 0) setText(typed);
+    if (!asked) setText(draftAfterRefusal(typed, draft.text));
   });
 
   void nextTick(() => {
@@ -852,7 +853,7 @@ function sendCurrentDraft(steer = false): boolean {
  * added since. The text is back already, with the terminal lines in front, unless something new was typed.
  */
 function putBackRefused(typed: string, sentText: string, images: PendingAttachment[], contexts: TerminalContextDraft[]): void {
-  if (sentText !== typed && draft.text === sentText) setText(typed);
+  if (sentText !== typed && draft.text.startsWith(sentText)) setText(typed + draft.text.slice(sentText.length));
   for (const image of images) {
     // Sending let go of the preview's blob URL.
     if (!pendingAttachments.value.some((a) => a.id === image.id)) addAttachment({ ...image, previewUrl: `data:${image.mime};base64,${image.data}` });

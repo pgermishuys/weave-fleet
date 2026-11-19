@@ -1,4 +1,5 @@
 import { computed, shallowRef } from "vue";
+import { draftAfterRefusal } from "@/lib/refused-draft";
 import { storeToRefs } from "pinia";
 import { useAbortSession } from "@/composables/use-session-actions";
 import { appendDraftText, useDraftState } from "@/composables/use-draft-state";
@@ -181,7 +182,7 @@ export function useComposerActions(sessionId: string) {
   function queueText(typed: string, text: string, options: QueueOptions): void {
     setText("");
     void enqueue(text, options).then((queued) => {
-      if (!queued && draft.text.length === 0) setText(typed);
+      if (!queued) setText(draftAfterRefusal(typed, draft.text));
     });
   }
 
@@ -197,7 +198,7 @@ export function useComposerActions(sessionId: string) {
         trackAction("session.side_question", sessionId);
         setText("");
         void side.ask(route.question, choices()).then((asked) => {
-          if (!asked && draft.text.length === 0) setText(typed);
+          if (!asked) setText(draftAfterRefusal(typed, draft.text));
         });
         break;
       case "shell":
@@ -207,7 +208,7 @@ export function useComposerActions(sessionId: string) {
         } else {
           setText("");
           void runShellCommand(route.command).then((ran) => {
-            if (!ran && draft.text.length === 0) setText(typed);
+            if (!ran) setText(draftAfterRefusal(typed, draft.text));
           });
         }
         break;

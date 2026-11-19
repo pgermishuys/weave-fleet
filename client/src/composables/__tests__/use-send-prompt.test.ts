@@ -274,7 +274,7 @@ describe("use-send-prompt refused sends", () => {
     expect(draft.draft.text).toBe("hello")
   })
 
-  it("leaves what was typed while it was sending alone, and still says what came back", async () => {
+  it("puts the refused text back in front of what was typed while it was sending, and says what came back", async () => {
     const sessionId = "session-refused-typed-meanwhile"
     const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
     draft.setText("first message")
@@ -287,7 +287,7 @@ describe("use-send-prompt refused sends", () => {
     answer(refused())
     await settle()
 
-    expect(draft.draft.text).toBe("something new")
+    expect(draft.draft.text).toBe("first message\n\nsomething new")
     expect(onRefused).toHaveBeenCalledTimes(1)
   })
 
