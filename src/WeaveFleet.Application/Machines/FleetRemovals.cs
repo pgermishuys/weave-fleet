@@ -11,7 +11,8 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Machines;
 
 /// <summary>What a machine sends another about removals: who it is, and the removals it keeps.</summary>
-public sealed record RemovalBatch(string? From, IReadOnlyList<FleetRemoval> Removals);
+/// <param name="Fleet">Only to the machine being forgotten: the ids of the other machines in the forgetting machine's list, so it can leave that Fleet whole.</param>
+public sealed record RemovalBatch(string? From, IReadOnlyList<FleetRemoval> Removals, IReadOnlyList<string>? Fleet = null);
 
 /// <summary>The removals a machine keeps (<c>GET /api/machine/removals</c>).</summary>
 public sealed record RemovalList(IReadOnlyList<FleetRemoval> Removals);
@@ -98,7 +99,7 @@ public sealed partial class FleetRemovals(
     /// many were new. <paramref name="from"/> is the machine that sent them, <paramref name="callerDeviceId"/> the key
     /// it used here.
     /// </summary>
-    public async Task<int> ApplyAsync(IReadOnlyList<FleetRemoval> removals, string? from, string? callerDeviceId, CancellationToken cancellationToken)
+    public async Task<int> ApplyAsync(IReadOnlyList<FleetRemoval> removals, string? from, string? callerDeviceId, CancellationToken cancellationToken, IReadOnlyList<string>? fleet = null)
     {
         var self = identity.Get().Id;
         var applied = 0;
@@ -113,7 +114,7 @@ public sealed partial class FleetRemovals(
 
             if (removal.Kind == FleetRemovalKinds.Machine && removal.Id == self)
             {
-                await LeftAsync(from, removal, callerDeviceId, cancellationToken);
+                await LeftAsync(from, removal, callerDeviceId, fleet, cancellationToken);
                 continue;
             }
 
@@ -173,7 +174,8 @@ public sealed partial class FleetRemovals(
         await grants.RevokeAllAsync(FleetRoster.MachinePrefix + machine.Id, cancellationToken);
 
         // It is told, and drops this machine and the key this machine uses on it.
-        await SendAsync(machine, [removal], cancellationToken);
+        var fleet = (await repository.ListAsync()).Where(m => m.Id != machine.Id && FleetRoster.IsPairable(m)).Select(m => m.Id).ToList();
+        await SendAsync(machine, [removal], cancellationToken, fleet);
         await TellAllAsync([removal], exceptPeerId, cancellationToken, except: machine.Id);
 
         // The keys it uses to reach this machine.
@@ -184,7 +186,7 @@ public sealed partial class FleetRemovals(
     }
 
     // This machine was forgotten by `from`: its keys on this machine stop working and it leaves this machine's list.
-    private async Task LeftAsync(string? from, FleetRemoval removal, string? callerDeviceId, CancellationToken cancellationToken)
+    private async Task LeftAsync(string? from, FleetRemoval removal, string? callerDeviceId, IReadOnlyList<string>? fleet, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(from) || from == removal.Id)
             return;
@@ -204,7 +206,36 @@ public sealed partial class FleetRemovals(
             await machines.DeleteAsync(from);
         }
 
+        await LeaveFleetAsync(from, fleet, cancellationToken);
         LogLeft(logger, from);
+    }
+
+    // Leaving the Fleet whole: the machines this one learned through it go too (the ones the forgetting machine listed, and
+    // the ones it or they introduced), with the keys this one made for them and the phones' keys on them. A machine this
+    // one added by itself that is not in that Fleet stays: it is a machine of its own now. No removal is kept for them;
+    // they are not forgotten, only no longer listed here.
+    private async Task LeaveFleetAsync(string from, IReadOnlyList<string>? fleet, CancellationToken cancellationToken)
+    {
+        var self = identity.Get().Id;
+        var leaving = new HashSet<string>(fleet ?? [], StringComparer.Ordinal);
+        var rows = await repository.ListAsync();
+        // Machines introduced by the Fleet's machines, however many hops back.
+        for (var grew = true; grew;)
+        {
+            grew = false;
+            foreach (var row in rows)
+                if (row.IntroducedBy is { } by && (by == from || leaving.Contains(by)) && leaving.Add(row.Id))
+                    grew = true;
+        }
+
+        leaving.Remove(self);
+        foreach (var row in rows.Where(r => leaving.Contains(r.Id) && r.Id != from))
+        {
+            foreach (var key in (await devices.ListAsync()).Where(d => d.MadeFor == row.Id))
+                await devices.RevokeAsync(key.Id);
+            await grants.RemoveGrantsOnAsync(row.Id, cancellationToken, keepMachineKeys: true);
+            await machines.DeleteAsync(row.Id);
+        }
     }
 
     private async Task RevokeGranteeLocallyAsync(string granteeId, CancellationToken cancellationToken)
@@ -230,7 +261,7 @@ public sealed partial class FleetRemovals(
     }
 
     /// <summary>Tells a machine, as far as it answers. A machine that doesn't hears it the next time machines compare lists.</summary>
-    private async Task<bool> SendAsync(RemoteMachine machine, IReadOnlyList<FleetRemoval> removals, CancellationToken cancellationToken)
+    private async Task<bool> SendAsync(RemoteMachine machine, IReadOnlyList<FleetRemoval> removals, CancellationToken cancellationToken, IReadOnlyList<string>? fleet = null)
     {
         if (machines.TryTokenOf(machine) is not { } token)
             return false;
@@ -240,7 +271,7 @@ public sealed partial class FleetRemovals(
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{machine.BaseUrl}/api/machine/removals")
             {
-                Content = JsonContent.Create(new RemovalBatch(identity.Get().Id, removals), FleetRosterJsonContext.Default.RemovalBatch),
+                Content = JsonContent.Create(new RemovalBatch(identity.Get().Id, removals, fleet), FleetRosterJsonContext.Default.RemovalBatch),
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var response = await httpClients.CreateClient(RemoteMachineService.HttpClientName).SendAsync(request, limit.Token);

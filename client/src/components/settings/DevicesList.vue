@@ -16,6 +16,8 @@ const props = defineProps<{
   everywhere?: boolean;
   /** How this computer is signed in, for its row. */
   thisComputer: string;
+  /** Phones and browsers only: leaves out the row for the machine itself. */
+  hideThisMachine?: boolean;
 }>();
 
 const emit = defineEmits<{ (event: "removed", id: string): void }>();
@@ -69,9 +71,15 @@ async function remove(device: PairedDevice): Promise<void> {
     class="mt-5 grid gap-2"
     data-testid="devices-with-access"
   >
-    <span class="text-xs font-medium uppercase tracking-wide text-muted">Devices with access</span>
+    <span
+      v-if="!hideThisMachine"
+      class="text-xs font-medium uppercase tracking-wide text-muted"
+    >Devices with access</span>
     <ul class="devices">
-      <li class="devices__row">
+      <li
+        v-if="!hideThisMachine"
+        class="devices__row"
+      >
         <div class="min-w-0 flex-1">
           <div class="text-sm text-text">
             This machine

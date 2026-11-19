@@ -2,62 +2,56 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { Check, Copy, Eye, EyeOff, Plus, RefreshCw } from "lucide-vue-next";
+import { Check, Plus } from "lucide-vue-next";
 import {
-  agentWorkLevelName,
   useMachinesStore,
-  type MachineAccess,
-  type MachineAgentWork,
-  type MachineEntry,
-  type MachineHarness,
   type PairingPreview,
 } from "@/stores/machines";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
-import ReachDialog from "@/components/settings/ReachDialog.vue";
-import TailscaleCheckNote from "@/components/settings/TailscaleCheckNote.vue";
-import { useMachineReach } from "@/composables/use-machine-reach";
 import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
 import FoundMachinesCard from "@/components/settings/FoundMachinesCard.vue";
 import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
-import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
-import MachineAddressList from "@/components/settings/MachineAddressList.vue";
-import { isTailscale, kindOf, type MachineAddress } from "@/lib/machine-routes";
-import { useJobsFeature } from "@/composables/use-jobs-feature";
+import MachinePage from "@/components/settings/MachinePage.vue";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { usePreferencesStore } from "@/stores/preferences";
 import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import DevicesList from "@/components/settings/DevicesList.vue";
-import { listDevices, type PairedDevice } from "@/lib/devices-api";
-import { diagnosisOf, tunnelDownDiagnosis, type MachineDiagnosis } from "@/lib/machine-diagnosis";
+import { diagnosisOf, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useHomeAccess } from "@/composables/use-home-access";
+import { useMachineLines } from "@/composables/use-machine-lines";
+import { useMachinePage } from "@/composables/use-machine-page";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
-import { confirmAction } from "@/components/ui/confirm";
 
 /**
- * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
- * this one. The list belongs to this client (it lives in this browser or desktop app); each machine's name
- * belongs to the machine, so a rename shows up on every client.
+ * Settings → Machines: "Your machines" (every machine this client knows, each with how a phone reaches it), "Phones
+ * and browsers" (every screen that has keys), and adding a machine. A machine's own page (token, addresses, who may
+ * reach it, forgetting it) opens from its row. The list belongs to this client (it lives in this browser or desktop
+ * app); each machine's name belongs to the machine, so a rename shows up on every client.
  */
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
-const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-error/60 hover:text-error-text disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
+
 const machines = useMachinesStore();
-const { entries, others, home, liveReachable } = storeToRefs(machines);
-// Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
-// comment node, and with Jobs off the card must render exactly as it did.
-const { isJobsEnabled: jobsOn } = useJobsFeature();
-// Your Fleet (Labs): forgetting a machine, or removing a phone, reaches every machine.
+const { entries, home } = storeToRefs(machines);
+// Your Fleet (Labs): removing a phone reaches every machine, and the Fleet-wide parts show.
 usePreferencesStore().ensureLoaded();
 const { enabled: yourFleetOn } = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
+const page = useMachinePage();
+const lines = useMachineLines();
+const { stateLine, capabilityLine, harnessVersions, location } = lines;
+const homeAccess = useHomeAccess();
+const { access, isDevice, loaded: accessLoaded, error: accessError, screens } = homeAccess;
+const openEntry = computed(() => entries.value.find((entry) => entry.key === page.openKey.value) ?? null);
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
@@ -191,257 +185,14 @@ async function addMachine(): Promise<void> {
   }
 }
 
-// ── Each machine ─────────────────────────────────────────────────────────────
-const renaming = shallowRef<string | null>(null);
-const renameValue = shallowRef("");
-const tokenFor = shallowRef<string | null>(null);
-const tokenValue = shallowRef("");
-const busyKey = shallowRef<string | null>(null);
-const rowError = reactive<Record<string, string | null>>({});
-
-function startRename(entry: MachineEntry): void {
-  renaming.value = entry.key;
-  renameValue.value = entry.name;
-  rowError[entry.key] = null;
-}
-
-async function saveRename(entry: MachineEntry): Promise<void> {
-  busyKey.value = entry.key;
-  try {
-    await machines.renameMachine(entry.key, renameValue.value.trim());
-    renaming.value = null;
-  } catch (error) {
-    rowError[entry.key] = error instanceof Error ? error.message : String(error);
-  } finally {
-    busyKey.value = null;
-  }
-}
-
-function startToken(entry: MachineEntry): void {
-  tokenFor.value = entry.key;
-  tokenValue.value = "";
-  rowError[entry.key] = null;
-}
-
-async function saveToken(entry: MachineEntry): Promise<void> {
-  busyKey.value = entry.key;
-  try {
-    await machines.updateToken(entry.key, tokenValue.value);
-    tokenFor.value = null;
-  } catch (error) {
-    rowError[entry.key] = error instanceof Error ? error.message : String(error);
-  } finally {
-    busyKey.value = null;
-  }
-}
-
-// ── Agents sending work ──────────────────────────────────────────────────────
-// "Agents here can send it work", on each other machine in home's own list (only its owner sees that list). This
-// machine's own card has none: it's where agents send work from.
-const AGENT_WORK_CHOICES: { value: MachineAgentWork; label: string }[] = [
-  { value: "ask", label: "Ask" },
-  { value: "always", label: "Always" },
-  { value: "never", label: "Never" },
-];
-
-function showsAgentWork(entry: MachineEntry): boolean {
-  return machines.agentWorkEntries.some((machine) => machine.key === entry.key);
-}
-
-
-async function setAgentWork(entry: MachineEntry, value: MachineAgentWork): Promise<void> {
-  if (machines.agentWork[entry.key] === value) return;
-  busyKey.value = entry.key;
-  rowError[entry.key] = null;
-  try {
-    await machines.setAgentWork(entry.key, value);
-  } catch (error) {
-    rowError[entry.key] = error instanceof Error ? error.message : String(error);
-  } finally {
-    busyKey.value = null;
-  }
-}
-
-async function forget(entry: MachineEntry): Promise<void> {
-  const confirmed = await confirmAction(yourFleetOn.value
-    ? {
-        title: `Forget ${entry.name} on every machine in your Fleet?`,
-        body: `Every machine drops it from its list and its keys stop working, even on machines that are off now: they hear when they're back. Its sessions stay on ${entry.name}. To use it again, add it again with its pairing code.`,
-        confirmLabel: `Forget ${entry.name}`,
-        destructive: true,
-      }
-    : {
-        title: `Forget ${entry.name}?`,
-        body: `Its sessions stay on ${entry.name}; this device just stops listing them.`,
-        confirmLabel: "Forget machine",
-        destructive: true,
-      });
-  if (!confirmed) return;
-  machines.forgetMachine(entry.key);
-}
-
-/** Why a machine isn't answering, when known: its tunnel being down, or what home or this page found. */
-function diagnosisFor(entry: MachineEntry): MachineDiagnosis | null {
-  return entry.tunnelUp === false ? tunnelDownDiagnosis(entry.name, entry.sshDestination ?? null) : machines.diagnoses[entry.key] ?? null;
-}
-
-function stateLine(entry: MachineEntry): { text: string; tone: "ok" | "bad" | "muted" } {
-  if (entry.tunnelUp === false) return { text: diagnosisFor(entry)!.headline, tone: "bad" };
-  if (entry.isLive) return { text: "live", tone: "ok" };
-  const state = others.value[entry.key];
-  if (state?.error) return { text: diagnosisFor(entry)?.headline ?? state.error, tone: "bad" };
-  if (state?.loadedAt) return { text: `reachable · ${state.sessions.length} ${state.sessions.length === 1 ? "session" : "sessions"}`, tone: "ok" };
-  return { text: "checking…", tone: "muted" };
-}
-
-/**
- * What the machine last said it can run (its ready harnesses) and how busy it is. Nothing for a Fleet too old to say,
- * or one that isn't answering now: its last numbers would be out of date.
- */
-function capabilityLine(entry: MachineEntry): string | null {
-  const capabilities = entry.capabilities;
-  const answering = entry.isLive ? entry.isHome || liveReachable.value : !others.value[entry.key]?.error;
-  if (!capabilities || !answering) return null;
-
-  const parts: string[] = [];
-  if (capabilities.harnesses) {
-    const ready = readyHarnesses(entry).map((harness) => harness.name);
-    parts.push(ready.length ? `Ready: ${ready.join(", ")}` : "No harness ready");
-  }
-  const { working, needsYou } = capabilities.sessions;
-  parts.push(`${working} working`);
-  if (needsYou) parts.push(`${needsYou} ${needsYou === 1 ? "needs" : "need"} you`);
-  return parts.join(" · ");
-}
-
-function readyHarnesses(entry: MachineEntry): MachineHarness[] {
-  return entry.capabilities?.harnesses?.filter((harness) => harness.available && harness.enabled) ?? [];
-}
-
-function harnessVersions(entry: MachineEntry): string | undefined {
-  const versions = readyHarnesses(entry).map((harness) => harness.version ? `${harness.name} ${harness.version}` : harness.name);
-  return versions.length ? versions.join(", ") : undefined;
-}
-
-// The route line and the address list are drawn by v-for over a list that is empty for most cards, not v-if: a false
-// v-if leaves a comment node, and a card without addresses must render exactly as it did.
-/** The addresses of a saved machine reached by URL; none for home or one reached over SSH. */
-function addressesOf(entry: MachineEntry): MachineAddress[] {
-  if (entry.isHome || entry.sshDestination || entry.connection?.sshDestination) return [];
-  return entry.connection?.addresses ?? [];
-}
-
-/** How this tab is connected, while the machine answers: from the kind of the address in use. */
-function routeLine(entry: MachineEntry): { text: string; note: string | null } | null {
-  const addresses = addressesOf(entry);
-  if (!addresses.length || stateLine(entry).tone !== "ok") return null;
-  const kind = kindOf(entry.baseUrl);
-  const text = isTailscale(kind) ? "Connected over Tailscale"
-    : kind === "lan" ? "Connected on your network"
-      : kind === "hostname" ? "Connected by host name"
-        : `Connected at ${entry.baseUrl}`;
-  const first = addresses[0];
-  // Only when Fleet fell back off Tailscale: on its IP after its name failed, Tailscale itself works.
-  const note = first.url !== entry.baseUrl && isTailscale(first.kind) && !isTailscale(kind) ? "Tailscale isn't answering" : null;
-  return { text, note };
-}
-
-function saveAddresses(entry: MachineEntry, urls: string[]): Promise<void> {
-  rowError[entry.key] = null;
-  return machines.reorderAddresses(entry.key, urls);
-}
-
-function location(entry: MachineEntry): string {
-  return entry.isHome ? "this machine" : entry.baseUrl;
-}
-
-// ── This machine's access ────────────────────────────────────────────────────
-const access = shallowRef<MachineAccess | null>(null);
-/** This browser signed in as a paired device: it may not see the token or manage devices. */
-const isDevice = shallowRef(false);
-const accessLoaded = shallowRef(false);
-const accessError = shallowRef<string | null>(null);
-const showToken = shallowRef(false);
-const copied = shallowRef<string | null>(null);
-const isReplacing = shallowRef(false);
-
 const homeName = computed(() => home.value?.name ?? "This machine");
-
-// The desktop app listens on this machine only until someone lets others reach it.
-const reach = useMachineReach();
-const reachOpen = shallowRef(false);
-const reachLabel = computed(() => {
-  const state = reach.state.value;
-  if (!state?.available) return null;
-  return { off: null, "tailscale-and-home": "Tailscale and home network", home: "Home network only", own: state.ownAddress ?? "Your own address" }[state.mode];
-});
-
-async function loadAccess(): Promise<void> {
-  accessError.value = null;
-  try {
-    const loaded = await machines.loadHomeAccess();
-    isDevice.value = loaded === "device";
-    access.value = loaded === "device" ? null : loaded;
-    if (access.value) {
-      void refreshDevices();
-      void reach.load();
-    }
-  } catch (error) {
-    accessError.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    accessLoaded.value = true;
-  }
-}
-
-// ── Paired devices ───────────────────────────────────────────────────────────
-const devices = shallowRef<PairedDevice[]>([]);
-const deviceNames = computed(() => devices.value.map((device) => device.name));
+const deviceNames = computed(() => homeAccess.devices.value.map((device) => device.name));
 const thisComputer = computed(() => access.value?.requiresToken
   ? "Signed in with the machine token"
   : "Signed in on loopback");
 
-async function refreshDevices(): Promise<void> {
-  try {
-    devices.value = await listDevices();
-  } catch {
-    // An older Fleet has no devices; the list just stays empty.
-  }
-}
-
 function onPublicUrlSaved(url: string): void {
   if (home.value) home.value = { ...home.value, publicUrl: url || null };
-}
-
-async function copy(value: string, what: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(value);
-    copied.value = what;
-    setTimeout(() => {
-      if (copied.value === what) copied.value = null;
-    }, 1500);
-  } catch {
-    // No clipboard (insecure origin): the value is on screen to select.
-  }
-}
-
-async function replaceToken(): Promise<void> {
-  const confirmed = await confirmAction({
-    title: "Replace this machine's token?",
-    body: "Every device using the old one loses access until you give it the new one.",
-    confirmLabel: "Replace token",
-    destructive: true,
-  });
-  if (!confirmed) return;
-  isReplacing.value = true;
-  accessError.value = null;
-  try {
-    access.value = await machines.replaceHomeToken();
-    showToken.value = true;
-  } catch (error) {
-    accessError.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    isReplacing.value = false;
-  }
 }
 
 let stopPolling: (() => void) | null = null;
@@ -449,20 +200,27 @@ onMounted(() => {
   void machines.loadHome();
   // An answer in a conversation ("Always for …") may have changed a machine's setting since the list was read.
   void machines.syncFromServer();
-  void loadAccess();
+  void homeAccess.load();
   stopPolling = machines.startPolling();
 });
-onUnmounted(() => stopPolling?.());
+onUnmounted(() => {
+  stopPolling?.();
+  page.close();
+});
 </script>
-
 <template>
+  <MachinePage
+    v-if="openEntry"
+    :entry="openEntry"
+  />
   <div
+    v-else
     class="grid gap-6"
     data-testid="machines-section"
   >
     <SettingGroup
       id="machines"
-      title="Machines"
+      title="Your machines"
     >
       <SettingRow
         id="add-machine"
@@ -705,7 +463,7 @@ onUnmounted(() => stopPolling?.());
 
       <ul
         class="divide-y divide-border"
-        aria-label="Machines"
+        aria-label="Your machines"
       >
         <li
           v-for="entry in entries"
@@ -720,40 +478,7 @@ onUnmounted(() => stopPolling?.());
             aria-hidden="true"
           />
           <div class="machine-card__names">
-            <template v-if="renaming === entry.key">
-              <form
-                class="flex flex-wrap items-center gap-2"
-                @submit.prevent="saveRename(entry)"
-              >
-                <input
-                  v-model="renameValue"
-                  type="text"
-                  maxlength="64"
-                  :class="inputClass"
-                  class="max-w-[240px] py-1"
-                  :aria-label="`New name for ${entry.name}`"
-                  data-testid="machine-rename-input"
-                >
-                <button
-                  type="submit"
-                  :class="buttonSecondaryClass"
-                  :disabled="busyKey === entry.key"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  :class="buttonSecondaryClass"
-                  @click="renaming = null"
-                >
-                  Cancel
-                </button>
-              </form>
-            </template>
-            <span
-              v-else
-              class="machine-card__name"
-            >
+            <span class="machine-card__name">
               {{ entry.name }}
               <span
                 v-if="entry.os"
@@ -778,126 +503,19 @@ onUnmounted(() => stopPolling?.());
               :class="`machine-card__state--${stateLine(entry).tone}`"
               :data-testid="entry.tunnelUp === false ? 'machine-tunnel-down' : undefined"
             >{{ stateLine(entry).text }}</span>
-            <template
-              v-for="route in routeLine(entry) ? [routeLine(entry)!] : []"
-              :key="route.text"
-            >
-              <span
-                class="machine-card__state machine-card__state--ok"
-                data-testid="machine-route"
-              >{{ route.text }}<span
-                v-if="route.note"
-                class="machine-card__route-note"
-                data-testid="machine-route-note"
-              > · {{ route.note }}</span></span>
-            </template>
-            <MachineAddressList
-              v-for="list in addressesOf(entry).length ? [addressesOf(entry)] : []"
-              :key="list.length"
-              :name="entry.name"
-              :addresses="list"
-              :in-use="entry.baseUrl"
-              :save="(urls) => saveAddresses(entry, urls)"
-              @failed="rowError[entry.key] = $event"
-            />
+            <span
+              class="machine-card__state"
+              :class="lines.reachOf(entry, access?.addresses ?? []).tone === 'out' ? 'machine-card__state--bad' : ''"
+              data-testid="machine-reach-line"
+            >{{ lines.reachOf(entry, access?.addresses ?? []).text }}</span>
             <span
               v-if="capabilityLine(entry)"
               class="machine-card__capabilities"
               :title="harnessVersions(entry)"
               data-testid="machine-capabilities"
             >{{ capabilityLine(entry) }}</span>
-            <div
-              v-if="showsAgentWork(entry)"
-              class="machine-card__agents"
-              data-testid="machine-agent-work"
-            >
-              <span class="machine-card__agents-row">
-                <span :id="`agent-work-${entry.key}`">Agents here can send it work</span>
-                <span
-                  class="machine-card__segments"
-                  role="radiogroup"
-                  :aria-labelledby="`agent-work-${entry.key}`"
-                >
-                  <button
-                    v-for="choice in AGENT_WORK_CHOICES"
-                    :key="choice.value"
-                    type="button"
-                    role="radio"
-                    class="machine-card__segment"
-                    :class="{ 'machine-card__segment--on': machines.agentWork[entry.key] === choice.value }"
-                    :aria-checked="machines.agentWork[entry.key] === choice.value"
-                    :disabled="busyKey === entry.key"
-                    :data-testid="`machine-agent-work-${choice.value}`"
-                    @click="setAgentWork(entry, choice.value)"
-                  >{{ choice.label }}</button>
-                </span>
-              </span>
-              <span
-                class="machine-card__agents-level"
-                data-testid="machine-agent-work-level"
-              >Work there runs under {{ entry.name }}'s level: {{ agentWorkLevelName(entry) }}.</span>
-            </div>
-            <MachineJobSeats
-              v-for="key in jobsOn ? [entry.key] : []"
-              :key="key"
-              :entry-key="key"
-            />
-
-            <form
-              v-if="tokenFor === entry.key"
-              class="mt-2 flex flex-wrap items-center gap-2"
-              @submit.prevent="saveToken(entry)"
-            >
-              <input
-                v-model="tokenValue"
-                type="password"
-                autocomplete="off"
-                :class="inputClass"
-                class="max-w-[320px] py-1"
-                placeholder="Paste the new token"
-                :aria-label="`New token for ${entry.name}`"
-              >
-              <button
-                type="submit"
-                :class="buttonSecondaryClass"
-                :disabled="busyKey === entry.key || !tokenValue.trim()"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                :class="buttonSecondaryClass"
-                @click="tokenFor = null"
-              >
-                Cancel
-              </button>
-            </form>
-            <details
-              v-if="diagnosisFor(entry)"
-              class="mt-1 text-xs"
-              data-testid="machine-details"
-            >
-              <summary class="cursor-pointer text-muted">
-                Details
-              </summary>
-              <MachineDiagnosisPanel
-                :diagnosis="diagnosisFor(entry)!"
-                retryable
-                @retry="machines.retryMachine(entry.key)"
-              />
-            </details>
-            <ErrorNote
-              v-if="rowError[entry.key]"
-              :message="rowError[entry.key]"
-              compact
-              class="mt-1"
-            />
           </div>
-
-          <div
-            v-if="renaming !== entry.key"
-            class="machine-card__actions"
-          >
+          <div class="machine-card__actions">
             <button
               v-if="!entry.isLive"
               type="button"
@@ -910,26 +528,11 @@ onUnmounted(() => stopPolling?.());
             <button
               type="button"
               :class="buttonSecondaryClass"
-              @click="startRename(entry)"
+              :aria-label="`${entry.name}'s page`"
+              data-testid="machine-manage"
+              @click="page.open(entry.key)"
             >
-              Rename
-            </button>
-            <button
-              v-if="!entry.isHome"
-              type="button"
-              :class="buttonSecondaryClass"
-              @click="startToken(entry)"
-            >
-              New token
-            </button>
-            <button
-              v-if="!entry.isHome"
-              type="button"
-              :class="buttonDangerClass"
-              data-testid="machine-forget"
-              @click="forget(entry)"
-            >
-              Forget
+              Manage
             </button>
           </div>
         </li>
@@ -938,214 +541,48 @@ onUnmounted(() => stopPolling?.());
 
     <SettingGroup
       id="phones"
-      :title="`Let other devices reach ${homeName}`"
-      hint="Phones and devices, and the access token."
-      data-testid="machine-access"
+      title="Phones and browsers"
+      :hint="yourFleetOn ? 'Every phone and browser that has keys, wherever it connected. Remove one and it loses them on every machine.' : 'The phones and browsers that have keys on this machine.'"
+      data-testid="machine-phones-group"
     >
-      <ReachDialog
-        v-if="reach.state.value?.available"
-        v-model:open="reachOpen"
-        :machine-name="homeName"
-        @changed="loadAccess"
-      />
       <ErrorNote
         v-if="accessError"
         :message="accessError"
         class="mx-4 my-3"
       />
-
       <p
         v-else-if="!access"
         class="px-4 py-3 text-sm text-muted"
       >
         <template v-if="isDevice">
-          This browser is signed in as a paired device. Adding phones and seeing the token happen on the machine itself.
+          This browser is signed in as a paired device. Adding phones happens on the machine itself.
         </template>
         <template v-else>
           {{ accessLoaded ? "This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines." : "Loading…" }}
         </template>
       </p>
-
-      <template v-else>
-        <div
-          class="px-4 py-3"
-          data-testid="machine-phones"
-        >
-          <AddPhonePanel
-            :machine-name="homeName"
-            :public-url="home?.publicUrl ?? null"
-            :addresses="access.addresses"
-            :device-names="deviceNames"
-            @refresh="refreshDevices"
-            @saved-url="onPublicUrlSaved"
-            @reach-changed="loadAccess"
-          />
-          <DevicesList
-            :devices="devices"
-            :this-computer="thisComputer"
-            :everywhere="yourFleetOn"
-            @removed="refreshDevices"
-          />
-        </div>
-
-        <div
-          v-if="reach.state.value?.available && reach.state.value.mode === 'off'"
-          class="flex flex-wrap items-center gap-3 px-4 py-3"
-          data-testid="machine-access-loopback"
-        >
-          <p class="max-w-prose text-sm text-muted">
-            Reachable from <b class="text-text">this machine only</b>. Turn it on to use {{ homeName }} from your phone
-            or another machine.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="machine-reach-open"
-            @click="reachOpen = true"
-          >
-            Let others reach {{ homeName }}
-          </Button>
-        </div>
-        <div
-          v-else-if="reachLabel"
-          class="flex flex-wrap items-center gap-3 px-4 py-3"
-          data-testid="machine-access-reach"
-        >
-          <p class="max-w-prose text-sm text-muted">
-            Reachable from other devices: <b class="text-text">{{ reachLabel }}</b>. Each one needs its own key.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="machine-reach-open"
-            @click="reachOpen = true"
-          >
-            Change
-          </Button>
-        </div>
-        <div
-          v-if="reach.state.value?.mode === 'tailscale-and-home' && reach.state.value.tailscale && !reach.state.value.tailscale.covered"
-          class="px-4 py-3"
-        >
-          <TailscaleCheckNote :check="reach.state.value.tailscale" />
-        </div>
-        <p
-          v-else-if="!access.remoteReachable && !access.requiresToken"
-          class="max-w-prose px-4 py-3 text-sm text-muted"
-          data-testid="machine-access-loopback"
-        >
-          Only this machine can reach it: Fleet listens on {{ access.host }}:{{ access.port }}. To add it from
-          another device, start Fleet with <code class="machine-code">--host 0.0.0.0</code> (or your tailnet
-          address), or put <code class="machine-code">tailscale serve</code> in front of it and start Fleet with
-          <code class="machine-code">--require-token</code>.
-        </p>
-        <p
-          v-else-if="!access.remoteReachable"
-          class="max-w-prose px-4 py-3 text-sm text-muted"
-        >
-          Fleet listens on {{ access.host }}:{{ access.port }} and asks every request for the token, so a proxy
-          such as <code class="machine-code">tailscale serve</code> can forward other devices to it. Use the
-          proxy's address.
-        </p>
-
-        <div
-          v-if="access.addresses.length"
-          class="grid gap-1 px-4 py-3"
-        >
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Addresses</span>
-          <div
-            v-for="address in access.addresses"
-            :key="address.url"
-            class="flex flex-wrap items-center gap-2"
-          >
-            <code class="machine-value">{{ address.url }}</code>
-            <span class="machine-card__os">{{ address.kind }}</span>
-            <button
-              type="button"
-              class="machine-icon-button"
-              :aria-label="`Copy ${address.url}`"
-              @click="copy(address.url, address.url)"
-            >
-              <Check
-                v-if="copied === address.url"
-                :size="14"
-                aria-hidden="true"
-              />
-              <Copy
-                v-else
-                :size="14"
-                aria-hidden="true"
-              />
-            </button>
-          </div>
-        </div>
-
-        <div class="grid gap-1 px-4 py-3">
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
-          <div class="flex flex-wrap items-center gap-2">
-            <code
-              class="machine-value"
-              data-testid="machine-access-token"
-            >{{ showToken ? access.token : "•".repeat(24) }}</code>
-            <button
-              type="button"
-              class="machine-icon-button"
-              :aria-label="showToken ? 'Hide token' : 'Show token'"
-              @click="showToken = !showToken"
-            >
-              <EyeOff
-                v-if="showToken"
-                :size="14"
-                aria-hidden="true"
-              />
-              <Eye
-                v-else
-                :size="14"
-                aria-hidden="true"
-              />
-            </button>
-            <button
-              type="button"
-              class="machine-icon-button"
-              aria-label="Copy token"
-              @click="copy(access.token, 'token')"
-            >
-              <Check
-                v-if="copied === 'token'"
-                :size="14"
-                aria-hidden="true"
-              />
-              <Copy
-                v-else
-                :size="14"
-                aria-hidden="true"
-              />
-            </button>
-            <button
-              v-if="access.tokenSource !== 'environment'"
-              type="button"
-              :class="buttonSecondaryClass"
-              :disabled="isReplacing"
-              @click="replaceToken"
-            >
-              <RefreshCw
-                :size="14"
-                aria-hidden="true"
-              />
-              Replace token
-            </button>
-          </div>
-          <p class="mt-1 max-w-prose text-xs text-muted">
-            <template v-if="access.tokenSource === 'environment'">
-              WEAVE_FLEET_AUTH_TOKEN sets it; change the variable and restart Fleet to replace it.
-            </template>
-            <template v-else>
-              Anyone who has it can run agents, change files and open terminals on this machine. Replacing it locks out every device that
-              has the old one.
-            </template>
-          </p>
-        </div>
-      </template>
+      <div
+        v-else
+        class="px-4 py-3"
+        data-testid="machine-phones"
+      >
+        <AddPhonePanel
+          :machine-name="homeName"
+          :public-url="home?.publicUrl ?? null"
+          :addresses="access.addresses"
+          :device-names="deviceNames"
+          @refresh="homeAccess.refreshDevices()"
+          @saved-url="onPublicUrlSaved"
+          @reach-changed="homeAccess.load()"
+        />
+        <DevicesList
+          :devices="screens"
+          :this-computer="thisComputer"
+          :everywhere="yourFleetOn"
+          hide-this-machine
+          @removed="homeAccess.refreshDevices()"
+        />
+      </div>
     </SettingGroup>
   </div>
 </template>
@@ -1231,66 +668,10 @@ onUnmounted(() => stopPolling?.());
   color: var(--muted);
 }
 
-.machine-card__route-note {
-  color: var(--muted);
-}
-
 .machine-card__capabilities {
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--muted);
-}
-
-.machine-card__agents {
-  display: grid;
-  gap: 4px;
-  margin-top: 6px;
-  font-size: 12.5px;
-  color: var(--text);
-}
-
-.machine-card__agents-row {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.machine-card__segments {
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-}
-
-.machine-card__segment {
-  padding: 2px 10px;
-  color: var(--muted);
-  font-size: 12.5px;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.machine-card__segment + .machine-card__segment {
-  border-left: 1px solid var(--border);
-}
-
-.machine-card__segment:hover:not(:disabled) {
-  color: var(--text);
-}
-
-.machine-card__segment--on {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.machine-card__segment:disabled {
-  cursor: progress;
-}
-
-.machine-card__agents-level {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .machine-card__state--ok {
@@ -1313,34 +694,5 @@ onUnmounted(() => stopPolling?.());
   background: var(--accent-dim);
   font-family: var(--font-mono);
   font-size: 0.85em;
-}
-
-.machine-value {
-  overflow-wrap: anywhere;
-  padding: 5px 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text);
-}
-
-.machine-icon-button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transition: border-color var(--transition), color var(--transition);
-}
-
-.machine-icon-button:hover {
-  border-color: var(--accent);
-  color: var(--text);
 }
 </style>
