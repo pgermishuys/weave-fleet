@@ -16,6 +16,27 @@ export interface PairedDevice {
   pairedVia: string | null;
   /** `machine` for another Fleet paired with a code; a phone or browser is `device`. Missing from an older Fleet. */
   kind?: "device" | "machine";
+  /** Your Fleet: the machine it connected through (its home), by name. Set only on a row of the Fleet-wide list. */
+  throughName?: string | null;
+  /** Your Fleet: this row is one phone or browser of the whole Fleet, so Remove reaches every machine by its Fleet-wide id. */
+  fleetWide?: boolean;
+}
+
+/** A machine that didn't answer when the Fleet-wide list was asked for. */
+export interface NotAnsweringMachine {
+  id: string;
+  name: string;
+}
+
+interface FleetScreenDto {
+  id: string;
+  name: string;
+  platform: string | null;
+  throughId: string | null;
+  throughName: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  machines: string[];
 }
 
 /** A new one-time pairing code. */
@@ -40,6 +61,36 @@ export async function listDevices(): Promise<PairedDevice[]> {
   const response = await fetchOnMachine(null, "/api/machine/devices");
   if (!response.ok) throw new Error(await readError(response, "Couldn't list the devices."));
   return ((await response.json()) as { devices: PairedDevice[] }).devices;
+}
+
+/**
+ * Your Fleet (Labs): every phone and browser in the Fleet, each once, with the machine it connected through. Machines that
+ * don't answer are named, and the rest still list.
+ */
+export async function listFleetScreens(): Promise<{ screens: PairedDevice[]; notAnswering: NotAnsweringMachine[] }> {
+  const response = await fetchOnMachine(null, "/api/machine/screens");
+  if (!response.ok) throw new Error(await readError(response, "Couldn't list the phones and browsers."));
+  const body = await response.json() as { screens: FleetScreenDto[]; notAnswering: NotAnsweringMachine[] };
+  return {
+    screens: body.screens.map((screen) => ({
+      id: screen.id,
+      name: screen.name,
+      platform: screen.platform,
+      createdAt: screen.createdAt,
+      lastUsedAt: screen.lastUsedAt,
+      pairedVia: screen.throughId,
+      kind: "device" as const,
+      throughName: screen.throughName,
+      fleetWide: true,
+    })),
+    notAnswering: body.notAnswering,
+  };
+}
+
+/** Removes a phone or browser from every machine by its Fleet-wide id (a phone's device id, or `screen:{id}`). */
+export async function removeFleetScreen(id: string): Promise<void> {
+  const response = await fetchOnMachine(null, `/api/machine/screens/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) throw new Error(await readError(response, "Couldn't remove it."));
 }
 
 export async function removeDevice(id: string): Promise<void> {

@@ -346,6 +346,7 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.FleetJoin>();
         services.AddHttpClient(WeaveFleet.Application.Machines.FleetJoin.JoinHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(60))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(8) });
+        services.AddSingleton<WeaveFleet.Application.Machines.FleetScreens>();
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.FleetRosterSync>();
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.FleetRosterSync>());
         // Scoped: it counts the caller's own sessions.

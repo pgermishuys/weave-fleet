@@ -378,6 +378,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Machines.RemovalBatch))]
 [JsonSerializable(typeof(WeaveFleet.Application.Machines.RemovalList))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.RemovalsAnswer))]
+[JsonSerializable(typeof(WeaveFleet.Application.Machines.FleetScreenList))]
+[JsonSerializable(typeof(WeaveFleet.Application.Machines.LocalScreens))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceResponse))]
 // Sessions on other machines (peer messages)

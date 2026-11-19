@@ -94,24 +94,24 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
     removal and forget reach every machine, including offline ones when they return.
   - Split into 2–3 PRs: server roster and introductions; phone app grants and notification; removal.
   - J5, J9, J10, J12–J15. L.
-- [x] **6. Found (decision 3).** (#1084 announce, Found and add; second PR: wants-to-join prompt and the desktop first run)
+- [x] **6. Found (decision 3).** (#1084, #1086)
   - A waiting machine (`fleet node up` / `fleet node pair`) announces itself on Tailscale (share discovery with the
     Teams spike / `MachineCandidates` so they don't fork) and on the home network.
   - Add a machine → Found is the default tab, with a code match.
   - "X wants to join your Fleet" on any connected phone or desktop app.
   - The desktop app's first run finds your Fleet and joins it, then asks "Where should new sessions run?".
   - Needs piece 5. J4, J7, J9, J10, J13. M–L.
-- [x] **7. On a new server.** (#PR) `install.sh --join '<address>#CODE'`, and a one-time 30-minute join code from Add a
+- [x] **7. On a new server.** (#1089) `install.sh --join '<address>#CODE'`, and a one-time 30-minute join code from Add a
   machine → On a new server. Needs pieces 5 and 6. J5. M.
-- [x] **8. Away from home (decision 6A).**
+- [x] **8. Away from home (decision 6A).** (#1083)
   - Tailscale checks on both ends, with "Turn on" for the listener.
   - The phone's reach rows and messages.
   - The warning when adding a Tailscale-only machine.
   - Needs pieces 3 and 4. J3. M.
-- [x] **9. Machines page.** (this PR) "Your machines" plus "Phones and browsers", a reach line per machine, and the advanced parts
+- [x] **9. Machines page.** (#1088, #1090) "Your machines" plus "Phones and browsers", a reach line per machine, and the advanced parts
   (token, addresses, own address) on each machine's page. It replaces "Let other devices reach This machine". Needs
   piece 5. M.
-- [x] **10. Phone first (J11).** The phone app's "I don't have Fleet yet" with "Send me the link" / "Share the line".
+- [x] **10. Phone first (J11).** (#1085; website: pgermishuys/weave-website#38) The phone app's "I don't have Fleet yet" with "Send me the link" / "Share the line".
   The website download page "Where will Fleet run?" lives in the weave-website repo: in a weave-website PR (to follow).
   S–M.
 

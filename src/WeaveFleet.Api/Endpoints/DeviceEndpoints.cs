@@ -150,6 +150,42 @@ public static class DeviceEndpoints
         .Produces<DeviceListResponse>(200)
         .WithName("ListDevices");
 
+        // Your Fleet (Labs): the phones and browsers of the whole Fleet, each once. This machine asks every machine in its list
+        // for what it holds (below) and groups it by phone or browser.
+        machine.MapGet("/screens", async (FleetScreens screens, FleetRemovals removals, CancellationToken cancellationToken) =>
+            !await removals.IsEnabledAsync()
+                ? Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden)
+                : Results.Ok(await screens.ListAsync(cancellationToken)))
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<FleetScreenList>(200)
+        .WithName("ListFleetScreens");
+
+        // What one machine holds itself, for another machine in the Fleet to group. The machine token or a machine-kind key.
+        machine.MapGet("/screens/local", async (HttpContext http, FleetScreens screens, FleetRemovals removals, DeviceTokenService devices) =>
+        {
+            if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
+                return Results.Json(new ErrorResponse("Only another machine in your Fleet lists its phones and browsers."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            if (!await removals.IsEnabledAsync())
+                return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            return Results.Ok(await screens.LocalAsync());
+        })
+        .RequireAuthorization()
+        .Produces<LocalScreens>(200)
+        .WithName("ListLocalScreens");
+
+        // Removes a phone or browser from every machine by its Fleet-wide id (a phone's device id, or screen:{id}).
+        machine.MapDelete("/screens/{id}", async (string id, FleetRemovals removals, CancellationToken cancellationToken) =>
+        {
+            if (!await removals.IsEnabledAsync())
+                return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            if (string.IsNullOrWhiteSpace(id) || id.Length > 128)
+                return Results.BadRequest(new ErrorResponse("That isn't a phone or browser id."));
+            await removals.RemoveGranteeAsync(id, cancellationToken);
+            return Results.NoContent();
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .WithName("RemoveFleetScreen");
+
         machine.MapDelete("/devices/{id}", async (
             HttpContext http,
             string id,

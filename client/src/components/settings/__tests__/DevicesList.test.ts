@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import type { PairedDevice } from "@/lib/devices-api";
 
-const { confirmAction, removeDevice } = vi.hoisted(() => ({
+const { confirmAction, removeDevice, removeFleetScreen } = vi.hoisted(() => ({
   confirmAction: vi.fn(async () => true),
   removeDevice: vi.fn(async () => {}),
+  removeFleetScreen: vi.fn(async () => {}),
 }));
 vi.mock("@/components/ui/confirm", () => ({ confirmAction }));
-vi.mock("@/lib/devices-api", () => ({ removeDevice }));
+vi.mock("@/lib/devices-api", () => ({ removeDevice, removeFleetScreen }));
 
 const phone: PairedDevice = {
   id: "d1",
@@ -85,5 +86,28 @@ describe("DevicesList: Remove", () => {
 
     expect(removeDevice).not.toHaveBeenCalled();
     expect(wrapper.emitted("removed")).toBeUndefined();
+  });
+
+  it("lists a phone of the whole Fleet with the machine it connected through, and removes it by its Fleet-wide id", async () => {
+    confirmAction.mockResolvedValueOnce(true);
+    const iphone: PairedDevice = { ...phone, id: "screen:abc", name: "Alex's iPhone", throughName: "atlas", fleetWide: true };
+    const wrapper = mount(DevicesList, { props: { devices: [iphone], thisComputer: "x", everywhere: true, hideThisMachine: true } });
+
+    expect(wrapper.get("[data-testid='device-row']").text()).toContain("Connected through atlas, added");
+
+    await wrapper.get("[data-testid='remove-device-screen:abc']").trigger("click");
+    await flushPromises();
+
+    expect(removeFleetScreen).toHaveBeenCalledWith("screen:abc");
+    expect(removeDevice).not.toHaveBeenCalled();
+    expect(wrapper.emitted("removed")).toEqual([["screen:abc"]]);
+  });
+
+  it("says which machines aren't answering", () => {
+    const one = mount(DevicesList, { props: { devices: [], thisComputer: "x", notAnswering: ["atlas"] } });
+    expect(one.get("[data-testid='devices-not-answering']").text()).toBe("atlas isn't answering, so what it holds isn't shown.");
+    const two = mount(DevicesList, { props: { devices: [], thisComputer: "x", notAnswering: ["atlas", "workbench"] } });
+    expect(two.get("[data-testid='devices-not-answering']").text()).toBe("atlas, workbench aren't answering, so what they hold isn't shown.");
+    expect(mount(DevicesList, { props: { devices: [], thisComputer: "x" } }).find("[data-testid='devices-not-answering']").exists()).toBe(false);
   });
 });
