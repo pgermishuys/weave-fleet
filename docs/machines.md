@@ -868,4 +868,23 @@ home.
 - **Screens.** An open `/phone` page looks at the list every 30 seconds and when the page comes back, and asks for a key
   for any machine it doesn't show yet.
 - **Not yet.** Removing or forgetting a machine on one machine doesn't reach the others (another machine's list can bring
-  it back), and the native phone app takes no grants.
+  it back).
+
+### The native phone app
+
+With Your Fleet on at a machine the app is paired with (its home), the app asks home for its own key on every other
+machine in home's list, so it never pairs them one by one. Nothing new on the server: the app reads
+`GET /api/preferences` (is `YourFleet` `"true"`?), `GET /api/machines` (no tokens for a phone) and calls
+`POST /api/machines/{id}/device-grant` with its own device token, exactly as the web phone does.
+
+- Each key is stored like a paired machine's (Keychain / Keystore), marked `via` the home that made it. Machines the app
+  paired itself never ask others for keys, so keys don't chain.
+- The addresses are home's, in the owner's order, minus any the phone mustn't send a key over (`routes-core`'s `canUse`).
+  A key that the other machine turns away (the phone was removed there) is asked for again on the next pass.
+- A pass runs each time home's connection comes up and every minute while the app is in front. The first list the app
+  reads is not news; a machine that appears in a later one is announced on the Sessions screen as "atlas joined your
+  Fleet" (tap: Machines; cross: dismiss), once the key is in hand, so a machine that was away when it was added is
+  announced when it answers.
+- Removing such a machine on the phone keeps it removed (it isn't asked for again); pairing it by hand undoes that.
+- Not yet: the notification is in the app, not a system push. The native app has no push channel (Fleet's only sender is
+  web push; the `apns` / `fcm` senders the dispatcher leaves room for don't exist).

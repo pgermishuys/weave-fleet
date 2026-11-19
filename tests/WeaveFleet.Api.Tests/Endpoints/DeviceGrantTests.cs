@@ -267,6 +267,30 @@ public sealed class DeviceGrantTests
         (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
     }
 
+    // ---- The native phone app: reads the switch and the list, then asks for a key for every machine it lacks ----
+
+    [Fact]
+    public async Task The_phone_app_reads_the_switch_and_the_list_without_tokens_then_gets_keys_for_each_machine()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        await ListAsync(hangar, falcon);
+        await TurnOnYourFleetAsync(hangar);
+        var (_, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
+        using var phone = Client(hangar, phoneToken);
+
+        (await (await phone.GetAsync("/api/preferences")).ReadSuccessAsync()).GetProperty(YourFleet.PreferenceKey).GetString().ShouldBe("true");
+        var list = (await (await phone.GetAsync("/api/machines")).ReadSuccessAsync()).GetProperty("machines");
+        var listed = list.EnumerateArray().Single();
+        listed.GetProperty("id").GetString().ShouldBe(MachineId(falcon));
+        listed.GetProperty("baseUrl").GetString().ShouldBe("https://falcon.test");
+        listed.TryGetProperty("token", out var token).ShouldBeTrue();
+        token.ValueKind.ShouldBe(JsonValueKind.Null, "a phone never sees a machine's token");
+
+        var granted = await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync();
+        (await Client(falcon, granted.GetProperty("token").GetString()!).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
     // ---- A machine added by its pairing code holds a machine-kind device token, not the machine token ----
 
     [Fact]

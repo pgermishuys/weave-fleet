@@ -5,10 +5,11 @@ import { applyDomainEvent, createSessionStreamState, type SessionStreamState } f
 import { isCanvasEvent, type DomainEvent } from "@fleet/lib/domain-events";
 import type { SessionSnapshot } from "@fleet/lib/session-snapshot";
 import { FleetManager } from "~/fleet/manager";
-import { machines } from "~/fleet/machines";
+import { machines, storage } from "~/fleet/machines";
+import { Roster } from "~/fleet/your-fleet-core";
 import { applyCanvasEvent, pagesFromCanvases, type SessionPage } from "~/fleet/pages";
 
-export const manager = new FleetManager(machines);
+export const manager = new FleetManager(machines, undefined, undefined, new Roster(storage));
 
 /** Stops the sockets while the app is in the background and starts them again when it comes back. */
 export function useForegroundConnections() {

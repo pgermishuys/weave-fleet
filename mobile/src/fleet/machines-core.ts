@@ -13,6 +13,8 @@ export interface Machine {
   token: string;
   deviceId: string;
   pairedAt: number;
+  /** Set when the phone got this machine's key from another machine in the Fleet (Your Fleet) instead of pairing with it: that machine's id. */
+  via?: string;
 }
 
 export interface KeyValueStorage {

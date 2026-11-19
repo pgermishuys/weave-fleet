@@ -4,16 +4,17 @@ import { useEffect, useState } from "react";
 import { Pressable, RefreshControl, SectionList, View } from "react-native";
 import { manager, useFleet } from "~/fleet/hooks";
 import { newPagesOf, pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
+import { joinedText } from "~/fleet/your-fleet-core";
 import { interruptionBanner } from "~/fleet/interruption-core";
 import { rowAge, rowDetail } from "~/fleet/session-list";
-import { Button, EmptyState, FleetMark, InterruptionBanner, SectionHeader, SessionRow, Sheet, Text, glyphStatusOf } from "~/kit";
+import { Button, EmptyState, FleetMark, InterruptionBanner, JoinedBanner, SectionHeader, SessionRow, Sheet, Text, glyphStatusOf } from "~/kit";
 import { Heading, PanelPage } from "~/ui/page";
 import { useTheme } from "~/theme";
 import type { ConnectionState } from "~/fleet/hub";
 
 export default function Sessions() {
   const { color } = useTheme();
-  const { machines, sections, loading, interrupted } = useFleet();
+  const { machines, sections, loading, interrupted, joined } = useFleet();
   const [cutOff, setCutOff] = useState(false);
   const [stopping, setStopping] = useState(false);
   const banner = interruptionBanner(interrupted);
@@ -56,11 +57,20 @@ export default function Sessions() {
         sections={sections}
         keyExtractor={(entry) => entry.key}
         stickySectionHeadersEnabled={false}
-        ListHeaderComponent={banner ? (
-          <InterruptionBanner
+        ListHeaderComponent={banner || joined.length > 0 ? (
+          <View>
+          {joined.map((notice) => (
+            <JoinedBanner
+              key={notice.machineId} testID="joined-banner" text={joinedText(notice)}
+              onPress={() => { manager.dismissJoined(notice.machineId); router.push("/machines"); }}
+              onDismiss={() => manager.dismissJoined(notice.machineId)}
+            />
+          ))}
+          {banner ? <InterruptionBanner
             testID="interruption-banner" text={banner.text} onPress={() => setCutOff(true)} busy={stopping}
             onStopAll={banner.automatic ? () => { setStopping(true); void manager.stopAutomatic().catch(() => {}).finally(() => setStopping(false)); } : undefined}
-          />
+          /> : null}
+          </View>
         ) : undefined}
         contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} tintColor={color.muted} onRefresh={() => { setRefreshing(true); void manager.refresh().finally(() => setRefreshing(false)); }} />}
