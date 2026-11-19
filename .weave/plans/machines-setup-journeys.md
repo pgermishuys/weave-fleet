@@ -111,11 +111,11 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
 - [x] **9. Machines page.** (this PR) "Your machines" plus "Phones and browsers", a reach line per machine, and the advanced parts
   (token, addresses, own address) on each machine's page. It replaces "Let other devices reach This machine". Needs
   piece 5. M.
-- [ ] **10. Phone first (J11).** The phone app's "I don't have Fleet yet" with "Send me the link" / "Copy the line".
-  The website download page "Where will Fleet run?" lives in the weave-website repo: ask the user before touching it.
+- [x] **10. Phone first (J11).** The phone app's "I don't have Fleet yet" with "Send me the link" / "Share the line".
+  The website download page "Where will Fleet run?" lives in the weave-website repo: in a weave-website PR (to follow).
   S–M.
 
-Later list: relaying through another machine (decision 6B); challenge-response before sending a key to a fallback
+Later list: native system push (APNs/FCM) for the phone app's "joined your Fleet" and "wants to join" notices; today they're a banner inside the app (user, 19 Nov 2026); relaying through another machine (decision 6B); challenge-response before sending a key to a fallback
 address (already on the list).
 
 ## Order

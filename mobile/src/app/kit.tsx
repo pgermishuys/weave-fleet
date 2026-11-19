@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  AddressList, PairWarningView, ReachNoteView, Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
+  AddressList, NoFleetYet, PairWarningView, ReachNoteView, Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
   PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, RouteLine, SearchField, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
   ToolBox, ToolRow, UserBubble, WhereLine, type GlyphStatus,
 } from "~/kit";
@@ -156,6 +156,10 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
           <Card tone="waiting">
             <PairWarningView warning={{ title: "atlas is only on Tailscale", body: "This phone can't reach it without Tailscale. Install Tailscale, sign in with the same account as atlas, then connect.", action: { kind: "get", label: "Get Tailscale" } }} />
           </Card>
+        </Section>
+
+        <Section label="I don't have Fleet yet">
+          <NoFleetYet onShare={noop} onShareLine={noop} />
         </Section>
 
         <Section label="Permission card">
