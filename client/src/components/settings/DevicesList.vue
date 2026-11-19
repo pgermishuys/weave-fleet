@@ -71,7 +71,10 @@ async function remove(device: PairedDevice): Promise<void> {
     class="mt-5 grid gap-2"
     data-testid="devices-with-access"
   >
-    <span class="text-xs font-medium uppercase tracking-wide text-muted">{{ hideThisMachine ? "Signed in" : "Devices with access" }}</span>
+    <span
+      v-if="!hideThisMachine"
+      class="text-xs font-medium uppercase tracking-wide text-muted"
+    >Devices with access</span>
     <ul class="devices">
       <li
         v-if="!hideThisMachine"
