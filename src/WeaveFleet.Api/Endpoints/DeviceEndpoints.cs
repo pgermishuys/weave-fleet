@@ -45,28 +45,37 @@ public static class DeviceEndpoints
         var machine = app.MapGroup("/api/machine").WithTags("Devices");
         machine.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
-        machine.MapPost("/pairing", (
+        machine.MapPost("/pairing", async (
             CreatePairingRequest request,
             PairingCodeStore codes,
-            MachineIdentityStore identities) =>
+            MachineIdentityStore identities,
+            LoopbackAuthPolicy policy,
+            TailnetName tailnet,
+            CancellationToken ct) =>
         {
-            // The code opens this Fleet's /pair page, which a node doesn't serve. The phone reaches a node through its
-            // home machine instead (device grants).
-            if (!fleetOptions.ServeUi)
-                return Results.Conflict(new ErrorResponse(
-                    "Pairing a phone needs a Fleet with the web app. Pair the phone with that Fleet, and add this machine to it."));
-
-            var baseUrl = request.BaseUrl is null ? null : MachineEndpoints.NormalizeBaseUrl(request.BaseUrl.Trim());
-            if (baseUrl is null)
-                return Results.BadRequest(new ErrorResponse("baseUrl must be the full http:// or https:// address the phone will open."));
-
+            // A machine with no web app makes phone codes too: the native phone app redeems them over the API, and the
+            // code carries every address, so nobody has to say which one the phone opens.
             var identity = identities.Get();
-            var code = codes.Create();
-            var payload = new PairingPayload(1, identity.Id, identity.Name ?? Environment.MachineName, baseUrl, code.Secret);
-            var json = JsonSerializer.Serialize(payload, ApiJsonContext.Default.PairingPayload);
-            var fragment = Base64Url(Encoding.UTF8.GetBytes(json));
+            var reachable = policy.IsRemoteReachable
+                ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct)).Select(address => address.Url)
+                : [];
 
-            return Results.Ok(new CreatePairingResponse(code.Secret, code.ManualCode, code.ExpiresAt, $"{baseUrl}/pair#p={fragment}", payload));
+            string? own = null;
+            if (!string.IsNullOrWhiteSpace(request.BaseUrl))
+            {
+                own = MachineEndpoints.NormalizeBaseUrl(request.BaseUrl.Trim());
+                if (own is null)
+                    return Results.BadRequest(new ErrorResponse("baseUrl must be the full http:// or https:// address the phone will open."));
+            }
+
+            var urls = PairingAddresses.For(own, identity.PublicUrl, reachable);
+            if (urls.Count == 0)
+                return Results.BadRequest(new ErrorResponse(
+                    "Fleet only listens on this computer, so no phone can reach it. Let other devices reach it first, or give an address of your own."));
+
+            var code = codes.Create();
+            var payload = new PairingPayload(1, identity.Id, identity.Name ?? Environment.MachineName, urls[0], code.Secret, urls);
+            return Results.Ok(new CreatePairingResponse(code.Secret, code.ManualCode, code.ExpiresAt, PairingAddresses.Link(payload), payload));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<CreatePairingResponse>(200)
@@ -86,7 +95,11 @@ public static class DeviceEndpoints
             var addresses = policy.IsRemoteReachable
                 ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct), policy.Reach).Select(address => address.Url).ToList()
                 : [];
-            return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, identity.Name ?? Environment.MachineName, addresses, MachineEndpoints.PairingLink(addresses, code.ManualCode)));
+            // The same code opens a phone too: the QR a machine with no screen prints carries every address.
+            var phoneUrls = PairingAddresses.For(null, identity.PublicUrl, addresses);
+            var name = identity.Name ?? Environment.MachineName;
+            var phoneLink = phoneUrls.Count == 0 ? null : PairingAddresses.Link(new PairingPayload(1, identity.Id, name, phoneUrls[0], code.Secret, phoneUrls));
+            return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, name, addresses, MachineEndpoints.PairingLink(addresses, code.ManualCode), phoneLink));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachinePairingCodeResponse>(200)
@@ -257,6 +270,39 @@ public static class DeviceEndpoints
 
     private static string NormalizePlatform(string? platform) =>
         platform is null ? "other" : platform.ToLowerInvariant();
+
+}
+
+/// <summary>Which addresses a pairing code carries, in the order a phone should try them, and the link they make.</summary>
+public static class PairingAddresses
+{
+    /// <summary>
+    /// Every address, best first: the one someone typed, the saved phone address, then what Fleet listens on (Tailscale,
+    /// the home network, the host name). An older phone reads only the first.
+    /// </summary>
+    public static List<string> For(string? own, string? publicUrl, IEnumerable<string> reachable)
+    {
+        var urls = new List<string>();
+        void Add(string? url)
+        {
+            var normalized = url is null ? null : MachineEndpoints.NormalizeBaseUrl(url.Trim());
+            if (normalized is not null && !urls.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                urls.Add(normalized);
+        }
+
+        Add(own);
+        Add(publicUrl);
+        foreach (var url in reachable)
+            Add(url);
+        return urls;
+    }
+
+    /// <summary>The URL a QR code shows: <c>&lt;first address&gt;/pair#p=&lt;base64url(payload)&gt;</c>.</summary>
+    public static string Link(PairingPayload payload)
+    {
+        var json = JsonSerializer.Serialize(payload, ApiJsonContext.Default.PairingPayload);
+        return $"{payload.Url}/pair#p={Base64Url(Encoding.UTF8.GetBytes(json))}";
+    }
 
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

@@ -269,6 +269,10 @@ run_service linux node up --lan --port 5512 --data-dir node-data || fail "node u
 grep -qF '"--host" "0.0.0.0"' "$UNIT" 2>/dev/null || fail "node up --lan didn't write host 0.0.0.0: $(cat "$UNIT" 2>/dev/null)"
 expect_output "✓ Listening on 0.0.0.0:5512" "node up --lan"
 expect_output "✓ Runs in the background, starts at login" "node up --lan"
+# It looks at Tailscale and the harnesses first, and names the next step for each that's missing.
+expect_output "Checking what" "node up --lan"
+expect_output "Tailscale" "node up --lan"
+if ! grep -qE "will run sessions here|No harness" "$WORK/stdout"; then fail "node up --lan said nothing about a harness: $(cat "$WORK/stdout")"; fi
 expect_output "http://stub/add-machine#CODE" "node up --lan"
 expect_calls "systemctl --user daemon-reload
 systemctl --user enable fleet-node.service

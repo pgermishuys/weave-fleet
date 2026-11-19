@@ -3,7 +3,7 @@ using WeaveFleet.Application.Devices;
 
 namespace WeaveFleet.Api.Contracts;
 
-/// <summary>Asks for a pairing code. <paramref name="BaseUrl"/> is the address the phone should open.</summary>
+/// <summary>Asks for a pairing code. <paramref name="BaseUrl"/> is an address of the caller's own to put first; leave it out and the code carries the addresses Fleet knows.</summary>
 public sealed record CreatePairingRequest(string? BaseUrl);
 
 /// <summary>
@@ -11,7 +11,9 @@ public sealed record CreatePairingRequest(string? BaseUrl);
 /// and redeem the code. The web app puts it, base64url-encoded, in the fragment of <c>&lt;url&gt;/pair#p=…</c>, so it
 /// never reaches a server or a log.
 /// </summary>
-public sealed record PairingPayload(int V, string MachineId, string MachineName, string Url, string Secret);
+/// <param name="Url">The first address, for a phone that reads only one.</param>
+/// <param name="Urls">Every address the machine can be reached on, best first (<paramref name="Url"/> is the first). A phone tries each and checks the machine's id before it sends the secret. Absent from codes made by an older Fleet.</param>
+public sealed record PairingPayload(int V, string MachineId, string MachineName, string Url, string Secret, IReadOnlyList<string>? Urls = null);
 
 /// <summary>A new pairing code.</summary>
 /// <param name="Secret">The one-time secret. Shown once; never stored in the clear.</param>
@@ -40,13 +42,15 @@ public sealed record PairingRedeemRequest(string? Secret, string? ManualCode, st
 /// <param name="ManualCode">The code, <c>XXXX-XXXX</c>.</param>
 /// <param name="Addresses">URLs another machine might use, best first. Empty when Fleet only listens on loopback.</param>
 /// <param name="Link">The pairing link for the first address (<c>&lt;address&gt;/add-machine#CODE</c>); null when there is no address.</param>
+/// <param name="PhoneLink">The same code as a link a phone scans (<c>&lt;address&gt;/pair#p=…</c>), carrying every address; null when there is none.</param>
 public sealed record MachinePairingCodeResponse(
     string ManualCode,
     DateTimeOffset ExpiresAt,
     string MachineId,
     string MachineName,
     IReadOnlyList<string> Addresses,
-    string? Link = null);
+    string? Link = null,
+    string? PhoneLink = null);
 
 /// <summary>Adds a machine by the address it listens on and a code from <c>fleet node pair</c>.</summary>
 public sealed record PairMachineRequest(string? BaseUrl, string? Code);

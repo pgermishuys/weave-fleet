@@ -514,8 +514,53 @@ ask_node_for_link() {
   "$APP_BIN" --node-pair --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" 2>/dev/null
 }
 
+# What this machine has before anything is asked: Tailscale, and a harness to run sessions with. A missing piece says
+# what to do next; none of it stops the setup, since either can be added afterwards.
+node_up_checks() {
+  NAME="$(hostname 2>/dev/null | sed 's/..*//')"
+  echo "Checking what ${NAME:-this machine} has"
+  echo ""
+  if [ -n "$TAILSCALE_IP" ]; then
+    printf '  ✓ Tailscale is on      %s
+' "$TAILSCALE_IP"
+  elif [ -n "$(command -v tailscale)" ] || [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then
+    printf '  – Tailscale            installed, not signed in. Run tailscale up so your phone reaches this machine away from home.
+'
+  else
+    printf '  – Tailscale            not installed. Without it your phone reaches this machine only on your home network.
+'
+    printf '                         Get it from tailscale.com/download, then run tailscale up and fleet node up again.
+'
+  fi
+  found_harness=0
+  if [ -n "$(command -v claude)" ]; then
+    found_harness=1
+    printf '  ✓ Claude Code %s  will run sessions here
+' "$(claude --version 2>/dev/null | head -n 1 | sed 's/ .*//')"
+  fi
+  if [ -n "$(command -v opencode)" ]; then
+    found_harness=1
+    printf '  ✓ OpenCode             will run sessions here
+'
+  fi
+  if [ "$found_harness" -eq 0 ]; then
+    printf '  ! No harness           sessions need one on this machine. Install Claude Code, then run claude once to sign in:
+'
+    printf '                         curl -fsSL https://claude.ai/install.sh | bash
+'
+  elif [ -z "$(command -v claude)" ]; then
+    printf '  – Claude Code          not installed (optional): curl -fsSL https://claude.ai/install.sh | bash
+'
+  elif [ -z "$(command -v opencode)" ]; then
+    printf '  – OpenCode             not installed (optional): curl -fsSL https://opencode.ai/install | bash
+'
+  fi
+  echo ""
+}
+
 node_up_choose() {
   TAILSCALE_IP="$(tailscale_ip)"
+  node_up_checks
   CURRENT_HOST="$(installed_host)"
   CURRENT_PRIVATE="$(installed_private)"
   # What is installed: Tailscale is 0.0.0.0 with --private-networks, or the Tailscale address an older install listens on.

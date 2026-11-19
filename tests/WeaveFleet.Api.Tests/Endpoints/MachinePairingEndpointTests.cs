@@ -23,7 +23,7 @@ public sealed class MachinePairingEndpointTests : IClassFixture<MachinePairingEn
     public MachinePairingEndpointTests(Server server) => _node = server.Factory;
 
     [Fact]
-    public async Task A_node_makes_a_code_for_another_machine_but_still_refuses_to_pair_a_phone()
+    public async Task A_node_makes_a_code_for_another_machine_and_for_a_phone()
     {
         var factory = _node;
         using var owner = Client(factory, MasterToken(factory));
@@ -35,7 +35,41 @@ public sealed class MachinePairingEndpointTests : IClassFixture<MachinePairingEn
         code.GetProperty("machineName").GetString().ShouldNotBeNullOrEmpty();
 
         var phone = await owner.PostAsJsonAsync("/api/machine/pairing", new { baseUrl = "https://harbor.example.test" });
-        phone.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        phone.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public void A_code_carries_every_address_with_the_ones_given_first_and_none_twice()
+    {
+        var urls = PairingAddresses.For(
+            "https://studio.example.test/",
+            "https://studio.tail4f2a.ts.net",
+            ["http://studio.tail4f2a.ts.net:6262", "http://192.168.1.20:6262", "HTTPS://studio.example.test", "http://studio:6262"]);
+
+        urls.ShouldBe([
+            "https://studio.example.test",
+            "https://studio.tail4f2a.ts.net",
+            "http://studio.tail4f2a.ts.net:6262",
+            "http://192.168.1.20:6262",
+            "http://studio:6262",
+        ]);
+        PairingAddresses.For(null, null, []).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void The_phone_link_holds_the_first_address_and_all_of_them_for_a_phone_to_try()
+    {
+        var payload = new WeaveFleet.Api.Contracts.PairingPayload(1, "m1", "hangar", "http://hangar.ts.net:6262", "s3cret", ["http://hangar.ts.net:6262", "http://192.168.1.31:6262"]);
+
+        var link = PairingAddresses.Link(payload);
+
+        link.ShouldStartWith("http://hangar.ts.net:6262/pair#p=");
+        var encoded = link[(link.IndexOf("#p=", StringComparison.Ordinal) + 3)..].Replace('-', '+').Replace('_', '/');
+        encoded += new string('=', (4 - encoded.Length % 4) % 4);
+        using var json = JsonDocument.Parse(System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded)));
+        json.RootElement.GetProperty("v").GetInt32().ShouldBe(1);
+        json.RootElement.GetProperty("url").GetString().ShouldBe("http://hangar.ts.net:6262");
+        json.RootElement.GetProperty("urls").GetArrayLength().ShouldBe(2);
     }
 
     [Fact]

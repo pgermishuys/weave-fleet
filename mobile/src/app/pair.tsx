@@ -29,8 +29,9 @@ export default function Pair() {
     setBusy(true);
     setError(null);
     try {
-      setMachineName((await previewPairing(next)).machineName);
-      setTarget(next);
+      const found = await previewPairing(next);
+      setMachineName(found.machineName);
+      setTarget(found.target);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

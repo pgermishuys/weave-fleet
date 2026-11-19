@@ -62,6 +62,7 @@ public static class NodePairCommand
         var name = root.GetProperty("machineName").GetString();
         var addresses = root.GetProperty("addresses").EnumerateArray().Select(a => a.GetString()!).ToList();
         var link = root.TryGetProperty("link", out var linkElement) ? linkElement.GetString() : null;
+        var phoneLink = root.TryGetProperty("phoneLink", out var phoneElement) ? phoneElement.GetString() : null;
         if (addresses.Count == 0)
             addresses.Add($"http://localhost:{port}");
 
@@ -76,6 +77,8 @@ public static class NodePairCommand
                 writer.WriteString("machineName", name);
                 if (link is not null)
                     writer.WriteString("link", link);
+                if (phoneLink is not null)
+                    writer.WriteString("phoneLink", phoneLink);
                 writer.WriteStartArray("addresses");
                 foreach (var address in addresses)
                     writer.WriteStringValue(address);
@@ -95,7 +98,24 @@ public static class NodePairCommand
             return 0;
         }
 
-        await output.WriteLineAsync($"Pairing link for {name}");
+        if (phoneLink is not null)
+        {
+            await output.WriteLineAsync($"Connect a phone or a desktop app to {name}");
+            await output.WriteLineAsync();
+            await output.WriteLineAsync("Phone: open the Fleet app and scan this code. It tries every address below, so nothing is typed.");
+            await output.WriteLineAsync();
+            foreach (var line in TerminalQr.Lines(phoneLink))
+                await output.WriteLineAsync(line);
+            await output.WriteLineAsync();
+            await output.WriteLineAsync($"No camera? In the phone app choose Type the code, and enter {addresses[0]} and {code}");
+            await output.WriteLineAsync();
+            await output.WriteLineAsync("Or add it to the Fleet you work from on a computer, with this link:");
+        }
+        else
+        {
+            await output.WriteLineAsync($"Pairing link for {name}");
+        }
+
         await output.WriteLineAsync();
         await output.WriteLineAsync($"    {link}");
         await output.WriteLineAsync();
