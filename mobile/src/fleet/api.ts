@@ -84,6 +84,8 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
     machine: () => request<{ id: string; addresses?: { url: string; kind: string }[] | null }>("/api/machine"),
     /** The machines this one is home to, each with its addresses in the owner's order. */
     machines: () => request<{ machines: ListedMachine[] }>("/api/machines"),
+    /** Machines waiting to be added (they ran `fleet node pair`), as this machine sees them on Tailscale and its network. */
+    found: () => request<{ machines: { machineId: string; name: string }[] }>("/api/machines/found"),
     /** The machine's switches (Settings → Labs among them), for Your Fleet. */
     preferences: () => request<Record<string, string>>("/api/preferences"),
     /** The phone's own key on another machine in this machine's list: this machine makes it there and hands it over. */

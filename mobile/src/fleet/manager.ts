@@ -6,7 +6,7 @@ import { machineApi, type MachineApi, type SessionListItem } from "~/fleet/api";
 import { MachineHub, type ConnectionState } from "~/fleet/hub";
 import { phoneTailnet, type PhoneTailnet } from "@fleet/lib/phone-reach";
 import type { Machine, MachinesStore } from "~/fleet/machines-core";
-import { isYourFleetOn, machineFromGrant, machinesToJoin, Roster, type JoinedNotice } from "~/fleet/your-fleet-core";
+import { isYourFleetOn, machineFromGrant, machinesToJoin, Roster, type JoinedNotice, type WantingNotice } from "~/fleet/your-fleet-core";
 import {
   adoptOrder, betterAddress, canUse, isBest, learnAddresses, orderForHome, pickAddress, probeFor, recordOutcomes, RECHECK_MS,
   reorderAddresses, seedAddresses, type MachineAddress, type Probe, type ProbeOutcome,
@@ -37,6 +37,8 @@ export interface FleetSnapshot {
   loading: boolean;
   /** Machines that joined the Fleet since the phone last looked (Your Fleet), newest first. */
   joined: JoinedNotice[];
+  /** Machines waiting to join the Fleet, as the machines the phone is paired with see them (Your Fleet). */
+  wanting: WantingNotice[];
 }
 
 interface Conn {
@@ -64,8 +66,10 @@ export class FleetManager {
   private conns = new Map<string, Conn>();
   private listeners = new Set<() => void>();
   private foreground = true;
-  private cached: FleetSnapshot = { machines: [], tailnet: "unknown", everOnTailnet: false, sections: [], interrupted: [], loading: false, joined: [] };
+  private cached: FleetSnapshot = { machines: [], tailnet: "unknown", everOnTailnet: false, sections: [], interrupted: [], loading: false, joined: [], wanting: [] };
   private joined: JoinedNotice[] = [];
+  private wantingBy = new Map<string, WantingNotice[]>();
+  private wantingDismissed = new Set<string>();
   private joining = new Set<string>();
 
   /** `probe` asks who answers at an address, `makeHub` opens a machine's hub; tests replace them. */
@@ -262,6 +266,7 @@ export class FleetManager {
     try {
       if (!isYourFleetOn(await conn.api.preferences().catch(() => null))) return;
       const { machines: listed } = await conn.api.machines();
+      await this.lookForWaiting(conn, listed.map((m) => m.id));
       const fresh = await this.roster.see([home.machineId, ...listed.map((m) => m.id)]);
       const declined = await this.roster.declined();
       const paired = this.store.all();
@@ -288,6 +293,19 @@ export class FleetManager {
     } finally {
       this.joining.delete(home.machineId);
     }
+  }
+
+  /** Asks home who is waiting to join. One it already lists, or that this phone already holds, isn't. */
+  private async lookForWaiting(conn: Conn, listedIds: string[]) {
+    const waiting = await conn.api.found().then((r) => r.machines).catch(() => []);
+    const known = new Set([conn.machine.machineId, ...listedIds, ...this.store.all().map((m) => m.machineId)]);
+    this.wantingBy.set(conn.machine.machineId, waiting.filter((m) => !known.has(m.machineId)).map((m) => ({ machineId: m.machineId, machineName: m.name })));
+    this.publish();
+  }
+
+  dismissWanting(machineId: string) {
+    this.wantingDismissed.add(machineId);
+    this.publish();
   }
 
   dismissJoined(machineId?: string) {
@@ -408,6 +426,7 @@ export class FleetManager {
       machines: views,
       sections: sectionSessions(conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, items: c.items }))),
       joined: this.joined,
+      wanting: [...new Map([...this.wantingBy.values()].flat().filter((w) => !this.wantingDismissed.has(w.machineId)).map((w) => [w.machineId, w])).values()],
       loading: conns.some((c) => !c.loaded && c.hub.state !== "signed-out" && c.hub.state !== "offline"),
     };
     for (const listener of this.listeners) listener();

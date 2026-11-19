@@ -13,6 +13,7 @@ import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
 import GoToFileDialog from "@/components/canvas/GoToFileDialog.vue";
 import ProblemReportDialog from "@/components/report/ProblemReportDialog.vue";
+import FirstRunFleet from "@/components/onboarding/FirstRunFleet.vue";
 import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
@@ -45,6 +46,7 @@ import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { useUpdateNotices } from "@/composables/use-update-notices";
 import { useRestartNotice } from "@/composables/use-restart-notice";
 import { useFleetUpdateNotices } from "@/composables/use-fleet-update-notices";
+import { useJoinPrompt } from "@/composables/use-join-prompt";
 import { useStaleWindowNotice } from "@/composables/use-stale-window-notice";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
@@ -72,6 +74,7 @@ useModsRuntimeStore().listen();
 useUpdateNotices();
 useRestartNotice();
 useFleetUpdateNotices();
+useJoinPrompt();
 useStaleWindowNotice();
 useVisualViewport();
 useKeyboardScroll();
@@ -441,6 +444,7 @@ function onGutterPointerDown(e: PointerEvent): void {
       <GoToFileDialog />
     </MachineScope>
     <ProblemReportDialog />
+    <FirstRunFleet />
     <ArchiveUndoToast />
     <NoticeCard />
   </div>

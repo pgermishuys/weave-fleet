@@ -125,6 +125,8 @@ While `fleet node pair` (or `fleet node up`, which runs it) has a live code, the
 - **Tailscale.** Fleet asks `tailscale status --json` (the reader `MachineCandidates` uses too) and asks each online peer, on Fleet's port, `GET /api/pairing/waiting`.
 - **Home network.** A one-second UDP broadcast on port 6263 while the code is live (`FLEET_FOUND_PORT` changes it). It is a plain datagram, not mDNS: nothing to install and no admin rights on Windows, macOS or Linux, and no clash with the system's own mDNS responder on port 5353. Fleet listens only while Found is open, and asks only the address that sent it (this computer, the home network or Tailscale) and only believes it when that address answers with the same machine id.
 - **Stops.** When the code is used or runs out.
+- **"atlas wants to join your Fleet".** With Your Fleet on (Settings → Labs), every connected screen looks every 20 seconds (`GET /api/machines/found`, which a paired phone or signed-in screen may read; only the owner adds). The desktop app and browsers show a notice with an Add button that opens Add a machine → Found, where the code is checked. The native phone app shows the same line as a banner on the Sessions screen, asked for from the machine it is paired with. Nothing is pushed: Fleet has no native push sender, so a screen that isn't open doesn't hear.
+- **The desktop app's first run.** The window looks once for a machine that is waiting. If it finds one it shows "Found your Fleet" with the same code check, and after joining asks "Where should new sessions run?". If nothing is waiting it shows nothing and doesn't look again; Add a machine → Found is always there.
 
 ### Set a machine up from here (over SSH)
 
