@@ -26,6 +26,9 @@ import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
 import MachineAddressList from "@/components/settings/MachineAddressList.vue";
 import { isTailscale, kindOf, type MachineAddress } from "@/lib/machine-routes";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
+import { usePreferenceSwitch } from "@/composables/use-preference-switch";
+import { usePreferencesStore } from "@/stores/preferences";
+import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
 import { diagnosisOf, tunnelDownDiagnosis, type MachineDiagnosis } from "@/lib/machine-diagnosis";
@@ -52,6 +55,9 @@ const { entries, others, home, liveReachable } = storeToRefs(machines);
 // Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
 // comment node, and with Jobs off the card must render exactly as it did.
 const { isJobsEnabled: jobsOn } = useJobsFeature();
+// Your Fleet (Labs): forgetting a machine, or removing a phone, reaches every machine.
+usePreferencesStore().ensureLoaded();
+const { enabled: yourFleetOn } = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
@@ -257,12 +263,19 @@ async function setAgentWork(entry: MachineEntry, value: MachineAgentWork): Promi
 }
 
 async function forget(entry: MachineEntry): Promise<void> {
-  const confirmed = await confirmAction({
-    title: `Forget ${entry.name}?`,
-    body: `Its sessions stay on ${entry.name}; this device just stops listing them.`,
-    confirmLabel: "Forget machine",
-    destructive: true,
-  });
+  const confirmed = await confirmAction(yourFleetOn.value
+    ? {
+        title: `Forget ${entry.name} on every machine in your Fleet?`,
+        body: `Every machine drops it from its list and its keys stop working, even on machines that are off now: they hear when they're back. Its sessions stay on ${entry.name}. To use it again, add it again with its pairing code.`,
+        confirmLabel: `Forget ${entry.name}`,
+        destructive: true,
+      }
+    : {
+        title: `Forget ${entry.name}?`,
+        body: `Its sessions stay on ${entry.name}; this device just stops listing them.`,
+        confirmLabel: "Forget machine",
+        destructive: true,
+      });
   if (!confirmed) return;
   machines.forgetMachine(entry.key);
 }
@@ -970,6 +983,7 @@ onUnmounted(() => stopPolling?.());
           <DevicesList
             :devices="devices"
             :this-computer="thisComputer"
+            :everywhere="yourFleetOn"
             @removed="refreshDevices"
           />
         </div>

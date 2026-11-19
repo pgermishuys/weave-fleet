@@ -1,6 +1,6 @@
 import { shallowRef } from "vue";
 import { readCredentials, removeGrant, saveGrant, type DeviceCredentials, type MachineGrant } from "@/lib/device-credentials";
-import { machinesNeedingGrants, requestGrant, unreachableReason, type ListedMachine } from "@/lib/phone/grants";
+import { machinesNeedingGrants, RemovedFromFleetError, requestGrant, unreachableReason, type ListedMachine } from "@/lib/phone/grants";
 import { removeScreenGrant, saveScreenGrant, screenCredentials, screenId, screenName } from "@/lib/phone/screen-keys";
 import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 
@@ -33,6 +33,8 @@ export function useMachineGrants() {
   const problems = shallowRef<Record<string, string>>({});
   const retried = new Set<string>();
   let isScreen = false;
+  // Home said this screen was removed from the Fleet: it stops asking, for this page load.
+  let removed = false;
 
   async function credentialsNow(): Promise<DeviceCredentials | null> {
     const phone = await readCredentials();
@@ -60,6 +62,7 @@ export function useMachineGrants() {
   async function ensureGrants(machines: readonly ListedMachine[]): Promise<DeviceCredentials | null> {
     let credentials = await credentialsNow();
     if (!credentials) return null;
+    if (removed) return credentials;
 
     const next: Record<string, string> = {};
     for (const machine of machines) {
@@ -73,6 +76,10 @@ export function useMachineGrants() {
         credentials = (await keep(grant)) ?? credentials;
       } catch (error) {
         next[machine.id] = error instanceof Error ? error.message : String(error);
+        if (error instanceof RemovedFromFleetError) {
+          removed = true;
+          break;
+        }
       }
     }
 
@@ -85,7 +92,7 @@ export function useMachineGrants() {
    * load. Returns the new token, or null when there's none to be had.
    */
   async function renewGrant(machineId: string): Promise<string | null> {
-    if (retried.has(machineId)) return null;
+    if (retried.has(machineId) || removed) return null;
     retried.add(machineId);
     const credentials = await credentialsNow();
     if (!credentials) return null;
@@ -96,6 +103,7 @@ export function useMachineGrants() {
       await keep(grant);
       return grant.token;
     } catch (error) {
+      if (error instanceof RemovedFromFleetError) removed = true;
       problems.value = { ...problems.value, [machineId]: error instanceof Error ? error.message : String(error) };
       return null;
     }

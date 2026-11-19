@@ -876,8 +876,45 @@ home.
   receiving machine, introductions are refused.
 - **Screens.** An open `/phone` page looks at the list every 30 seconds and when the page comes back, and asks for a key
   for any machine it doesn't show yet.
-- **Not yet.** Removing or forgetting a machine on one machine doesn't reach the others (another machine's list can bring
-  it back).
+- **Removal.** See the next section.
+
+### Forgetting and removing reach every machine (Your Fleet, third slice)
+
+With Your Fleet on, forget atlas on any machine (or screen) and it is gone from every machine; remove a phone or a browser
+on any machine and it loses its keys on every machine. A machine that was off hears when it is back.
+
+- **Removals.** A machine keeps what was forgotten or removed in `fleet_removals` (`id`, `kind`, `removed_at`,
+  `removed_by`): kind `machine` for a forgotten machine, `grantee` for a phone or a browser (a phone's device id, or
+  `screen:{id}`). The machine the user did it on keeps one, applies it, and tells every machine in its list
+  (`POST /api/machine/removals`, `{ from, removals }`, a machine's key or the owner's token only; refused with Your
+  Fleet off). Each machine that takes in a removal it didn't have applies it and tells its own list, so it spreads where
+  the first machine can't reach. `GET /api/machine/removals` lists them.
+- **Forgetting a machine.** `DELETE /api/machines/{id}` on a machine with Your Fleet on: the phones' and browsers' keys
+  on atlas are removed (as before), the keys this machine asked other machines to make for atlas are removed there
+  (`device_grants` under `machine:{id}`), the keys this machine made for atlas are revoked (`devices.made_for`),
+  atlas is told, and the row is deleted. Atlas, told by a machine that forgot it, drops that machine from its list and
+  revokes the keys it made for it, the key that machine used, and the keys it holds for it. A machine reached over SSH
+  is the exception: its address is a tunnel only this machine has, so it is removed here and nowhere else.
+- **Removing a phone or a browser.** The owner removing a device (`DELETE /api/machine/devices/{id}`) removes its
+  *grantee*: the phone's own device id, or for a key a home asked this machine for (`devices.made_for`, set by the
+  home when it mints one) the id of the phone or `screen:{id}` it is for. Every machine revokes the keys made for it and
+  the phone itself when it's paired there (so a phone removed on atlas is unpaired from its home, workbench). Removing a
+  key a machine made for another machine is not a removal of the machine.
+- **No new keys.** `POST /api/machines/{id}/device-grant` answers 403 "This device was removed from your Fleet." for a
+  removed phone or browser, and `POST /api/machine/devices` refuses (409) to make a key for anything removed. A phone
+  that was unpaired gets its usual 401 from home. The web phone pages stop asking for the rest of the page load.
+- **Offline catch-up.** Whenever two machines compare lists (when either list changes, when a machine answers again, and
+  before introductions in each pass) they first compare removals: each takes the ones the other has that it hasn't, and
+  sends the ones the other lacks. So a machine that was off applies what it missed, and a list that still has a forgotten
+  machine can't introduce it again.
+- **Adding it back on purpose.** Adding a forgotten machine again by its pairing code or token clears the removal on the
+  machine it is added on. A removal only applies to a machine added before it, and a machine added after is introduced to
+  the rest with the time it was added (`Introduction.since`), which clears the removal on each machine that holds one. A
+  machine introducing *itself* has no such time, so a forgotten machine can't talk its way back in. Times are each
+  machine's own clock; a removal dated more than five minutes ahead is taken as now.
+- **Not yet.** A machine told it was forgotten drops the machine that told it, but not machines it has that didn't tell
+  it (a forgotten machine that was reached by only some). Their keys for it are revoked by the ones that forgot it, so it
+  can't reach them; its list shows them as not answering until removed there.
 
 ### The native phone app
 
@@ -895,5 +932,7 @@ machine in home's list, so it never pairs them one by one. Nothing new on the se
   Fleet" (tap: Machines; cross: dismiss), once the key is in hand, so a machine that was away when it was added is
   announced when it answers.
 - Removing such a machine on the phone keeps it removed (it isn't asked for again); pairing it by hand undoes that.
+- A phone removed from the Fleet (on any machine) is unpaired from its home: home answers 401, which the app already
+  treats as removed, so it isn't given a fresh key.
 - Not yet: the notification is in the app, not a system push. The native app has no push channel (Fleet's only sender is
   web push; the `apns` / `fcm` senders the dispatcher leaves room for don't exist).

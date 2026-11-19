@@ -177,6 +177,52 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
             });
     }
 
+    public async Task<IReadOnlyList<FleetRemoval>> ListRemovalsAsync()
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync("SELECT id, kind, removed_at, removed_by FROM fleet_removals ORDER BY removed_at, id", _ => { }, ReadRemoval);
+    }
+
+    public async Task<FleetRemoval?> GetRemovalAsync(string id)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            "SELECT id, kind, removed_at, removed_by FROM fleet_removals WHERE id = @Id",
+            cmd => cmd.AddParameter("Id", id),
+            ReadRemoval);
+    }
+
+    public async Task SaveRemovalAsync(FleetRemoval removal)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        // Timestamps are fixed-width UTC ("O"), so comparing the text compares the time.
+        await conn.ExecuteNonQueryAsync(
+            """
+            INSERT INTO fleet_removals (id, kind, removed_at, removed_by) VALUES (@Id, @Kind, @RemovedAt, @RemovedBy)
+            ON CONFLICT (id) DO UPDATE SET kind = excluded.kind, removed_at = excluded.removed_at, removed_by = excluded.removed_by
+            WHERE excluded.removed_at > fleet_removals.removed_at
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Id", removal.Id);
+                cmd.AddParameter("Kind", removal.Kind);
+                cmd.AddParameter("RemovedAt", Format(removal.RemovedAt));
+                cmd.AddParameter("RemovedBy", removal.RemovedBy);
+            });
+    }
+
+    public async Task DeleteRemovalAsync(string id)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync("DELETE FROM fleet_removals WHERE id = @Id", cmd => cmd.AddParameter("Id", id));
+    }
+
+    private static FleetRemoval ReadRemoval(DbDataReader r) => new(
+        r.GetString(r.GetOrdinal("id")),
+        r.GetString(r.GetOrdinal("kind")),
+        Parse(r.GetString(r.GetOrdinal("removed_at"))),
+        r.GetNullableString(r.GetOrdinal("removed_by")));
+
     private static string Format(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static DateTimeOffset Parse(string value) =>

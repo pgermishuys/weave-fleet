@@ -48,6 +48,24 @@ describe("DevicesList: Remove", () => {
     expect(wrapper.emitted("removed")).toEqual([["d1"]]);
   });
 
+  it("says it reaches every machine when Your Fleet is on, for a phone but not for a machine's key", async () => {
+    confirmAction.mockResolvedValue(false);
+    const wrapper = mount(DevicesList, { props: { devices: [phone, studio], thisComputer: "x", everywhere: true } });
+
+    await wrapper.get("[data-testid='remove-device-d1']").trigger("click");
+    await flushPromises();
+    expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: "Remove Robin's phone on every machine in your Fleet?",
+      confirmLabel: "Remove Robin's phone",
+      destructive: true,
+    }));
+
+    await wrapper.get("[data-testid='remove-device-m1']").trigger("click");
+    await flushPromises();
+    expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({ confirmLabel: "Remove machine" }));
+    confirmAction.mockResolvedValue(true);
+  });
+
   it("names a paired machine as a machine", async () => {
     confirmAction.mockResolvedValueOnce(false);
     const wrapper = mountList();

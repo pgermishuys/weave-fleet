@@ -84,8 +84,12 @@ public sealed record DeviceListResponse(IReadOnlyList<DeviceSummary> Devices);
 /// may ask.
 /// </summary>
 /// <param name="PairedVia">The id of the machine asking: the phone's home machine.</param>
+/// <param name="MadeFor">The machine, phone or screen the key is made for, so removing that revokes it (Your Fleet, Labs).</param>
 /// <param name="Kind"><c>device</c> (the default) or <c>machine</c>: a key another machine uses to reach this one (Your Fleet, Labs).</param>
-public sealed record CreateDeviceRequest(string? Name, string? Platform, string? PairedVia, string? Kind = null);
+public sealed record CreateDeviceRequest(string? Name, string? Platform, string? PairedVia, string? Kind = null, string? MadeFor = null);
+
+/// <summary>How many of the removals sent were news to this machine (Your Fleet, Labs).</summary>
+public sealed record RemovalsAnswer(int Applied);
 
 /// <summary>A device token made on request.</summary>
 public sealed record CreateDeviceResponse(string DeviceId, string Token);

@@ -338,6 +338,7 @@ public static class DependencyInjection
             .AddLogger<WeaveFleet.Infrastructure.Machines.MachineProbeRequestLogger>();
         services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
         // Your Fleet (Labs): every machine keeps the list, and machines are introduced to each other.
+        services.AddSingleton<WeaveFleet.Application.Machines.FleetRemovals>();
         services.AddSingleton<WeaveFleet.Application.Machines.FleetRoster>();
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.FleetRosterSync>();
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.FleetRosterSync>());

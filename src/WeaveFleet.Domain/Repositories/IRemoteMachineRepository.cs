@@ -35,4 +35,15 @@ public interface IRemoteMachineRepository
     Task MarkGrantRevokedAsync(string deviceId, string machineId, DateTimeOffset at);
 
     Task DeleteGrantAsync(string deviceId, string machineId);
+
+    /// <summary>What was forgotten or removed from the whole Fleet (Your Fleet, Labs).</summary>
+    Task<IReadOnlyList<FleetRemoval>> ListRemovalsAsync();
+
+    Task<FleetRemoval?> GetRemovalAsync(string id);
+
+    /// <summary>Keeps the removal; when one is already kept for the id, the later one wins.</summary>
+    Task SaveRemovalAsync(FleetRemoval removal);
+
+    /// <summary>Forgets a removal: the machine was added back on purpose.</summary>
+    Task DeleteRemovalAsync(string id);
 }

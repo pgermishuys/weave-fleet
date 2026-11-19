@@ -18,7 +18,8 @@ public interface ISelfAddresses
 }
 
 /// <summary>What one machine tells another about a third (or about itself), with a key the third one made for it.</summary>
-public sealed record Introduction(string MachineId, string Name, string? Os, IReadOnlyList<string> Addresses, string Token, string? IntroducedBy);
+/// <param name="Since">When the introducing machine added the machine to its list; null when it introduces itself. A machine that was forgotten is only taken in again by an introduction made after it was forgotten.</param>
+public sealed record Introduction(string MachineId, string Name, string? Os, IReadOnlyList<string> Addresses, string Token, string? IntroducedBy, DateTimeOffset? Since = null);
 
 public enum IntroductionOutcome
 {
@@ -49,7 +50,8 @@ public enum IntroductionOutcome
 /// <item>The keys an introduction made on another machine are remembered in <c>device_grants</c> under
 /// <c>machine:{id}</c> (the machine they are for), and the introduced machine's row says who introduced it.</item>
 /// </list>
-/// A key that couldn't be delivered is removed again. Removal does not reach other machines yet.
+/// A key that couldn't be delivered is removed again. Forgetting a machine reaches every machine
+/// (<see cref="FleetRemovals"/>), and a list that is out of date doesn't introduce a forgotten machine again.
 /// </summary>
 public sealed partial class FleetRoster(
     IRemoteMachineRepository repository,
@@ -58,6 +60,7 @@ public sealed partial class FleetRoster(
     IHttpClientFactory httpClients,
     MachineIdentityStore identity,
     ISelfAddresses selfAddresses,
+    FleetRemovals removals,
     IServiceScopeFactory scopes,
     TimeProvider time,
     ILogger<FleetRoster> logger) : IDisposable
@@ -84,6 +87,11 @@ public sealed partial class FleetRoster(
         if (await repository.GetAsync(introduction.MachineId) is not null)
             return IntroductionOutcome.Known;
 
+        // A machine that was forgotten comes back only when it was added again after it was forgotten.
+        var forgotten = await removals.GetAsync(introduction.MachineId) is { Kind: FleetRemovalKinds.Machine } gone ? gone : null;
+        if (forgotten is not null && (introduction.Since is not { } since || since <= forgotten.RemovedAt))
+            return IntroductionOutcome.Refused;
+
         foreach (var address in (introduction.Addresses ?? []).Select(RemoteMachineService.NormalizeBaseUrl).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
         {
             // Who answers first, without the key: a key goes only to the machine it's for.
@@ -92,7 +100,9 @@ public sealed partial class FleetRoster(
             var (info, _) = await machines.IdentifyAsync(address, introduction.Token, cancellationToken);
             if (info is null || info.Id != introduction.MachineId)
                 return IntroductionOutcome.Refused;
-            var (machine, _) = await machines.AddAsync(address, introduction.Token, cancellationToken, introducedBy: introduction.IntroducedBy);
+            var (machine, _) = await machines.AddAsync(address, introduction.Token, cancellationToken, introducedBy: introduction.IntroducedBy ?? "unknown");
+            if (machine is not null && forgotten is not null)
+                await repository.DeleteRemovalAsync(introduction.MachineId);
             return machine is null ? IntroductionOutcome.Refused : IntroductionOutcome.Added;
         }
 
@@ -108,6 +118,13 @@ public sealed partial class FleetRoster(
     {
         if (!await IsEnabledAsync() || await repository.GetAsync(machineId) is not { } peer)
             return;
+        // What was forgotten or removed goes first: a list that still has it mustn't bring it back.
+        if (!await removals.ExchangeWithAsync(peer, cancellationToken))
+            return;
+        if (await repository.GetAsync(machineId) is not { } current)
+            return;
+        peer = current;
+
         var known = await RosterOfAsync(peer, cancellationToken);
         if (known is null)
             return;
@@ -134,6 +151,20 @@ public sealed partial class FleetRoster(
         await _syncing.WaitAsync(cancellationToken);
         try
         {
+            // What was forgotten or removed goes round first, to every machine, so nothing below introduces it again.
+            foreach (var machine in await repository.ListAsync())
+            {
+                try
+                {
+                    if (await repository.GetAsync(machine.Id) is { } current)
+                        await removals.ExchangeWithAsync(current, cancellationToken);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Security.Cryptography.CryptographicException)
+                {
+                    LogSyncFailed(logger, machine.Name);
+                }
+            }
+
             foreach (var machine in await repository.ListAsync())
             {
                 try
@@ -153,7 +184,7 @@ public sealed partial class FleetRoster(
     }
 
     // A machine reached through an SSH tunnel is only reachable from here, so nobody else can be handed it.
-    private static bool IsPairable(RemoteMachine machine) => machine.SshDestination is null;
+    internal static bool IsPairable(RemoteMachine machine) => machine.SshDestination is null;
 
     /// <summary>
     /// Makes <paramref name="subject"/> (null: this machine) mint a key for <paramref name="target"/> and hands it
@@ -170,7 +201,7 @@ public sealed partial class FleetRoster(
         List<string> addresses;
         if (subject is null)
         {
-            var (device, minted) = await devices.IssueAsync(keyName, "other", self.Id, DeviceKinds.Machine);
+            var (device, minted) = await devices.IssueAsync(keyName, "other", self.Id, DeviceKinds.Machine, madeFor: target.Id);
             (deviceId, token, subjectId, subjectName, subjectOs) = (device.Id, minted, self.Id, selfName, null);
             addresses = (await selfAddresses.ListAsync(cancellationToken)).ToList();
         }
@@ -178,7 +209,7 @@ public sealed partial class FleetRoster(
         {
             if (machines.TryTokenOf(subject) is not { } subjectToken)
                 return false;
-            var mint = await MintAsync(subject, subjectToken, keyName, self.Id, cancellationToken);
+            var mint = await MintAsync(subject, subjectToken, keyName, self.Id, target.Id, cancellationToken);
             if (mint is null)
                 return false;
             (deviceId, token, subjectId, subjectName, subjectOs) = (mint.Value.DeviceId, mint.Value.Token, subject.Id, subject.Name, subject.Os);
@@ -188,7 +219,7 @@ public sealed partial class FleetRoster(
 
         var outcome = addresses.Count == 0
             ? IntroductionOutcome.Unreachable
-            : await DeliverAsync(target, new Introduction(subjectId, subjectName, subjectOs, addresses, token, self.Id), cancellationToken);
+            : await DeliverAsync(target, new Introduction(subjectId, subjectName, subjectOs, addresses, token, self.Id, subject?.AddedAt), cancellationToken);
         if (outcome == IntroductionOutcome.Added)
             return true;
 
@@ -223,13 +254,13 @@ public sealed partial class FleetRoster(
         }
     }
 
-    private async Task<(string DeviceId, string Token)?> MintAsync(RemoteMachine machine, string machineToken, string name, string pairedVia, CancellationToken cancellationToken)
+    private async Task<(string DeviceId, string Token)?> MintAsync(RemoteMachine machine, string machineToken, string name, string pairedVia, string madeFor, CancellationToken cancellationToken)
     {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{machine.BaseUrl}/api/machine/devices")
             {
-                Content = JsonContent.Create(new MintKeyRequest(name, "other", pairedVia, DeviceKinds.Machine), FleetRosterJsonContext.Default.MintKeyRequest),
+                Content = JsonContent.Create(new MintKeyRequest(name, "other", pairedVia, DeviceKinds.Machine, madeFor), FleetRosterJsonContext.Default.MintKeyRequest),
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", machineToken);
             using var response = await httpClients.CreateClient(RemoteMachineService.HttpClientName).SendAsync(request, cancellationToken);
@@ -311,7 +342,7 @@ public sealed partial class FleetRoster(
     private static partial void LogSyncFailed(ILogger logger, string machine);
 }
 
-internal sealed record MintKeyRequest(string Name, string Platform, string PairedVia, string Kind);
+internal sealed record MintKeyRequest(string Name, string Platform, string PairedVia, string Kind, string MadeFor);
 
 internal sealed record MintedKey(string DeviceId, string Token);
 
@@ -322,6 +353,8 @@ public sealed record IntroductionAnswer(string Status);
 [System.Text.Json.Serialization.JsonSerializable(typeof(IntroductionAnswer))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(MintKeyRequest))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(MintedKey))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(RemovalBatch))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(RemovalList))]
 [System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNamingPolicy = System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class FleetRosterJsonContext : System.Text.Json.Serialization.JsonSerializerContext
 {

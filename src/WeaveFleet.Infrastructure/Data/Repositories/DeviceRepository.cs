@@ -9,7 +9,7 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 /// <summary>The <c>devices</c> table (migration 051).</summary>
 public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : IDeviceRepository
 {
-    private const string Columns = "id, name, platform, kind, token_hash, paired_via, created_by, created_at, last_used_at, revoked_at";
+    private const string Columns = "id, name, platform, kind, token_hash, paired_via, created_by, made_for, created_at, last_used_at, revoked_at";
 
     public async Task<Device?> GetAsync(string id)
     {
@@ -34,8 +34,8 @@ public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : I
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
-            INSERT INTO devices (id, name, platform, kind, token_hash, paired_via, created_by, created_at, last_used_at, revoked_at)
-            VALUES (@Id, @Name, @Platform, @Kind, @TokenHash, @PairedVia, @CreatedBy, @CreatedAt, @LastUsedAt, @RevokedAt)
+            INSERT INTO devices (id, name, platform, kind, token_hash, paired_via, created_by, made_for, created_at, last_used_at, revoked_at)
+            VALUES (@Id, @Name, @Platform, @Kind, @TokenHash, @PairedVia, @CreatedBy, @MadeFor, @CreatedAt, @LastUsedAt, @RevokedAt)
             """,
             cmd =>
             {
@@ -46,6 +46,7 @@ public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : I
                 cmd.AddParameter("TokenHash", device.TokenHash);
                 cmd.AddParameter("PairedVia", device.PairedVia);
                 cmd.AddParameter("CreatedBy", device.CreatedBy);
+                cmd.AddParameter("MadeFor", device.MadeFor);
                 cmd.AddParameter("CreatedAt", Format(device.CreatedAt));
                 cmd.AddParameter("LastUsedAt", Format(device.LastUsedAt));
                 cmd.AddParameter("RevokedAt", device.RevokedAt is { } revoked ? Format(revoked) : null);
@@ -105,6 +106,7 @@ public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : I
         TokenHash = (byte[])r.GetValue(r.GetOrdinal("token_hash")),
         PairedVia = r.GetNullableString(r.GetOrdinal("paired_via")),
         CreatedBy = r.GetNullableString(r.GetOrdinal("created_by")),
+        MadeFor = r.GetNullableString(r.GetOrdinal("made_for")),
         CreatedAt = Parse(r.GetString(r.GetOrdinal("created_at"))),
         LastUsedAt = Parse(r.GetString(r.GetOrdinal("last_used_at"))),
         RevokedAt = r.GetNullableString(r.GetOrdinal("revoked_at")) is { } revoked ? Parse(revoked) : null,

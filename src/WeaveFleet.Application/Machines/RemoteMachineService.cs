@@ -94,6 +94,9 @@ public sealed class RemoteMachineService(
             Addresses = sshDestination is null ? MachineAddresses.Learn(existing?.Addresses ?? [], info.Addresses ?? [], normalized) : [],
         };
         await machines.UpsertAsync(machine);
+        // Added on purpose (not introduced by another machine): a machine forgotten before is part of the Fleet again.
+        if (introducedBy is null && existing is null)
+            await machines.DeleteRemovalAsync(machine.Id);
         Changed?.Invoke(machine.Id);
         return (machine, null);
     }

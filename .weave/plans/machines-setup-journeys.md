@@ -86,7 +86,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
   - "Your phone will reach studio" lines replace the three-item readiness checklist.
   - The address field moves under "Use my own address".
   - J2, J6. M.
-- [ ] **5. Your Fleet: every machine keeps the list (decision 1).** The core, and the largest piece.
+- [x] **5. Your Fleet: every machine keeps the list (decision 1).** (#1079, #1082, #1081, #1087) The core, and the largest piece.
   - Start with a thin slice behind a Labs switch, live-checked end to end: a phone connects to hangar, atlas is added
     through hangar, the phone sees atlas.
   - Then: the roster is copied to every machine, a machine can introduce another (key exchange), a screen connected to
