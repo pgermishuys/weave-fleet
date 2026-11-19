@@ -53,6 +53,13 @@ public sealed record MachinePairingCodeResponse(
     string? PhoneLink = null);
 
 /// <summary>Adds a machine by the address it listens on and a code from <c>fleet node pair</c>.</summary>
+/// <summary>A machine that is waiting to be added: who it is and the first half of its code. Never a secret.</summary>
+public sealed record WaitingResponse(string MachineId, string Name, string? Os, string Hint, DateTimeOffset ExpiresAt);
+
+public sealed record FoundMachineResponse(string MachineId, string Name, string? Os, string BaseUrl, string Hint, string Source, DateTimeOffset ExpiresAt);
+
+public sealed record FoundMachineListResponse(IReadOnlyList<FoundMachineResponse> Machines);
+
 public sealed record PairMachineRequest(string? BaseUrl, string? Code);
 
 /// <summary>The machine a pairing link points at, as it answered before the code was used.</summary>

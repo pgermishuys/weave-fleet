@@ -20,6 +20,7 @@ import TailscaleCheckNote from "@/components/settings/TailscaleCheckNote.vue";
 import { useMachineReach } from "@/composables/use-machine-reach";
 import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
+import FoundMachinesCard from "@/components/settings/FoundMachinesCard.vue";
 import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
 import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
 import MachineAddressList from "@/components/settings/MachineAddressList.vue";
@@ -47,7 +48,7 @@ const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
-const { entries, others, home, liveReachable, candidates } = storeToRefs(machines);
+const { entries, others, home, liveReachable } = storeToRefs(machines);
 // Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
 // comment node, and with Jobs off the card must render exactly as it did.
 const { isJobsEnabled: jobsOn } = useJobsFeature();
@@ -55,10 +56,11 @@ const { isJobsEnabled: jobsOn } = useJobsFeature();
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
 const addForm = reactive({ link: "", token: "", code: "" });
-type AddMode = "setup" | "link";
-const addModes: AddMode[] = ["setup", "link"];
-const modeLabels: Record<AddMode, string> = { setup: "Set it up from here", link: "Paste a pairing link" };
-const addMode = shallowRef<AddMode>("link");
+type AddMode = "found" | "setup" | "link";
+const addModes: AddMode[] = ["found", "setup", "link"];
+const modeLabels: Record<AddMode, string> = { found: "Found", setup: "Set it up from here", link: "Paste a pairing link" };
+// Found is where Add a machine opens: a waiting machine needs nothing pasted.
+const addMode = shallowRef<AddMode>("found");
 /** Set when a machine can't be set up from here: the link card says which machine and what to run on it. */
 const linkHint = shallowRef<string | null>(null);
 /** A set-up is running in the card: leaving the dialog doesn't stop it, so the button says Close. */
@@ -75,9 +77,8 @@ async function openAddForm(): Promise<void> {
   addError.value = null;
   linkHint.value = null;
   justAdded.value = null;
-  addMode.value = "link";
+  addMode.value = "found";
   await machines.loadCandidates();
-  if (showAddForm.value && (candidates.value?.length ?? 0) > 0) addMode.value = "setup";
 }
 function onSetUp(name: string): void {
   justAdded.value = name;
@@ -502,8 +503,13 @@ onUnmounted(() => stopPolling?.());
             {{ modeLabels[mode] }}
           </button>
         </div>
+        <FoundMachinesCard
+          v-if="addMode === 'found'"
+          @added="onSetUp"
+          @use-paste="pickMode('link')"
+        />
         <MachineSetupCard
-          v-if="addMode === 'setup'"
+          v-else-if="addMode === 'setup'"
           @added="onSetUp"
           @use-link="onUseLink"
           @running="setupRunning = $event"

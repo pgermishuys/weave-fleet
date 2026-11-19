@@ -221,6 +221,9 @@ describe("Settings → Machines", () => {
       const wrapper = mount(MachinesSection);
       await flushPromises();
       await wrapper.find("[data-testid='machines-add']").trigger("click");
+      await flushPromises();
+      // Add a machine opens on Found; these tests are about pasting a link.
+      await wrapper.find("[data-testid='machines-add-mode-link']").trigger("click");
       return wrapper;
     }
 
@@ -233,10 +236,22 @@ describe("Settings → Machines", () => {
       await flushPromises();
     }
 
-    it("opens on the pairing link when Fleet sees no machines, with Set it up from here as the other choice", async () => {
+    it("opens on Found, with Set it up from here and Paste a pairing link as the other choices", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/found"] = () => json({ machines: [] });
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      await wrapper.find("[data-testid='machines-add']").trigger("click");
+      await flushPromises();
+      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["Found", "Set it up from here", "Paste a pairing link"]);
+      expect(wrapper.find("[data-testid='machines-add-mode-found']").attributes("aria-selected")).toBe("true");
+      expect(wrapper.find("[data-testid='machines-found-empty']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-add-link']").exists()).toBe(false);
+    });
+
+    it("shows the pasted link's field on the Paste a pairing link tab", async () => {
       const wrapper = await openAddForm();
 
-      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["Set it up from here", "Paste a pairing link"]);
       expect(wrapper.find("[data-testid='machines-add-link']").exists()).toBe(true);
       expect(wrapper.find("[data-testid='machines-add-link-help']").text()).toContain("fleet node pair");
       expect(wrapper.find("[data-testid='machines-add-code']").exists()).toBe(false);
@@ -383,6 +398,8 @@ describe("Settings → Machines", () => {
       const wrapper = mount(MachinesSection);
       await flushPromises();
       await wrapper.find("[data-testid='machines-add']").trigger("click");
+      await flushPromises();
+      await wrapper.find("[data-testid='machines-add-mode-link']").trigger("click");
       await wrapper.find("[data-testid='machines-add-link']").setValue("http://100.64.12.40:2113/add-machine#ABCD-EFGH");
       await flushPromises();
 
@@ -421,12 +438,14 @@ describe("Settings → Machines", () => {
       await flushPromises();
       await wrapper.find("[data-testid='machines-add']").trigger("click");
       await flushPromises();
+      await wrapper.find("[data-testid='machines-add-mode-setup']").trigger("click");
+      await flushPromises();
       return wrapper;
     }
 
     const rowOf = (wrapper: VueWrapper, name: string) => wrapper.findAll("[data-testid='machines-setup-row']").find((row) => row.text().startsWith(name))!;
 
-    it("is the default card when Fleet sees machines, and says what is on each one", async () => {
+    it("lists the machines Fleet sees, and says what is on each one", async () => {
       const wrapper = await openForm();
 
       expect(wrapper.find("[data-testid='machines-add-mode-setup']").attributes("aria-selected")).toBe("true");

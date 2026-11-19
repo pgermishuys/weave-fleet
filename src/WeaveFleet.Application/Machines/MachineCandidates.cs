@@ -29,9 +29,9 @@ public sealed class MachineCandidates(ITailscale tailscale, Func<IReadOnlyList<S
     /// <param name="alreadyAdded">Destinations of machines this Fleet already has; they are left out.</param>
     public async Task<IReadOnlyList<MachineCandidate>> ListAsync(IReadOnlySet<string> alreadyAdded, CancellationToken cancellationToken)
     {
-        var peers = ParsePeers(await tailscale.StatusJsonAsync(cancellationToken));
+        var peers = TailnetPeers.Parse(await tailscale.StatusJsonAsync(cancellationToken));
         var merged = new List<MachineCandidate>();
-        var usedPeers = new HashSet<TailscalePeer>();
+        var usedPeers = new HashSet<TailnetPeer>();
         foreach (var host in _configHosts())
         {
             var peer = peers.FirstOrDefault(p => p.Names.Contains(host.Alias, StringComparer.OrdinalIgnoreCase)
@@ -49,44 +49,4 @@ public sealed class MachineCandidates(ITailscale tailscale, Func<IReadOnlyList<S
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
-
-    private sealed record TailscalePeer(string HostName, string? DnsName, string? Os, IReadOnlyList<string> Names);
-
-    private static List<TailscalePeer> ParsePeers(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return [];
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("Peer", out var peers) || peers.ValueKind != JsonValueKind.Object)
-                return [];
-            var list = new List<TailscalePeer>();
-            foreach (var entry in peers.EnumerateObject())
-            {
-                var peer = entry.Value;
-                if (!peer.TryGetProperty("Online", out var online) || online.ValueKind != JsonValueKind.True)
-                    continue;
-                var hostName = Text(peer, "HostName");
-                var dns = Text(peer, "DNSName")?.TrimEnd('.');
-                if (string.IsNullOrEmpty(hostName))
-                    continue;
-                var names = new List<string> { hostName };
-                if (dns is { Length: > 0 })
-                    names.Add(dns);
-                if (peer.TryGetProperty("TailscaleIPs", out var ips) && ips.ValueKind == JsonValueKind.Array)
-                    names.AddRange(ips.EnumerateArray().Select(ip => ip.GetString()).OfType<string>());
-                list.Add(new TailscalePeer(hostName, string.IsNullOrEmpty(dns) ? null : dns, Text(peer, "OS")?.ToLowerInvariant() switch { "macos" or "darwin" => "macos", { } os => os, null => null }, names));
-            }
-
-            return list;
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
-    private static string? Text(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 }

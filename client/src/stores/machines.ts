@@ -166,6 +166,20 @@ export interface MachineCandidate {
   os: string | null;
 }
 
+/**
+ * A machine that is waiting to be added (it ran `fleet node pair`), seen on Tailscale or the home network.
+ * `hint` is the first half of the code its terminal shows; the rest is typed.
+ */
+export interface FoundMachine {
+  machineId: string;
+  name: string;
+  os: string | null;
+  baseUrl: string;
+  hint: string;
+  source: string;
+  expiresAt: string;
+}
+
 /** What Fleet saw on a candidate over SSH: Fleet running, SSH working with no Fleet, no login, or a system it can't set up. */
 export interface CandidateProbe {
   state: "ready" | "noFleet" | "cantLogIn" | "unsupported";
@@ -589,6 +603,20 @@ export const useMachinesStore = defineStore("machines", () => {
     });
     if (!response.ok) throw await readFailure(response, "Couldn't reach the machine.");
     return await response.json() as PairingPreview;
+  }
+
+  /** Machines waiting to be added, seen on Tailscale and the home network; null until looked for. */
+  const foundMachines = shallowRef<FoundMachine[] | null>(null);
+
+  /** Looks for waiting machines. Empty when it sees none or this Fleet can't say (an older one). */
+  async function loadFound(): Promise<void> {
+    try {
+      const response = await fetchOnMachine(null, "/api/machines/found");
+      const body = response.ok ? await response.json() as { machines?: FoundMachine[] } : null;
+      foundMachines.value = Array.isArray(body?.machines) ? body.machines : [];
+    } catch {
+      foundMachines.value = [];
+    }
   }
 
   /** The machines Fleet can already see (ssh config, Tailscale); null until loaded. Empty when it sees none or can't say. */
@@ -1148,6 +1176,8 @@ export const useMachinesStore = defineStore("machines", () => {
     diagnoses,
     retryMachine,
     candidates,
+    foundMachines,
+    loadFound,
     setupCommands,
     loadCandidates,
     probeCandidate,

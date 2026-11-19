@@ -77,6 +77,14 @@ public static class MachinesEndpoints
         .Produces<MachineCandidateListResponse>(200)
         .WithName("ListMachineCandidates");
 
+        // Found: machines that are waiting to be added, on Tailscale and the home network. Adding one is POST /pair with its address and the code.
+        group.MapGet("/found", async (FoundMachines found, CancellationToken cancellationToken) =>
+            Results.Ok(new FoundMachineListResponse((await found.ListAsync(cancellationToken))
+                .Select(f => new FoundMachineResponse(f.MachineId, f.Name, f.Os, f.BaseUrl, f.Hint, f.Source, f.ExpiresAt)).ToList())))
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<FoundMachineListResponse>(200)
+        .WithName("ListFoundMachines");
+
         // Looks at one listed machine over SSH. Changes nothing there.
         group.MapPost("/candidates/probe", async (AddSshMachineRequest request, SshMachineService ssh, CancellationToken cancellationToken) =>
         {

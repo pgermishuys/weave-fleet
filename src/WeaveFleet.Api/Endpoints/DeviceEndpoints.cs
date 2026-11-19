@@ -88,10 +88,13 @@ public static class DeviceEndpoints
             MachineIdentityStore identities,
             LoopbackAuthPolicy policy,
             TailnetName tailnet,
+            WaitingMachine waiting,
             CancellationToken ct) =>
         {
             var identity = identities.Get();
             var code = codes.Create();
+            // Waiting to be added: tell Tailscale and the home network, until the code is used or runs out.
+            waiting.Open(code.ManualCode, code.ExpiresAt);
             var addresses = policy.IsRemoteReachable
                 ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct), policy.Reach).Select(address => address.Url).ToList()
                 : [];
@@ -222,6 +225,15 @@ public static class DeviceEndpoints
         .Produces<PairingPreviewResponse>(200)
         .WithName("PreviewPairingCode");
 
+        // Found: is this machine waiting to be added? Says who it is and the first half of the code, never a secret.
+        pairing.MapGet("/waiting", (WaitingMachine waiting) =>
+            waiting.Current() is { } current
+                ? Results.Ok(new WaitingResponse(current.MachineId, current.Name, current.Os, current.Hint, current.ExpiresAt))
+                : Results.NotFound(new ErrorResponse("This machine isn't waiting to be added.")))
+        .AllowAnonymous()
+        .Produces<WaitingResponse>(200)
+        .WithName("GetWaitingMachine");
+
         pairing.MapPost("/redeem", async (
             HttpContext http,
             PairingRedeemRequest request,
@@ -229,7 +241,8 @@ public static class DeviceEndpoints
             ManualCodeAttempts attempts,
             DeviceTokenService devices,
             MachineIdentityStore identities,
-            LoopbackAuthPolicy policy) =>
+            LoopbackAuthPolicy policy,
+            WaitingMachine waiting) =>
         {
             if (Limited(attempts, request.ManualCode) is { } limited)
                 return limited;
@@ -245,6 +258,8 @@ public static class DeviceEndpoints
                 return Results.NotFound(new ErrorResponse(CodeNotFound));
 
             var (device, token) = await devices.IssueAsync(request.DeviceName!.Trim(), NormalizePlatform(request.Platform), kind: isMachine ? DeviceKinds.Machine : DeviceKinds.Device);
+            if (isMachine)
+                waiting.Close();
 
             // Same-origin features that ride on the cookie (images, pages, the hub) work for the phone at once. A
             // machine talks with its token and never holds a browser session.
