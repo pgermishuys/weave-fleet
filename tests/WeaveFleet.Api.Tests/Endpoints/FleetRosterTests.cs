@@ -219,6 +219,47 @@ public sealed class FleetRosterTests
     }
 
     [Fact]
+    public async Task A_forgotten_machine_leaves_the_whole_Fleet_even_when_the_forgetter_cannot_reach_the_rest()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        var workbenchKeyOnAtlas = workbench.KeyFor(atlas);
+        var atlasKeyOnWorkbench = atlas.KeyFor(workbench);
+        (await Probe(workbench, atlasKeyOnWorkbench)).ShouldBe(HttpStatusCode.OK);
+
+        // Workbench can't tell atlas it was forgotten, so atlas hears it from hangar alone.
+        world.Router.Down.Add("workbench");
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await atlas.ListAsync()).ShouldBeEmpty("atlas left hangar's Fleet whole: workbench is gone from its list too");
+        (await Probe(atlas, workbenchKeyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized, "workbench's key on atlas");
+        (await atlas.Devices.ListAsync()).Where(d => d.Kind == DeviceKinds.Machine).ShouldBeEmpty("atlas made no key that still works for a machine of that Fleet");
+        (await atlas.Removals.GetAsync(workbench.Id)).ShouldBeNull("workbench was not forgotten, atlas just doesn't list it");
+        (await atlas.Removals.GetAsync(hangar.Id)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_forgotten_machine_keeps_a_machine_it_added_that_is_not_in_that_Fleet()
+    {
+        await using var world = new World();
+        var (hangar, atlas, workbench) = await world.StartThreeAsync();
+        var depot = await world.StartAsync("depot", yourFleet: false);
+
+        // Atlas adds depot while hangar can't hear about it, so depot is atlas's own and not in hangar's list.
+        world.Router.Down.Add("hangar");
+        await World.AddAsync(atlas, depot);
+        world.Router.Down.Remove("hangar");
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldNotContain(depot.Id);
+
+        world.Router.Down.Add("workbench");
+        using var owner = Client(hangar, hangar.OwnerToken);
+        (await owner.DeleteAsync($"/api/machines/{atlas.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await atlas.ListAsync()).Select(m => m.Id).ShouldBe([depot.Id], "atlas is a machine of its own, with the machine it added itself");
+    }
+
+    [Fact]
     public async Task A_machine_that_was_off_applies_the_removal_when_it_is_back_and_does_not_bring_the_machine_back()
     {
         await using var world = new World();

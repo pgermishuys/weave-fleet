@@ -219,7 +219,7 @@ public static class DeviceEndpoints
             if (!await removals.IsEnabledAsync())
                 return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
-            var applied = await removals.ApplyAsync(batch.Removals ?? [], batch.From?.Trim(), FleetClaims.DeviceIdOf(http.User), cancellationToken);
+            var applied = await removals.ApplyAsync(batch.Removals ?? [], batch.From?.Trim(), FleetClaims.DeviceIdOf(http.User), cancellationToken, batch.Fleet);
             return Results.Ok(new RemovalsAnswer(applied));
         })
         .RequireAuthorization()
