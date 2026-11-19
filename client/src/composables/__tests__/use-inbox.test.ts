@@ -38,8 +38,12 @@ import { inboxSession, useInbox } from "../phone/use-inbox";
 
 describe("useInbox", () => {
   let posts: { url: string; init: RequestInit }[];
+  let added: { id: string; name: string; baseUrl: string }[];
+  let grantAsks: string[];
 
   beforeEach(async () => {
+    added = [];
+    grantAsks = [];
     started.length = 0;
     hubs.length = 0;
     for (const id of Object.keys(feedSessions)) delete feedSessions[id];
@@ -62,9 +66,12 @@ describe("useInbox", () => {
           { id: "hangar", name: "hangar", baseUrl: "https://hangar.ts.net" },
           { id: "falcon", name: "falcon", baseUrl: "https://falcon.ts.net", os: "macos" },
           { id: "osprey", name: "osprey", baseUrl: "https://osprey.ts.net" },
+          ...added,
         ] });
       }
       if (url === "/api/machine") return Response.json({ id: "hangar", name: "hangar", os: "linux" });
+      if (url.includes("/device-grant")) grantAsks.push(url);
+      if (url.includes("/machines/workbench/device-grant")) return Response.json({ machineId: "workbench", baseUrl: "https://workbench.ts.net", token: "fdt_workbench.1" });
       if (url.includes("/device-grant")) return Response.json({ error: "Can't reach osprey from hangar right now." }, { status: 502 });
       posts.push({ url, init });
       return new Response(null, { status: 204 });
@@ -114,6 +121,21 @@ describe("useInbox", () => {
     const inbox = await mountInbox();
 
     expect(inbox.machines.value.map((m) => [m.id, m.os])).toEqual([["hangar", "linux"], ["falcon", "macos"], ["osprey", null]]);
+  });
+
+  it("asks for a key to a machine added to your Fleet while the inbox is open, and not again for one it already shows", async () => {
+    const inbox = await mountInbox();
+    grantAsks.length = 0;
+
+    await inbox.refreshAll();
+    expect(grantAsks).toEqual([]);
+
+    added.push({ id: "workbench", name: "workbench", baseUrl: "https://workbench.ts.net" });
+    await inbox.refreshAll();
+    await flushPromises();
+
+    expect(grantAsks.filter((url) => url.includes("/machines/workbench/"))).toHaveLength(1);
+    expect(started.some((feed) => feed.machineId === "workbench" && feed.token === "fdt_workbench.1")).toBe(true);
   });
 
   it("answers on the machine that asked, with that machine's key", async () => {

@@ -119,12 +119,12 @@ public static class DeviceEndpoints
             WeaveFleet.Application.Machines.DeviceGrantService grants,
             CancellationToken cancellationToken) =>
         {
-            // A machine in the owner's Fleet (it holds a machine-kind token) removes only what a machine made for a phone
-            // or screen: a device with a home. Everything else is the owner's.
+            // A machine in the owner's Fleet (it holds a machine-kind token) removes only the devices it made itself: the keys it
+            // asked this machine for. Everything else is the owner's.
             if (!FleetClaims.IsOwner(http.User))
             {
                 var target = (await devices.ListAsync()).FirstOrDefault(d => d.Id == id);
-                if (!await IsPeerMachineAsync(http, devices) || target is null || target.PairedVia is null)
+                if (target is null || FleetClaims.DeviceIdOf(http.User) is not { } callerId || !await IsPeerMachineAsync(http, devices) || target.CreatedBy != callerId)
                     return Results.Json(new ErrorResponse("Only the owner removes a device."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
             }
 
@@ -150,16 +150,36 @@ public static class DeviceEndpoints
             if (ValidateDevice(request.Name, request.Platform) is { } invalid)
                 return invalid;
 
+            var kind = request.Kind is null ? DeviceKinds.Device : request.Kind.ToLowerInvariant();
+            if (kind is not (DeviceKinds.Device or DeviceKinds.Machine))
+                return Results.BadRequest(new ErrorResponse("kind must be device or machine."));
+            // The key remembers which machine's key asked for it, so only that machine can remove it.
+            var createdBy = FleetClaims.IsOwner(http.User) ? null : FleetClaims.DeviceIdOf(http.User);
+
             var pairedVia = request.PairedVia?.Trim();
             if (pairedVia is { Length: > 64 })
                 return Results.BadRequest(new ErrorResponse("pairedVia is a machine id, at most 64 characters."));
 
-            var (device, token) = await devices.IssueAsync(request.Name!.Trim(), NormalizePlatform(request.Platform), string.IsNullOrEmpty(pairedVia) ? null : pairedVia);
+            var (device, token) = await devices.IssueAsync(request.Name!.Trim(), NormalizePlatform(request.Platform), string.IsNullOrEmpty(pairedVia) ? null : pairedVia, kind, createdBy);
             return Results.Ok(new CreateDeviceResponse(device.Id, token));
         })
         .RequireAuthorization()
         .Produces<CreateDeviceResponse>(200)
         .WithName("CreateDevice");
+
+        // Your Fleet (Labs): another machine in the owner's Fleet introduces a third (or itself) with a key the third one made for
+        // this machine, so this machine keeps the whole list too. Only the machine token or a machine-kind key may.
+        machine.MapPost("/introductions", async (HttpContext http, Introduction introduction, FleetRoster roster, DeviceTokenService devices, CancellationToken cancellationToken) =>
+        {
+            if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
+                return Results.Json(new ErrorResponse("Only another machine in your Fleet introduces machines."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            var outcome = await roster.AcceptAsync(introduction, cancellationToken);
+            return Results.Ok(new IntroductionAnswer(outcome.ToString().ToLowerInvariant()));
+        })
+        .RequireAuthorization()
+        .Produces<IntroductionAnswer>(200)
+        .WithName("IntroduceMachine");
 
         // A paired phone that's signed in but lost its token asks for a new one: the iPhone Home Screen app starts with a
         // copy of Safari's cookies but none of its storage. The old token stops working.

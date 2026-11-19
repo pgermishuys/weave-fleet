@@ -10,7 +10,7 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 /// <summary>The <c>machines</c> and <c>device_grants</c> tables (migration 053; addresses in 071).</summary>
 public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFactory) : IRemoteMachineRepository
 {
-    private const string MachineColumns = "id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agent_work, ssh_destination, addresses";
+    private const string MachineColumns = "id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agent_work, ssh_destination, addresses, introduced_by";
     private const string GrantColumns = "device_id, machine_id, remote_device_id, created_at, revoked_at";
 
     public async Task<IReadOnlyList<RemoteMachine>> ListAsync()
@@ -30,8 +30,8 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
-            INSERT INTO machines (id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agent_work, ssh_destination, addresses)
-            VALUES (@Id, @Name, @BaseUrl, @Token, @Os, @AddedAt, @LastSeenAt, @Status, @AgentWork, @SshDestination, @Addresses)
+            INSERT INTO machines (id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agent_work, ssh_destination, addresses, introduced_by)
+            VALUES (@Id, @Name, @BaseUrl, @Token, @Os, @AddedAt, @LastSeenAt, @Status, @AgentWork, @SshDestination, @Addresses, @IntroducedBy)
             ON CONFLICT (id) DO UPDATE SET
               name = excluded.name,
               base_url = excluded.base_url,
@@ -41,7 +41,8 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
               status = excluded.status,
               agent_work = excluded.agent_work,
               ssh_destination = excluded.ssh_destination,
-              addresses = excluded.addresses
+              addresses = excluded.addresses,
+              introduced_by = COALESCE(excluded.introduced_by, machines.introduced_by)
             """,
             cmd =>
             {
@@ -56,6 +57,7 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
                 cmd.AddParameter("AgentWork", machine.AgentWork);
                 cmd.AddParameter("SshDestination", machine.SshDestination);
                 cmd.AddParameter("Addresses", WriteAddresses(machine.Addresses));
+                cmd.AddParameter("IntroducedBy", machine.IntroducedBy);
             });
     }
 
@@ -193,6 +195,7 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
         AgentWork = MachineAgentWork.Read(r.GetString(r.GetOrdinal("agent_work"))),
         SshDestination = r.GetNullableString(r.GetOrdinal("ssh_destination")),
         Addresses = ReadAddresses(r.GetNullableString(r.GetOrdinal("addresses"))),
+        IntroducedBy = r.GetNullableString(r.GetOrdinal("introduced_by")),
     };
 
     // Written by hand, like the rest of this table, so the column's shape is plain to read here.

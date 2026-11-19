@@ -23,6 +23,9 @@ public sealed record Device
     /// <summary>The machine that asked for this token on the device's behalf; null when the device paired here.</summary>
     public string? PairedVia { get; init; }
 
+    /// <summary>The device (another machine's key on this one) that asked for this token; null when the owner or a pairing code made it.</summary>
+    public string? CreatedBy { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>When the device last used its token. The token expires 30 days after this.</summary>

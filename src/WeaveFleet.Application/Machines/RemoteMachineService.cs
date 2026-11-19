@@ -62,7 +62,7 @@ public sealed class RemoteMachineService(
     }
 
     /// <summary>Checks the address and token against the machine and saves it. Error is what to tell the user.</summary>
-    public async Task<(RemoteMachine? Machine, MachineProblem? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken, string? sshDestination = null)
+    public async Task<(RemoteMachine? Machine, MachineProblem? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken, string? sshDestination = null, string? introducedBy = null)
     {
         var normalized = NormalizeBaseUrl(baseUrl);
         if (normalized is null)
@@ -89,6 +89,7 @@ public sealed class RemoteMachineService(
             Status = RemoteMachineStatuses.Online,
             AgentWork = existing?.AgentWork ?? MachineAgentWork.Ask,
             SshDestination = sshDestination,
+            IntroducedBy = introducedBy ?? existing?.IntroducedBy,
             // Over SSH the tunnel is the way in; otherwise the address given, and the ones the machine reports.
             Addresses = sshDestination is null ? MachineAddresses.Learn(existing?.Addresses ?? [], info.Addresses ?? [], normalized) : [],
         };

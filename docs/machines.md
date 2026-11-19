@@ -843,3 +843,29 @@ machine for its own key on any machine in its list, the way a paired phone does.
   home); everything else on those endpoints stays the owner's.
 - The phone pages (`/phone`) of a browser that isn't a paired phone keep the keys in `localStorage["weave:screen-keys"]`,
   apart from a phone's credentials, so the browser never looks paired (no push subscription).
+
+### Every machine keeps the list (Your Fleet, second slice)
+
+With Your Fleet on, add atlas through hangar and then workbench through atlas: hangar, atlas and workbench each list the
+other two. A screen connected to any one of them gets a key for each, now and for machines added later. No machine is the
+home.
+
+- **Introductions.** A machine mints the key another machine uses to reach it (a machine-kind device token on itself,
+  `POST /api/machine/devices` with `"kind": "machine"`) and never hands on a key it was given, nor its owner token.
+  Whoever introduces two machines asks each to mint a key for the other, with the token it already holds for both, and
+  delivers the keys with `POST /api/machine/introductions` (`{ machineId, name, os, addresses, token, introducedBy }`).
+  The receiving machine asks each address who answers (`GET /api/machine/id`, no token) and sends the key only to the
+  one that answers as that machine. A key nobody took is removed again. A machine reached over SSH isn't handed on: its
+  address is a tunnel only this machine has.
+- **Roster copy and catch-up.** Each machine compares its list with every machine in it whenever its own list changes
+  and whenever a machine answers again (`FleetRoster.SyncWithAsync`), and introduces whatever is missing: itself to that
+  machine, and each of its other machines to it. A machine that was off catches up when it's back, because the others
+  then compare lists with it. The machine row records who introduced it (`machines.introduced_by`), and the keys an
+  introduction made on another machine sit in `device_grants` under `machine:{id}`.
+- **What a machine-kind token may do.** Make device tokens (including machine-kind ones), take introductions, and remove
+  only the devices it made itself (`devices.created_by`). Everything else is the owner's. With Your Fleet off on the
+  receiving machine, introductions are refused.
+- **Screens.** An open `/phone` page looks at the list every 30 seconds and when the page comes back, and asks for a key
+  for any machine it doesn't show yet.
+- **Not yet.** Removing or forgetting a machine on one machine doesn't reach the others (another machine's list can bring
+  it back), and the native phone app takes no grants.
