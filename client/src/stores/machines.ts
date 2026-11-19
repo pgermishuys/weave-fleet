@@ -170,6 +170,15 @@ export interface MachineCandidate {
  * A machine that is waiting to be added (it ran `fleet node pair`), seen on Tailscale or the home network.
  * `hint` is the first half of the code its terminal shows; the rest is typed.
  */
+/** A one-time code a new server joins this Fleet with. `target` is what `install.sh --join` takes: the addresses, `#`, the code. */
+export interface JoinCode {
+  code: string;
+  expiresAt: string;
+  addresses: string[];
+  target: string;
+  machineName: string;
+}
+
 export interface FoundMachine {
   machineId: string;
   name: string;
@@ -603,6 +612,16 @@ export const useMachinesStore = defineStore("machines", () => {
     });
     if (!response.ok) throw await readFailure(response, "Couldn't reach the machine.");
     return await response.json() as PairingPreview;
+  }
+
+  /**
+   * Makes a join code on this machine for a new server (Add a machine → On a new server): one use, 30 minutes, with every
+   * address this machine can be reached at. Throws with the reason when this machine only listens on itself.
+   */
+  async function makeJoinCode(): Promise<JoinCode> {
+    const response = await fetchOnMachine(null, "/api/machines/join-code", { method: "POST" });
+    if (!response.ok) throw await readFailure(response, "Couldn't make a join code.");
+    return await response.json() as JoinCode;
   }
 
   /** Machines waiting to be added, seen on Tailscale and the home network; null until looked for. */
@@ -1178,6 +1197,7 @@ export const useMachinesStore = defineStore("machines", () => {
     candidates,
     foundMachines,
     loadFound,
+    makeJoinCode,
     setupCommands,
     loadCandidates,
     probeCandidate,

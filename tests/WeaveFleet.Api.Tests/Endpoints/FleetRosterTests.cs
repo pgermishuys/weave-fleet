@@ -408,6 +408,170 @@ public sealed class FleetRosterTests
         (await Probe(atlas, keyOnAtlas)).ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    // ---- a new server joins with a one-time code (install.sh --join) ----
+
+    [Fact]
+    public async Task A_new_server_joins_with_the_code_and_both_machines_list_each_other()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", publicUrl: true);
+        var atlas = await world.StartAsync("atlas", publicUrl: true);
+
+        var line = await MakeJoinLineAsync(hangar);
+        line.ShouldStartWith("https://hangar.test");
+        line.ShouldMatch("#[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$");
+        var joined = await JoinAsync(atlas, line);
+
+        joined.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await joined.ReadSuccessAsync();
+        body.GetProperty("status").GetString().ShouldBe("joined");
+        body.GetProperty("fleetMachineName").GetString().ShouldBe("hangar");
+        body.GetProperty("fleetKeepsList").GetBoolean().ShouldBeTrue();
+        await world.SettleAsync();
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([atlas.Id]);
+        (await atlas.ListAsync()).Select(m => m.Id).ShouldBe([hangar.Id]);
+        (await atlas.Machines.CheckAsync(hangar.Id, CancellationToken.None)).Problem.ShouldBeNull("atlas reaches hangar with the key hangar made for it");
+        (await hangar.Machines.CheckAsync(atlas.Id, CancellationToken.None)).Problem.ShouldBeNull();
+        hangar.Machines.TokenOf((await hangar.ListAsync()).Single()).ShouldNotBe(atlas.OwnerToken, "hangar holds a key atlas made for it, not atlas's owner token");
+    }
+
+    [Fact]
+    public async Task The_machines_already_in_the_fleet_hear_about_the_new_server()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", publicUrl: true);
+        var workbench = await world.StartAsync("workbench");
+        var atlas = await world.StartAsync("atlas", publicUrl: true);
+        await World.AddAsync(hangar, workbench, byCode: true);
+        await world.SettleAsync();
+
+        (await JoinAsync(atlas, await MakeJoinLineAsync(hangar))).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await world.SettleAsync();
+
+        foreach (var machine in new[] { hangar, atlas, workbench })
+        {
+            var others = new[] { hangar, atlas, workbench }.Where(o => o != machine).Select(o => o.Id).Order();
+            (await machine.ListAsync()).Select(m => m.Id).Order().ShouldBe(others, $"{machine.Name}'s list");
+        }
+    }
+
+    [Fact]
+    public async Task A_join_code_works_once()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", publicUrl: true);
+        var atlas = await world.StartAsync("atlas", publicUrl: true);
+        var workbench = await world.StartAsync("workbench", publicUrl: true);
+        var line = await MakeJoinLineAsync(hangar);
+
+        (await JoinAsync(atlas, line)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        var second = await JoinAsync(workbench, line);
+
+        second.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        var body = await second.Content.ReadAsStringAsync();
+        body.ShouldContain("code-refused");
+        body.ShouldContain("expired or was already used");
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([atlas.Id], "the second machine was not added");
+        (await workbench.ListAsync()).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_code_nobody_made_is_refused_and_adds_nothing()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", publicUrl: true);
+        var atlas = await world.StartAsync("atlas", publicUrl: true);
+
+        var wrong = await JoinAsync(atlas, "https://hangar.test#ABCD-EFGH");
+
+        wrong.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await wrong.Content.ReadAsStringAsync()).ShouldContain("code-refused");
+        (await hangar.ListAsync()).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_line_that_is_not_a_join_line_is_turned_down_before_anything_is_sent()
+    {
+        await using var world = new World();
+        await world.StartAsync("hangar", publicUrl: true);
+        var atlas = await world.StartAsync("atlas", publicUrl: true);
+        var sent = 0;
+        world.Router.Seen = _ => sent++;
+
+        foreach (var line in new[] { "", "ABCD-EFGH", "https://hangar.test", "https://hangar.test#nope", "#ABCD-EFGH" })
+            (await JoinAsync(atlas, line)).StatusCode.ShouldBe(HttpStatusCode.BadRequest, $"'{line}'");
+
+        sent.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_new_server_the_fleet_cannot_reach_back_says_so_and_the_code_is_used_up()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", publicUrl: true);
+        var atlas = await world.StartAsync("atlas", publicUrl: true);
+        // Atlas tells the Fleet it listens somewhere nothing answers.
+        atlas.Factory.Services.GetRequiredService<MachineIdentityStore>().Update(identity => identity with { PublicUrl = "https://nowhere.test" });
+        var line = await MakeJoinLineAsync(hangar);
+
+        var failed = await JoinAsync(atlas, line);
+
+        failed.StatusCode.ShouldBe(HttpStatusCode.BadGateway);
+        var text = (await failed.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("message").GetString()!;
+        text.ShouldContain("couldn't reach");
+        text.ShouldContain("make a new one");
+        (await hangar.ListAsync()).ShouldBeEmpty();
+        using var scope = atlas.Factory.Services.CreateScope();
+        (await scope.ServiceProvider.GetRequiredService<YourFleetFeature>().IsEnabledAsync()).ShouldBeTrue("atlas had Your Fleet on and still has");
+    }
+
+    [Fact]
+    public async Task With_Your_Fleet_off_on_the_inviting_machine_only_it_lists_the_new_server_and_atlas_keeps_the_switch_off()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", yourFleet: false, publicUrl: true);
+        var atlas = await world.StartAsync("atlas", yourFleet: false, publicUrl: true);
+
+        var joined = await JoinAsync(atlas, await MakeJoinLineAsync(hangar));
+
+        var body = await joined.ReadSuccessAsync();
+        body.GetProperty("fleetKeepsList").GetBoolean().ShouldBeFalse();
+        body.GetProperty("listed").GetBoolean().ShouldBeFalse();
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([atlas.Id]);
+        (await atlas.ListAsync()).ShouldBeEmpty();
+        using var scope = atlas.Factory.Services.CreateScope();
+        (await scope.ServiceProvider.GetRequiredService<YourFleetFeature>().IsEnabledAsync()).ShouldBeFalse("joining a Fleet that keeps no list doesn't turn the Labs switch on");
+    }
+
+    [Fact]
+    public async Task Only_the_owner_makes_a_join_code_and_a_phone_does_not()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar", publicUrl: true);
+        var (_, phoneToken) = await hangar.Devices.IssueAsync("Pixel 9", "android");
+        using var phone = Client(hangar, phoneToken);
+
+        (await phone.PostAsync("/api/machines/join-code", null)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private static async Task<string> MakeJoinLineAsync(Node inviting)
+    {
+        using var owner = Client(inviting, inviting.OwnerToken);
+        var made = await (await owner.PostAsync("/api/machines/join-code", null)).ReadSuccessAsync();
+        made.GetProperty("code").GetString()!.ShouldMatch("^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$");
+        made.GetProperty("addresses").EnumerateArray().Select(a => a.GetString()).ShouldContain($"https://{inviting.Name}.test");
+        (made.GetProperty("expiresAt").GetDateTimeOffset() - DateTimeOffset.UtcNow).ShouldBeInRange(TimeSpan.FromMinutes(29), TimeSpan.FromMinutes(31));
+        return made.GetProperty("target").GetString()!;
+    }
+
+    /// <summary>What <c>fleet node join</c> does: asks the machine running here, with its own token, to join.</summary>
+    private static async Task<HttpResponseMessage> JoinAsync(Node joining, string line)
+    {
+        using var owner = Client(joining, joining.OwnerToken);
+        var response = await owner.PostAsJsonAsync("/api/machine/join", new { target = line });
+        return response;
+    }
+
     // ---- scaffolding ----
 
     private sealed class Router : HttpMessageHandler
@@ -483,7 +647,7 @@ public sealed class FleetRosterTests
             return (hangar, atlas, workbench);
         }
 
-        public async Task<Node> StartAsync(string name, bool yourFleet = true)
+        public async Task<Node> StartAsync(string name, bool yourFleet = true, bool publicUrl = false)
         {
             var addresses = new List<string> { $"https://{name}.test" };
             var factory = new ApiWebApplicationFactory(
@@ -494,13 +658,15 @@ public sealed class FleetRosterTests
                 configureTestServices: services =>
                 {
                     services.AddHttpClient(RemoteMachineService.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Router);
+                    services.AddHttpClient(FleetJoin.JoinHttpClientName).ConfigurePrimaryHttpMessageHandler(() => Router);
                     services.AddSingleton<ISelfAddresses>(new FixedAddresses(addresses));
                 });
             Router.Targets[name] = factory.Server.CreateHandler();
             var node = new Node(name, factory, addresses);
             _nodes.Add(node);
             Machines[node.Id] = node;
-            factory.Services.GetRequiredService<MachineIdentityStore>().Update(identity => identity with { Name = name });
+            // The address a join line carries, and the one a joining machine gives the Fleet to reach it back at.
+            factory.Services.GetRequiredService<MachineIdentityStore>().Update(identity => identity with { Name = name, PublicUrl = publicUrl ? addresses[0] : identity.PublicUrl });
             if (yourFleet)
             {
                 using var scope = factory.Services.CreateScope();

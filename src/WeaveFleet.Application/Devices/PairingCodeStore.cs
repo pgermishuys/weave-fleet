@@ -12,10 +12,14 @@ namespace WeaveFleet.Application.Devices;
 /// At most <see cref="MaxLive"/> are live at once; making another drops the oldest.
 /// </para>
 /// </summary>
-public sealed class PairingCodeStore(TimeProvider time)
+public sealed class PairingCodeStore(TimeProvider time, TimeSpan lifetime)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     public const int MaxLive = 5;
+
+    public PairingCodeStore(TimeProvider time) : this(time, Lifetime)
+    {
+    }
 
     // Crockford's base32: no I, L, O or U, so a typed code can't be misread.
     private const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -36,7 +40,7 @@ public sealed class PairingCodeStore(TimeProvider time)
             manual[i] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
         var manualCode = new string(manual);
 
-        var expiresAt = time.GetUtcNow() + Lifetime;
+        var expiresAt = time.GetUtcNow() + lifetime;
         lock (_gate)
         {
             Purge();

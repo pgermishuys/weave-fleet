@@ -62,6 +62,18 @@ public sealed record FoundMachineListResponse(IReadOnlyList<FoundMachineResponse
 
 public sealed record PairMachineRequest(string? BaseUrl, string? Code);
 
+/// <summary>A join code made on this machine for a new server (Add a machine → On a new server).</summary>
+/// <param name="Code">The code, <c>XXXX-XXXX</c>. Good for 30 minutes and one machine.</param>
+/// <param name="Addresses">Where the new machine reaches this one, best first.</param>
+/// <param name="Target">What <c>install.sh --join</c> takes: the addresses, <c>#</c>, the code.</param>
+public sealed record JoinCodeResponse(string Code, DateTimeOffset ExpiresAt, IReadOnlyList<string> Addresses, string Target, string MachineName);
+
+/// <summary>Joins this machine to the Fleet a join line came from (<c>fleet node join</c> asks this machine to).</summary>
+public sealed record JoinFleetRequest(string? Target);
+
+/// <summary>How a join went. <c>Status</c> is joined, code-refused, too-many-tries, unreachable, refused or invalid.</summary>
+public sealed record JoinFleetResponse(string Status, string Message, string? FleetMachineId, string? FleetMachineName, bool Listed, bool FleetKeepsList);
+
 /// <summary>The machine a pairing link points at, as it answered before the code was used.</summary>
 /// <param name="Version">The Fleet version it runs; null for a Fleet too old to say.</param>
 /// <param name="BaseUrl">The address as Fleet will use it.</param>

@@ -65,6 +65,32 @@ public static class MachinesEndpoints
         .Produces<MachineEntryResponse>(200)
         .WithName("PairMachine");
 
+        // Add a machine → On a new server: a one-time code, good for 30 minutes, that a new server joins this Fleet with
+        // (install.sh --join '<address>#CODE'). It carries every address of this machine, like a pairing code.
+        group.MapPost("/join-code", async (
+            JoinCodeStore joinCodes,
+            MachineIdentityStore identities,
+            LoopbackAuthPolicy policy,
+            TailnetName tailnet,
+            CancellationToken cancellationToken) =>
+        {
+            var identity = identities.Get();
+            var reachable = policy.IsRemoteReachable
+                ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(cancellationToken), policy.Reach).Select(address => address.Url)
+                : [];
+            var addresses = PairingAddresses.For(null, identity.PublicUrl, reachable);
+            var name = identity.Name ?? Environment.MachineName;
+            if (addresses.Count == 0)
+                return Results.BadRequest(new ErrorResponse(
+                    $"{name} only listens on this machine, so a new server can't reach it. Let others reach it first (Settings → Machines), then make a join code."));
+
+            var code = joinCodes.Create();
+            return Results.Ok(new JoinCodeResponse(code.ManualCode, code.ExpiresAt, addresses, JoinTarget.Format(addresses, code.ManualCode), name));
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<JoinCodeResponse>(200)
+        .WithName("CreateJoinCode");
+
         // The machines Add a machine → Set it up from here lists: ~/.ssh/config hosts and online Tailscale peers.
         group.MapGet("/candidates", async (RemoteMachineService machines, MachineCandidates candidates, CancellationToken cancellationToken) =>
         {

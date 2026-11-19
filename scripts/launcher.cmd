@@ -185,6 +185,7 @@ echo        fleet node [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>]
 echo        fleet node install-service [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--print]
 echo        fleet node uninstall-service
 echo        fleet node pair [--port ^<port^>] [--data-dir ^<path^>] [--profile ^<name^>]
+echo        fleet node join '^<address^>#CODE' [--port ^<port^>] [--data-dir ^<path^>] [--profile ^<name^>]
 echo.
 echo Starts Fleet as a node: the API without the web app. Every request needs the access token,
 echo even from this machine. Run "fleet node up" to set it up, then add it to another Fleet in Settings ^> Machines ^> Add a machine.
@@ -197,6 +198,8 @@ echo                       ^(a scheduled task named "Fleet node"^)
 echo   uninstall-service   Stop the node and remove that task
 echo   pair                Print a one-time code ^(10 minutes, works once^) and this node's address, so another
 echo                       Fleet can add it without the master token. Run it while the node is running.
+echo   join                Join the Fleet that made a join line ^(Add a machine ^> On a new server in that Fleet^). The line's
+echo                       code works once, for 30 minutes. Run it while this node is running and reachable ^(fleet node up^).
 echo.
 echo Options:
 echo   --port ^<port^>       Override the server port
@@ -222,6 +225,8 @@ set "NODE="
 set "SERVICE_ACTION="
 set "NODE_PAIR="
 set "NODE_UP="
+set "NODE_JOIN="
+set "NODE_JOIN_TARGET="
 set "UP_CHOICE="
 set "ASSUME_YES="
 set "PRINT_ONLY="
@@ -243,6 +248,14 @@ if defined NODE (
         shift
     ) else if /i "%~1"=="up" (
         set "NODE_UP=1"
+        shift
+    ) else if /i "%~1"=="join" (
+        set "NODE_JOIN=1"
+        shift
+        rem The join line comes next: '<address>#CODE', from Add a machine ^> On a new server.
+        set "NODE_JOIN_TARGET=%~1"
+        if not defined NODE_JOIN_TARGET goto :join_needs_line
+        if "!NODE_JOIN_TARGET:~0,1!"=="-" goto :join_needs_line
         shift
     )
 )
@@ -482,6 +495,13 @@ if defined NODE_UP goto :do_node_up
 if defined NODE_PAIR (
     rem Asks the node already running with these settings for a code, prints it and stops.
     "%APP_BIN%" --node-pair %NODE_PAIR_JSON% --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
+    exit /b !ERRORLEVEL!
+)
+
+if defined NODE_JOIN (
+    rem Asks the node already running with these settings to join the Fleet the line came from, prints how it went and stops.
+    rem It was probably started a moment ago, so it keeps asking for up to 30 seconds.
+    "%APP_BIN%" --node-join "!NODE_JOIN_TARGET!" --join-wait 30 --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
     exit /b !ERRORLEVEL!
 )
 
@@ -836,6 +856,10 @@ exit /b 1
 
 :json_without_pair
 echo Error: --json only works with fleet node pair. >&2
+exit /b 1
+
+:join_needs_line
+echo Error: fleet node join needs the line from Add a machine ^> On a new server, like 'http://100.64.1.7:6262#J8RT-4WXN'. >&2
 exit /b 1
 
 :print_without_install

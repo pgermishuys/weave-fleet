@@ -8,6 +8,8 @@ SKIP_PATH_UPDATE="${WEAVE_FLEET_SKIP_PATH_UPDATE:-0}"
 CHECKSUMS_NAME="${WEAVE_FLEET_CHECKSUMS_NAME:-checksums.txt}"
 
 WORK_DIR=""
+# --join '<address>#CODE': after installing, start this machine with no screen and join the Fleet that made the line.
+JOIN_LINE=""
 
 log() {
   printf '%s\n' "$*"
@@ -281,7 +283,82 @@ update_path() {
   log "Added $bin_dir to PATH in $profile_path."
 }
 
+usage() {
+  log "Usage: install.sh [--join '<address>#CODE']"
+  log ""
+  log "Installs Fleet. With --join it then starts this machine with no screen (fleet node up) and joins the Fleet that"
+  log "made the line: in that Fleet, open Settings > Machines > Add a machine > On a new server and copy the line."
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --join)
+        if [ "$#" -lt 2 ]; then
+          fail "Error: --join needs the line from Add a machine > On a new server, like --join 'http://100.64.1.7:6262#J8RT-4WXN'."
+        fi
+        JOIN_LINE="$2"
+        check_join_line "$JOIN_LINE"
+        shift 2
+        ;;
+      --join=*)
+        JOIN_LINE="${1#--join=}"
+        check_join_line "$JOIN_LINE"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        fail "Error: unknown option: $1 (see install.sh --help)"
+        ;;
+    esac
+  done
+}
+
+# Looks like '<address>#CODE'. Checked before anything is downloaded; Fleet checks it again when it joins.
+check_join_line() {
+  case "$1" in
+    ?*"#"?*) ;;
+    *)
+      fail "Error: that isn't a join line. It looks like 'http://100.64.1.7:6262#J8RT-4WXN'. Copy it from Add a machine > On a new server."
+      ;;
+  esac
+}
+
+# The machine with no screen, then the join. Each step prints what it did; Fleet's own words say what to do when one fails.
+join_fleet() {
+  fleet_bin="$INSTALL_DIR/bin/fleet"
+  [ -x "$fleet_bin" ] || fail "Error: Fleet was installed, but $fleet_bin isn't there to run."
+
+  log ""
+  log "Starting this machine (fleet node up)"
+  up_output="$WORK_DIR/node-up.txt"
+  if ! "$fleet_bin" node up --yes > "$up_output" 2>&1; then
+    cat "$up_output" >&2
+    fail "Error: couldn't start this machine. Fix what is said above, then run: fleet node up --yes, and: fleet node join '$JOIN_LINE'"
+  fi
+  # What it did, up to the last step. What follows is a pairing link for adding this machine by hand, which a join doesn't need.
+  while IFS= read -r line; do
+    printf '%s\n' "$line"
+    case "$line" in
+      *"Master token stays on this machine"*) break ;;
+    esac
+  done < "$up_output"
+
+  log ""
+  log "Joining your Fleet (fleet node join)"
+  if ! "$fleet_bin" node join "$JOIN_LINE"; then
+    log ""
+    log "Fleet is installed and running here, but it didn't join. Once you have a new line, run:"
+    log "  $fleet_bin node join '<address>#CODE'"
+    exit 1
+  fi
+}
+
 main() {
+  parse_args "$@"
   ensure_tar_available
 
   rid="$(detect_os)-$(detect_arch)"
@@ -326,6 +403,12 @@ main() {
 
   log "Fleet installed to $INSTALL_DIR."
   log "Open a new shell or run: export PATH=\"$INSTALL_DIR/bin:\$PATH\""
+
+  if [ -n "$JOIN_LINE" ]; then
+    join_fleet
+    return 0
+  fi
+
   log ""
   log "Next:"
   log "  fleet            a machine you sit at: starts Fleet; open http://127.0.0.1:6262 in a browser"

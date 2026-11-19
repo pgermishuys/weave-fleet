@@ -101,7 +101,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
   - "X wants to join your Fleet" on any connected phone or desktop app.
   - The desktop app's first run finds your Fleet and joins it, then asks "Where should new sessions run?".
   - Needs piece 5. J4, J7, J9, J10, J13. M–L.
-- [ ] **7. On a new server.** `install.sh --join '<address>#CODE'`, and a one-time 30-minute join code from Add a
+- [x] **7. On a new server.** (#PR) `install.sh --join '<address>#CODE'`, and a one-time 30-minute join code from Add a
   machine → On a new server. Needs pieces 5 and 6. J5. M.
 - [x] **8. Away from home (decision 6A).**
   - Tailscale checks on both ends, with "Turn on" for the listener.

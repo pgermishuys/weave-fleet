@@ -214,6 +214,7 @@ show_node_help() {
   echo "       fleet node install-service [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--print]"
   echo "       fleet node uninstall-service"
   echo "       fleet node pair [--port <port>] [--data-dir <path>] [--profile <name>] [--json]"
+  echo "       fleet node join '<address>#CODE' [--port <port>] [--data-dir <path>] [--profile <name>]"
   echo ""
   echo "Starts Fleet as a node: the API without the web app. Every request needs the access token,"
   echo "even from this machine. Run 'fleet node up' to set it up, then add it to another Fleet in Settings > Machines > Add a machine."
@@ -226,6 +227,8 @@ show_node_help() {
   echo "  uninstall-service   Stop the node and remove that service"
   echo "  pair                Print a one-time code (10 minutes, works once) and this node's address, so another"
   echo "                      Fleet can add it without the master token. Run it while the node is running."
+  echo "  join                Join the Fleet that made a join line (Add a machine > On a new server in that Fleet). The line's"
+  echo "                      code works once, for 30 minutes. Run it while this node is running and reachable (fleet node up)."
   echo ""
   echo "Options:"
   echo "  --port <port>       Override the server port"
@@ -689,6 +692,8 @@ service_log_hint() {
 NODE=0
 NODE_PAIR=0
 NODE_PAIR_JSON=""
+NODE_JOIN=0
+NODE_JOIN_TARGET=""
 NODE_UP=0
 UP_CHOICE=""
 ASSUME_YES=0
@@ -703,6 +708,19 @@ if [ "${1:-}" = "node" ]; then
       ;;
     pair)
       NODE_PAIR=1
+      shift
+      ;;
+    join)
+      NODE_JOIN=1
+      shift
+      # The join line comes next: '<address>#CODE', from Add a machine → On a new server.
+      case "${1:-}" in
+        ""|-*)
+          echo "Error: fleet node join needs the line from Add a machine → On a new server, like 'http://100.64.1.7:6262#J8RT-4WXN'." >&2
+          exit 1
+          ;;
+      esac
+      NODE_JOIN_TARGET="$1"
       shift
       ;;
     up)
@@ -964,6 +982,11 @@ fi
 if [ "$NODE_PAIR" -eq 1 ]; then
   # Asks the node already running with these settings for a code, prints it and stops.
   exec "$APP_BIN" --node-pair $NODE_PAIR_JSON --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
+fi
+if [ "$NODE_JOIN" -eq 1 ]; then
+  # Asks the node already running with these settings to join the Fleet the line came from, prints how it went and stops.
+  # It was probably started a moment ago (install.sh --join), so it keeps asking for up to 30 seconds.
+  exec "$APP_BIN" --node-join "$NODE_JOIN_TARGET" --join-wait 30 --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
 fi
 if [ "$NODE" -eq 1 ]; then
   EXTRA_ARGS="$EXTRA_ARGS --node"

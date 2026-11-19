@@ -51,9 +51,15 @@ string? legacyImportSourcePath = null;
 string? cliArgumentError = null;
 var nodePair = false;
 var nodePairJson = false;
+string? nodeJoinTarget = null;
+var nodeJoinWaitSeconds = 0;
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] is "--host" && i + 1 < args.Length)
+    if (args[i] is NodeJoinCommand.Flag && i + 1 < args.Length)
+        nodeJoinTarget = args[++i];
+    else if (args[i] is "--join-wait" && i + 1 < args.Length)
+        _ = int.TryParse(args[++i], out nodeJoinWaitSeconds);
+    else if (args[i] is "--host" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:Host"] = args[++i];
     else if (args[i] is "--port" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:Port"] = args[++i];
@@ -111,6 +117,30 @@ if (nodePair)
         Console.Out,
         Console.Error,
         asJson: nodePairJson));
+}
+
+if (nodeJoinTarget is not null)
+{
+    // `fleet node join '<address>#CODE'`: ask the node running on this machine to join that Fleet, print how it went, and stop.
+    var joinOptions = new ConfigurationBuilder()
+        .AddEnvironmentVariables()
+        .AddInMemoryCollection(cliOverrides!)
+        .Build()
+        .GetSection(FleetOptions.SectionName)
+        .Get<FleetOptions>() ?? new FleetOptions();
+    // The Fleet being joined contacts this machine back before it answers, so the answer can take a while.
+    using var joinClient = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
+    Environment.Exit(await NodeJoinCommand.RunAsync(
+        nodeJoinTarget,
+        joinOptions.Host,
+        joinOptions.Port,
+        joinOptions.DatabasePath,
+        Environment.GetEnvironmentVariable("WEAVE_FLEET_AUTH_TOKEN"),
+        joinClient,
+        Console.Out,
+        Console.Error,
+        TimeSpan.FromSeconds(nodeJoinWaitSeconds),
+        TimeSpan.FromSeconds(1)));
 }
 
 var builder = WebApplication.CreateBuilder(args);
