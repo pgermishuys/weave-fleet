@@ -1,4 +1,5 @@
 import { randomId } from "@/lib/random-id";
+import { draftAfterRefusal } from "@/lib/refused-draft";
 import { computed, reactive, readonly, shallowRef } from "vue";
 import type { SessionListItem } from "@/api/client";
 import type { components } from "@/api/generated/schema";
@@ -671,7 +672,8 @@ export function useSendPrompt(sessionId: string) {
     }
 
     const onRefused = (): void => {
-      if (!isRetry && draft.text.length === 0) setText(typed);
+      // The refused text comes back in front of anything typed since, so neither is lost.
+      if (!isRetry) setText(draftAfterRefusal(typed, draft.text));
       options?.onRefused?.();
     };
     void postPrompt(request, onRefused, before);
