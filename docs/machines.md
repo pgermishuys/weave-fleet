@@ -9,13 +9,13 @@ This page has two parts: how to make a machine reachable, and the contract a cli
 
 ## Making a machine reachable
 
-A Fleet only listens on `127.0.0.1` by default, so nothing else can reach it. There are two ways to open it up.
+A Fleet only listens on `127.0.0.1` (port 6262) by default, so nothing else can reach it. There are two ways to open it up.
 Both assume the devices can already reach each other, for example over [Tailscale](https://tailscale.com).
 
 ### Listen on the network
 
 ```sh
-fleet --host 0.0.0.0 --port 2113
+fleet --host 0.0.0.0
 ```
 
 Bound to anything other than loopback, Fleet asks every request for its access token, its own machine's
@@ -26,8 +26,8 @@ On a tailnet, `--host <the machine's 100.x address>` listens only there.
 ### Behind `tailscale serve` (HTTPS)
 
 ```sh
-fleet --port 2113 --require-token
-tailscale serve --bg --https=443 http://127.0.0.1:2113
+fleet --require-token
+tailscale serve --bg --https=443 http://127.0.0.1:6262
 ```
 
 `tailscale serve` gives the machine a real certificate on `https://<machine>.<tailnet>.ts.net`. HTTPS
@@ -66,7 +66,7 @@ link. See [Set a machine up with `fleet node up`](#set-a-machine-up-with-fleet-n
 foreground instead, for example in a container, start it with the flags:
 
 ```sh
-fleet node --host 0.0.0.0 --port 2113
+fleet node --host 0.0.0.0
 ```
 
 A node is the same Fleet API, hub and terminals, with two differences:
@@ -93,7 +93,7 @@ fleet node pair
 ```
 
 It prints one pairing link, `<address>/add-machine#<CODE>`, for example
-`http://100.64.90.72:2113/add-machine#K3MQ-9ZDT`. The address keeps its scheme and port; the code sits in the
+`http://100.64.90.72:6262/add-machine#K3MQ-9ZDT`. The address keeps its scheme and port; the code sits in the
 fragment, so it never reaches a server log. When the node has several reachable addresses, the link uses the first
 (tailnet first) and the others are listed under "Also reachable at". When the node only listens on loopback, it says
 so and tells you to run `fleet node up` and pick Tailscale or Local network, and prints no link.
@@ -225,7 +225,7 @@ addresses, after its id answers there.
 options as `fleet node`:
 
 ```sh
-fleet node install-service --host 0.0.0.0 --port 2113
+fleet node install-service --host 0.0.0.0
 ```
 
 | | What it installs | Logs |

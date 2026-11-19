@@ -65,7 +65,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
 - [x] **1. J8: desktop app on a computer already running `fleet node`.** (#1076) First reproduce it (Windows: the node's
   "Fleet node" scheduled task, then the desktop app). Then make the app use that Fleet: read its key file as the same
   user, show the web app itself, and show the "Fleet already runs on this computer" screen. S–M.
-- [ ] **2. Words and next steps.**
+- [x] **2. Words and next steps.** (#1075)
   - `install.sh` ends with the next step for both kinds of machine.
   - `--ssh-only` text; README; docs port; `docs/phone.md` covers the native app.
   - A one-line "what's a machine" on Settings → Machines and in the welcome wizard's last step, with "Add your phone".

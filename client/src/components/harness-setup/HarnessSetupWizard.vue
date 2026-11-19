@@ -2,10 +2,12 @@
 import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { CheckCircle2, Plus } from "lucide-vue-next";
+import { CheckCircle2, Plus, Smartphone } from "lucide-vue-next";
 import weaveLogo from "@/assets/weave_logo.png";
 import HarnessSetupRows from "@/components/harness-setup/HarnessSetupRows.vue";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import { harnessState } from "@/lib/harness-display";
@@ -22,6 +24,7 @@ import { usePreferencesStore } from "@/stores/preferences";
 const STEPS: readonly HarnessSetupStep[] = ["welcome", "harnesses", "ready"];
 
 const router = useRouter();
+const { setActiveSection } = useSettingsNav();
 const setup = useHarnessSetupStore();
 const { isOpen, step } = storeToRefs(setup);
 const { config } = storeToRefs(useAppShellStore());
@@ -70,6 +73,12 @@ async function toReady(): Promise<void> {
 async function startSession(): Promise<void> {
   await leave();
   await router.navigate({ to: "/sessions/new", search: { projectId: undefined, source: undefined } });
+}
+
+async function addPhone(): Promise<void> {
+  await leave();
+  setActiveSection("machines");
+  await router.navigate({ to: "/settings" });
 }
 
 function onOpenChange(open: boolean): void {
@@ -190,6 +199,27 @@ function onOpenChange(open: boolean): void {
               {{ readyNames }} {{ readyHarnesses.length > 1 ? "are" : "is" }} ready. Add or update harnesses any time
               in Settings → Harnesses.
             </p>
+            <p class="harness-setup__lede">
+              A machine is anywhere Fleet runs: this one, or a server you add under Settings → Machines.
+            </p>
+          </div>
+          <div class="harness-setup__phone">
+            <Smartphone
+              :size="18"
+              class="text-muted"
+              aria-hidden="true"
+            />
+            <p class="harness-setup__phone-text">
+              <b>Use Fleet from your phone.</b> Answer agents and start sessions away from your desk.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="harness-setup-add-phone"
+              @click="void addPhone()"
+            >
+              Add your phone
+            </Button>
           </div>
           <button
             type="button"
@@ -285,6 +315,30 @@ function onOpenChange(open: boolean): void {
   color: var(--muted);
   font-size: 13.5px;
   line-height: 1.55;
+}
+
+.harness-setup__phone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  text-align: left;
+}
+
+.harness-setup__phone-text {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.harness-setup__phone-text b {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .harness-setup__lede--left {

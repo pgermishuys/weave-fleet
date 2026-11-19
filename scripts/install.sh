@@ -326,7 +326,10 @@ main() {
 
   log "Fleet installed to $INSTALL_DIR."
   log "Open a new shell or run: export PATH=\"$INSTALL_DIR/bin:\$PATH\""
-  log "Then start it with: fleet"
+  log ""
+  log "Next:"
+  log "  fleet            a machine you sit at: starts Fleet; open http://127.0.0.1:6262 in a browser"
+  log "  fleet node up    a machine with no screen, such as a server: set it up, then add it from your phone or another Fleet"
 }
 
 main "$@"

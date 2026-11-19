@@ -6,6 +6,7 @@ import type { HarnessInfo } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 import { HARNESS_SETUP_DONE_PREFERENCE, useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -158,6 +159,21 @@ describe("HarnessSetupWizard", () => {
 
     expect(useHarnessSetupStore().isOpen).toBe(false);
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/sessions/new", search: { projectId: undefined, source: undefined } });
+  });
+
+  it("says what a machine is and offers Add your phone, which opens Settings → Machines", async () => {
+    const view = await launch();
+    harnesses.value = [readyOpenCode];
+    useHarnessSetupStore().open("ready");
+    await flushPromises();
+
+    expect(view.text()).toContain("A machine is anywhere Fleet runs");
+    await view.get("[data-testid='harness-setup-add-phone']").trigger("click");
+    await flushPromises();
+
+    expect(useHarnessSetupStore().isOpen).toBe(false);
+    expect(useSettingsNav().activeSection.value).toBe("machines");
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
   });
 
   it("opens at the harness step from the banner, the new-session box or Settings", async () => {

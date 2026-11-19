@@ -90,7 +90,8 @@ public static class NodePairCommand
         if (link is null)
         {
             await output.WriteLineAsync($"{name} only listens on this machine, so no other machine can reach it directly.");
-            await output.WriteLineAsync("Run fleet node up and pick Tailscale or Local network, then run fleet node pair again.");
+            await output.WriteLineAsync("To add it over SSH, open Settings → Machines → Add a machine → Over SSH in the Fleet you work from.");
+            await output.WriteLineAsync("To reach it directly, run fleet node up and pick Tailscale or Local network, then run fleet node pair again.");
             return 0;
         }
 
