@@ -71,7 +71,7 @@ public static class DeviceEndpoints
             var urls = PairingAddresses.For(own, identity.PublicUrl, reachable);
             if (urls.Count == 0)
                 return Results.BadRequest(new ErrorResponse(
-                    "Fleet only listens on this computer, so no phone can reach it. Let other devices reach it first, or give an address of your own."));
+                    "Fleet only listens on this machine, so no phone can reach it. Let others reach it first, or give an address of your own."));
 
             var code = codes.Create();
             var payload = new PairingPayload(1, identity.Id, identity.Name ?? Environment.MachineName, urls[0], code.Secret, urls);

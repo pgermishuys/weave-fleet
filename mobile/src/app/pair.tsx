@@ -8,6 +8,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { machines, useMachines } from "~/fleet/machines";
 import { previewPairing, redeemPairing, targetFromScan, targetFromTyped, type PairingTarget } from "~/fleet/pairing";
+import { isTailscale, kindOf } from "~/fleet/routes-core";
 import { Button, Card, Icon, Text } from "~/kit";
 import { useTheme } from "~/theme";
 
@@ -113,6 +114,12 @@ export default function Pair() {
             <Text size={24} weight="bold">Connect this phone to {machineName}?</Text>
             <Text tone="muted">{target.baseUrl}</Text>
             <Text tone="muted">This phone gets its own key for this machine. Remove it any time from Settings → Machines on the machine.</Text>
+            {(target.addresses?.length ?? 0) > 1 && (
+              <View style={{ gap: 4 }} testID="reach">
+                {target.addresses!.some((url) => ["lan", "hostname"].includes(kindOf(url))) && <Text tone="muted">At home, on your Wi-Fi</Text>}
+                {target.addresses!.some((url) => isTailscale(kindOf(url))) && <Text tone="muted">Away from home, with Tailscale on the phone</Text>}
+              </View>
+            )}
             {error && <Text tone="error">{error}</Text>}
             <Button label="Connect" variant="primary" loading={busy} onPress={() => void connect()} testID="connect" />
             <Button label="Back" variant="ghost" onPress={() => setTarget(null)} />

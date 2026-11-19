@@ -1,29 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
-import { AlertCircle, Check, Circle, Copy, Smartphone } from "lucide-vue-next";
+import { Check, Globe, Smartphone, Wifi } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import QrCode from "@/components/settings/QrCode.vue";
 import ReachDialog from "@/components/settings/ReachDialog.vue";
 import { useMachineReach } from "@/composables/use-machine-reach";
-import { createPairingCode, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
-import { choosePhoneBaseUrl, supportsInstall } from "@/lib/pairing";
-import { phoneReadiness } from "@/lib/phone-readiness";
+import { createPairingCode, NoPhoneAddressError, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
+import { pairingAddresses } from "@/lib/pairing";
+import { reachLines } from "@/lib/phone-readiness";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Settings → Machines → This machine → Add your phone: a one-time QR code (and a code to type) a phone scans to get
- * its own key. The code works once and expires in 10 minutes. The secret is only ever in the QR URL's fragment
- * and on screen; it isn't kept anywhere.
+ * its own key. The code carries every address the machine can be reached on and the phone tries each, so nothing is
+ * asked about addresses; "Use my own address" is for a tunnel or a domain. The code works once and expires in 10
+ * minutes. The secret is only ever in the QR URL's fragment and on screen; it isn't kept anywhere.
  */
 const props = defineProps<{
   machineName: string;
   publicUrl: string | null;
   addresses: readonly { url: string; kind?: string }[];
-  /** Fleet asks every request for a token, this machine's own included (`--require-token`). */
-  requiresToken: boolean;
-  /** The port Fleet listens on, for the commands in the checklist. */
-  port: number;
   /** Names of the devices with access now, so a new one shows up as "connected". */
   deviceNames: readonly string[];
 }>();
@@ -56,39 +53,14 @@ const needsReach = computed(() => !!reach.state.value?.available && reach.state.
 /** What the phone can open: the addresses Fleet listens on, else the ones just opened by letting others reach it. */
 const addressesNow = computed(() => props.addresses.length ? props.addresses : reach.state.value?.listening ?? []);
 
-const suggestedUrl = computed(() => choosePhoneBaseUrl(props.publicUrl, window.location, addressesNow.value));
-const host = computed(() => {
-  try {
-    return code.value ? new URL(code.value.payload.url).host : "";
-  } catch {
-    return "";
-  }
-});
+/** Where the phone will reach this machine: what the code carries, else what Fleet knows now. */
+const reaching = computed(() => reachLines(code.value
+  ? pairingAddresses(code.value.payload)
+  : [props.publicUrl, ...addressesNow.value.map((address) => address.url)].filter((url): url is string => !!url)));
+/** The address a phone opens on the web to type the code: the first one the code carries. */
+const firstUrl = computed(() => code.value?.payload.url ?? "");
 const secondsLeft = computed(() => code.value ? Math.max(0, Math.round((Date.parse(code.value.expiresAt) - now.value) / 1000)) : 0);
 const countdown = computed(() => `${Math.floor(secondsLeft.value / 60)}:${String(secondsLeft.value % 60).padStart(2, "0")}`);
-const insecure = computed(() => !!code.value && !supportsInstall(code.value.payload.url));
-const readiness = computed(() => phoneReadiness({
-  machineName: props.machineName,
-  phoneUrl: props.publicUrl ?? suggestedUrl.value ?? null,
-  addresses: addressesNow.value,
-  requiresToken: props.requiresToken,
-  port: props.port,
-  reach: !reach.state.value?.available ? "unavailable" : reach.state.value.mode === "off" ? "off" : "on",
-}));
-const ready = computed(() => readiness.value.every((item) => item.ok));
-const copied = shallowRef<string | null>(null);
-
-async function copyCommand(command: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(command);
-    copied.value = command;
-    setTimeout(() => {
-      if (copied.value === command) copied.value = null;
-    }, 1500);
-  } catch {
-    // The command is on screen to select by hand.
-  }
-}
 
 function onReachChanged(): void {
   emit("reach-changed");
@@ -96,27 +68,27 @@ function onReachChanged(): void {
   if (reach.state.value?.mode !== "off") void start();
 }
 
-async function start(baseUrl = phoneUrl.value || suggestedUrl.value || ""): Promise<void> {
+async function start(ownAddress?: string): Promise<void> {
   if (needsReach.value) {
     reachOpen.value = true;
-    return;
-  }
-  if (!baseUrl) {
-    // Nothing a phone could open is known yet (a loopback page, no saved address): ask for it first.
-    editingUrl.value = true;
     return;
   }
   busy.value = true;
   error.value = null;
   connected.value = null;
   try {
-    code.value = await createPairingCode(baseUrl);
-    phoneUrl.value = code.value.payload.url;
+    code.value = await createPairingCode(ownAddress ?? (props.publicUrl || undefined));
     devicesAtStart = [...props.deviceNames];
     now.value = Date.now();
     startTimer();
   } catch (failure) {
-    error.value = failure instanceof Error ? failure.message : String(failure);
+    if (failure instanceof NoPhoneAddressError) {
+      // Fleet knows no address a phone could reach: the one thing left to ask for.
+      editingUrl.value = true;
+      error.value = failure.message;
+    } else {
+      error.value = failure instanceof Error ? failure.message : String(failure);
+    }
   } finally {
     busy.value = false;
   }
@@ -129,13 +101,14 @@ async function saveUrl(): Promise<void> {
     await savePublicUrl(phoneUrl.value.trim());
     emit("saved-url", phoneUrl.value.trim());
     editingUrl.value = false;
+    error.value = null;
   } catch (failure) {
     error.value = failure instanceof Error ? failure.message : String(failure);
     busy.value = false;
     return;
   }
   busy.value = false;
-  // The old QR points at the old address: make a new one.
+  // The old QR doesn't carry the new address: make a new one.
   await start(phoneUrl.value.trim());
 }
 
@@ -186,16 +159,222 @@ onUnmounted(stopTimer);
       :machine-name="machineName"
       @changed="onReachChanged"
     />
+
     <div
-      v-if="!code && editingUrl"
+      v-if="code"
       class="add-phone__card"
     >
       <h4 class="text-sm font-semibold text-text">
-        Which address will the phone open?
+        Add your phone
+      </h4>
+      <ol class="mt-3 grid gap-4">
+        <li>
+          <p class="text-sm font-medium text-text">
+            1 · Get Weave Fleet on your phone
+          </p>
+          <p class="mt-0.5 text-sm text-muted">
+            App Store or Google Play. Search "Weave Fleet".
+          </p>
+        </li>
+        <li>
+          <p class="text-sm font-medium text-text">
+            2 · Open it and scan this code
+          </p>
+          <div class="mt-2 flex flex-wrap items-start gap-5">
+            <QrCode
+              :value="code.url"
+              :label="`Pairing code for ${machineName}`"
+              data-testid="add-phone-qr"
+            />
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-muted">
+                Works once, for 10 minutes. No camera? Open
+                <span
+                  class="font-mono text-xs"
+                  data-testid="add-phone-host"
+                >{{ firstUrl }}/pair</span> and type
+                <code
+                  class="add-phone__manual"
+                  data-testid="add-phone-code"
+                >{{ code.manualCode }}</code>
+              </p>
+              <p
+                class="mt-2 text-xs"
+                :class="secondsLeft > 0 ? 'text-muted' : 'text-error-text'"
+              >
+                <template v-if="secondsLeft > 0">
+                  Waiting for your phone… {{ countdown }} left
+                </template>
+                <template v-else>
+                  This code has expired.
+                  <Button
+                    variant="link"
+                    size="sm"
+                    class="h-auto p-0"
+                    @click="start()"
+                  >
+                    Make a new one
+                  </Button>
+                </template>
+              </p>
+            </div>
+          </div>
+        </li>
+      </ol>
+
+      <div
+        v-if="reaching.length"
+        class="add-phone__reach"
+        data-testid="add-phone-readiness"
+      >
+        <p class="text-sm font-medium text-text">
+          Your phone will reach {{ machineName }}
+        </p>
+        <ul class="mt-1.5 grid gap-1">
+          <li
+            v-for="line in reaching"
+            :key="line.id"
+            class="add-phone__line"
+            :data-testid="`add-phone-reach-${line.id}`"
+          >
+            <Wifi
+              v-if="line.id === 'home'"
+              :size="14"
+              class="shrink-0 text-running-text"
+              aria-hidden="true"
+            />
+            <Globe
+              v-else
+              :size="14"
+              class="shrink-0 text-running-text"
+              aria-hidden="true"
+            />
+            <span class="text-text">{{ line.title }}</span>
+            <span class="font-mono text-xs text-muted">{{ line.hosts.join(", ") }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <p class="mt-4 max-w-prose text-xs text-muted">
+        The phone gets its own key, so removing it signs out only that phone.
+      </p>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="close"
+        >
+          Done
+        </Button>
+        <Button
+          variant="link"
+          size="sm"
+          type="button"
+          data-testid="add-phone-set-address"
+          @click="editingUrl = !editingUrl"
+        >
+          Use my own address
+        </Button>
+      </div>
+    </div>
+
+    <div
+      v-else
+      class="add-phone__card"
+    >
+      <h4 class="text-sm font-semibold text-text">
+        Use Fleet from your phone
       </h4>
       <p class="mt-1 max-w-prose text-sm text-muted">
-        This page is on this machine only. Give the address a phone reaches {{ machineName }} at — with
-        <code>tailscale serve</code> that's its https://….ts.net address.
+        Answer agents, start sessions and get notifications on your phone. It connects straight to {{ machineName }},
+        and nothing goes through Weave.
+      </p>
+
+      <div
+        v-if="reaching.length"
+        class="add-phone__reach"
+        data-testid="add-phone-readiness"
+      >
+        <p class="text-sm font-medium text-text">
+          Your phone will reach {{ machineName }}
+        </p>
+        <ul class="mt-1.5 grid gap-1">
+          <li
+            v-for="line in reaching"
+            :key="line.id"
+            class="add-phone__line"
+            :data-testid="`add-phone-reach-${line.id}`"
+          >
+            <Wifi
+              v-if="line.id === 'home'"
+              :size="14"
+              class="shrink-0 text-running-text"
+              aria-hidden="true"
+            />
+            <Globe
+              v-else
+              :size="14"
+              class="shrink-0 text-running-text"
+              aria-hidden="true"
+            />
+            <span class="text-text">{{ line.title }}</span>
+            <span class="font-mono text-xs text-muted">{{ line.hosts.join(", ") }}</span>
+          </li>
+        </ul>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="busy"
+          data-testid="add-phone-start"
+          @click="start()"
+        >
+          <Spinner
+            v-if="busy"
+            size="lg"
+          />
+          <Smartphone
+            v-else
+            aria-hidden="true"
+          />
+          Add your phone
+        </Button>
+        <Button
+          variant="link"
+          size="sm"
+          type="button"
+          data-testid="add-phone-set-address"
+          @click="editingUrl = !editingUrl"
+        >
+          Use my own address
+        </Button>
+      </div>
+      <p
+        v-if="connected"
+        class="mt-2 flex items-center gap-1.5 text-sm text-running-text"
+        role="status"
+      >
+        <Check
+          :size="14"
+          aria-hidden="true"
+        />
+        {{ connected }} is connected.
+      </p>
+    </div>
+
+    <div
+      v-if="editingUrl"
+      class="add-phone__card mt-3"
+      data-testid="add-phone-own-address"
+    >
+      <h4 class="text-sm font-semibold text-text">
+        Use my own address
+      </h4>
+      <p class="mt-1 max-w-prose text-sm text-muted">
+        An address you run yourself that reaches {{ machineName }}: a tunnel, or a domain such as
+        https://fleet.example.com. The code carries it first, ahead of the ones Fleet found.
       </p>
       <form
         class="mt-3 flex flex-wrap items-center gap-2"
@@ -206,8 +385,8 @@ onUnmounted(stopTimer);
           :class="inputClass"
           class="max-w-md"
           type="url"
-          placeholder="https://hangar.tail9c2e.ts.net"
-          aria-label="Address the phone opens"
+          placeholder="https://fleet.example.com"
+          aria-label="Your own address"
           data-testid="add-phone-url"
         >
         <Button
@@ -228,274 +407,6 @@ onUnmounted(stopTimer);
       </form>
     </div>
 
-    <template v-else-if="!code">
-      <div
-        class="add-phone__ready"
-        data-testid="add-phone-readiness"
-      >
-        <h4 class="text-sm font-semibold text-text">
-          Use Fleet from your phone
-        </h4>
-        <p class="mt-1 max-w-prose text-sm text-muted">
-          Answer agents, start sessions and get notifications on your phone. It connects straight to
-          {{ machineName }}{{ ready ? ", and everything it needs is in place:" : ". It needs three things:" }}
-        </p>
-        <ul class="mt-3 grid gap-3">
-          <li
-            v-for="item in readiness"
-            :key="item.id"
-            class="add-phone__item"
-            :data-testid="`add-phone-ready-${item.id}`"
-            :data-ok="item.ok"
-          >
-            <Check
-              v-if="item.ok"
-              :size="16"
-              class="add-phone__mark text-running-text"
-              aria-label="Done"
-            />
-            <Circle
-              v-else
-              :size="16"
-              class="add-phone__mark text-muted"
-              aria-label="Still to do"
-            />
-            <div class="min-w-0">
-              <p class="text-sm text-text">
-                {{ item.title }}
-              </p>
-              <p class="mt-0.5 max-w-prose text-xs text-muted">
-                {{ item.detail }}
-                <a
-                  v-if="item.link"
-                  :href="item.link.href"
-                  target="_blank"
-                  rel="noopener"
-                  class="text-accent-text underline-offset-2 hover:underline"
-                >{{ item.link.label }}</a>
-              </p>
-              <div
-                v-if="item.command"
-                class="add-phone__command"
-              >
-                <code>{{ item.command }}</code>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  :aria-label="`Copy ${item.command}`"
-                  @click="copyCommand(item.command)"
-                >
-                  <Check
-                    v-if="copied === item.command"
-                    :size="14"
-                  />
-                  <Copy
-                    v-else
-                    :size="14"
-                  />
-                </Button>
-              </div>
-            </div>
-          </li>
-        </ul>
-        <p
-          v-if="!ready"
-          class="mt-3 max-w-prose text-xs text-muted"
-        >
-          Without these the phone can still pair over your Wi-Fi and use Fleet in its browser, but not as an app or with
-          notifications. Step by step: docs/phone.md.
-        </p>
-      </div>
-      <details
-        class="mt-4 max-w-prose text-sm"
-        data-testid="add-phone-outside"
-      >
-        <summary class="cursor-pointer text-text">
-          Reach it from outside your network
-        </summary>
-        <div class="mt-2 grid gap-2 text-xs text-muted">
-          <p>
-            The phone opens one address, the one saved for {{ machineName }}{{ publicUrl ? ` (${publicUrl})` : "" }}. Any
-            https:// address that reaches this machine will do: Tailscale, a tunnel you run yourself, or a domain of
-            your own.
-          </p>
-          <p>
-            Fleet runs no relay of its own. The phone talks to your address, and nothing goes through Weave.
-            <a
-              href="https://fleet.tryweave.io/docs/phone"
-              target="_blank"
-              rel="noopener"
-              class="text-accent-text underline-offset-2 hover:underline"
-            >Phone setup</a>
-          </p>
-          <div>
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              data-testid="add-phone-set-address"
-              @click="editingUrl = true"
-            >
-              {{ publicUrl ? "Change the address" : "Set the address" }}
-            </Button>
-          </div>
-        </div>
-      </details>
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          variant="outline"
-          size="sm"
-          :disabled="busy"
-          data-testid="add-phone-start"
-          @click="start()"
-        >
-          <Spinner
-            v-if="busy"
-            size="lg"
-          />
-          <Smartphone
-            v-else
-            aria-hidden="true"
-          />
-          Add your phone
-        </Button>
-        <span class="text-xs text-muted">The phone gets its own key, so removing it signs out only that phone.</span>
-      </div>
-      <p
-        v-if="connected"
-        class="mt-2 flex items-center gap-1.5 text-sm text-running-text"
-        role="status"
-      >
-        <Check
-          :size="14"
-          aria-hidden="true"
-        />
-        {{ connected }} is connected.
-      </p>
-    </template>
-
-    <div
-      v-else
-      class="add-phone__card"
-    >
-      <div class="flex flex-wrap items-start gap-5">
-        <QrCode
-          :value="code.url"
-          :label="`Pairing code for ${machineName}`"
-          data-testid="add-phone-qr"
-        />
-        <div class="min-w-0 flex-1">
-          <h4 class="text-sm font-semibold text-text">
-            Add your phone
-          </h4>
-          <p class="mt-1 text-sm text-muted">
-            Scan with the phone's camera. The code works once and expires in 10 minutes.
-          </p>
-          <p
-            class="mt-2 font-mono text-xs text-muted"
-            data-testid="add-phone-host"
-          >
-            {{ host }}
-          </p>
-          <p class="mt-3 text-sm text-text">
-            No camera? Open <span class="font-mono text-xs">{{ code.payload.url }}/pair</span> and type
-            <code
-              class="add-phone__manual"
-              data-testid="add-phone-code"
-            >{{ code.manualCode }}</code>
-          </p>
-          <p
-            class="mt-2 text-xs"
-            :class="secondsLeft > 0 ? 'text-muted' : 'text-error-text'"
-          >
-            <template v-if="secondsLeft > 0">
-              Expires in {{ countdown }}
-            </template>
-            <template v-else>
-              This code has expired.
-              <Button
-                variant="link"
-                size="sm"
-                class="h-auto p-0"
-                @click="start()"
-              >
-                Make a new one
-              </Button>
-            </template>
-          </p>
-        </div>
-      </div>
-
-      <div class="mt-4 grid gap-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Phone opens</span>
-        <div
-          v-if="!editingUrl"
-          class="flex flex-wrap items-center gap-2"
-        >
-          <code class="add-phone__url">{{ code.payload.url }}</code>
-          <Button
-            variant="ghost"
-            size="sm"
-            @click="editingUrl = true"
-          >
-            Change
-          </Button>
-        </div>
-        <form
-          v-else
-          class="flex flex-wrap items-center gap-2"
-          @submit.prevent="saveUrl"
-        >
-          <input
-            v-model="phoneUrl"
-            :class="inputClass"
-            class="max-w-md"
-            type="url"
-            placeholder="https://hangar.tail9c2e.ts.net"
-            aria-label="Address the phone opens"
-            data-testid="add-phone-url"
-          >
-          <Button
-            type="submit"
-            size="sm"
-            :disabled="busy || !phoneUrl.trim()"
-          >
-            Save
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            type="button"
-            @click="editingUrl = false"
-          >
-            Cancel
-          </Button>
-        </form>
-        <p
-          v-if="insecure"
-          class="mt-1 flex max-w-prose items-start gap-1.5 text-xs text-idle-text"
-          data-testid="add-phone-insecure"
-        >
-          <AlertCircle
-            :size="14"
-            class="mt-px shrink-0"
-            aria-hidden="true"
-          />
-          <span>Install and notifications need HTTPS — put <code>tailscale serve</code> in front of Fleet and use its https:// address (see docs/phone.md). Over plain http the phone can still use Fleet in its browser.</span>
-        </p>
-      </div>
-
-      <div class="mt-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          @click="close"
-        >
-          Done
-        </Button>
-      </div>
-    </div>
-
     <ErrorNote
       v-if="error"
       :message="error"
@@ -505,42 +416,18 @@ onUnmounted(stopTimer);
 </template>
 
 <style scoped>
-.add-phone__ready {
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
+.add-phone__reach {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
-.add-phone__item {
+.add-phone__line {
   display: flex;
-  gap: 10px;
-}
-
-.add-phone__mark {
-  flex: none;
-  margin-top: 2px;
-}
-
-.add-phone__command {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  max-width: 100%;
-}
-
-.add-phone__command code {
-  min-width: 0;
-  overflow-x: auto;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  white-space: nowrap;
-  color: var(--text);
+  gap: 4px 8px;
+  font-size: 13px;
 }
 
 .add-phone__card {
@@ -558,11 +445,5 @@ onUnmounted(stopTimer);
   font-family: var(--font-mono-stack);
   font-size: 13px;
   letter-spacing: 0.08em;
-}
-
-.add-phone__url {
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  color: var(--text);
 }
 </style>

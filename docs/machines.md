@@ -81,8 +81,12 @@ At startup it says to run `fleet node pair` on this machine and paste the link t
 to its database, as on any Fleet (see [The access token](#the-access-token)). `fleet node` takes `--host`, `--port`, `--data-dir` and `--profile`, like
 `fleet`. Behind `tailscale serve`, leave out `--host`.
 
-A node can't pair a phone itself (`POST /api/machine/pairing` returns `409`), because the pairing link opens a page
-it doesn't serve. Pair the phone with the Fleet that has the node in its list; the phone reaches the node through it.
+A node pairs phones too: `fleet node up` and `fleet node pair` print a QR code in the terminal beside the code, and the
+phone app scans it. The code carries every address the node can be reached on (Tailscale, the home network, the host
+name, and a phone address if one is set), best first, as `urls` in the pairing payload; `url` stays the first, so an
+older phone reads that one. The phone tries each address, checks the machine's id there before it sends the code, and
+keeps the ones that answer. `POST /api/machine/pairing` takes an optional `baseUrl` (an address of your own, which goes
+first); with none it uses what Fleet listens on, and answers `400` when that is loopback only.
 
 ### Add a node with a pairing link
 

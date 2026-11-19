@@ -47,14 +47,23 @@ export async function removeDevice(id: string): Promise<void> {
   if (!response.ok && response.status !== 404) throw new Error(await readError(response, "Couldn't remove the device."));
 }
 
-/** Asks for a one-time code a phone opening `baseUrl` can redeem. */
-export async function createPairingCode(baseUrl: string): Promise<PairingCodeResponse> {
+/** Fleet listens on this computer only and has no address of its own to put in a code. */
+export class NoPhoneAddressError extends Error {}
+
+/**
+ * Asks for a one-time code. It carries every address Fleet can be reached on, so a phone tries each and nobody picks
+ * one. `ownAddress` is one of the person's own (a tunnel, a domain), which goes first.
+ */
+export async function createPairingCode(ownAddress?: string): Promise<PairingCodeResponse> {
   const response = await fetchOnMachine(null, "/api/machine/pairing", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ baseUrl }),
+    body: JSON.stringify(ownAddress ? { baseUrl: ownAddress } : {}),
   });
-  if (!response.ok) throw new Error(await readError(response, "Couldn't make a pairing code."));
+  if (!response.ok) {
+    const message = await readError(response, "Couldn't make a pairing code.");
+    throw ownAddress || response.status !== 400 ? new Error(message) : new NoPhoneAddressError(message);
+  }
   return await response.json() as PairingCodeResponse;
 }
 

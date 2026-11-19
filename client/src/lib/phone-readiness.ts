@@ -1,78 +1,43 @@
 /**
- * What a computer needs before a phone can use Fleet from anywhere, in plain words, worked out from what Fleet
- * already knows about itself (`GET /api/machine/access`) and the address the phone will open. Settings → Machines →
- * Add your phone shows it as a short checklist, with the command to run for anything missing. No Vue.
+ * Where a phone will reach a machine, in plain words, worked out from the addresses its pairing code carries (or, before
+ * there is a code, from the ones Fleet knows). Settings → Machines → Add your phone shows it as "Your phone will reach
+ * studio". No Vue.
  */
+import { kindOf } from "@/lib/machine-routes";
 
-export interface ReadinessItem {
-  id: "tailscale" | "https" | "key";
-  ok: boolean;
+export interface ReachLine {
+  id: "home" | "tailscale" | "own";
+  /** What the phone needs for this one: "At home, on your Wi-Fi". */
   title: string;
-  detail: string;
-  /** A command that fixes it, to copy. */
-  command?: string;
-  link?: { href: string; label: string };
+  /** The hosts as shown: `192.168.1.20`, `studio.tail4f2a.ts.net`. */
+  hosts: string[];
 }
 
-export interface ReadinessInput {
-  machineName: string;
-  /** The address the phone will open (the saved phone address, else Fleet's best guess); null when none is known. */
-  phoneUrl: string | null;
-  addresses: readonly { url: string; kind?: string }[];
-  requiresToken: boolean;
-  port: number;
-  /**
-   * The desktop app's "Let others reach this machine": `off` until someone asks, `on` once they do (every other device
-   * then needs a key), `unavailable` for a Fleet started from a terminal, which has flags instead.
-   */
-  reach?: "off" | "on" | "unavailable";
-}
-
-function hostOf(url: string | null): string {
-  if (!url) return "";
+function hostOf(url: string): string {
   try {
     return new URL(url).hostname;
   } catch {
-    return "";
+    return url;
   }
 }
 
-export function phoneReadiness(input: ReadinessInput): ReadinessItem[] {
-  const host = hostOf(input.phoneUrl);
-  const onTailnet = host.endsWith(".ts.net") || input.addresses.some((address) => address.kind === "tailnet");
-  const https = !!input.phoneUrl && input.phoneUrl.toLowerCase().startsWith("https://");
-  const keyAsked = input.requiresToken || input.reach === "on";
-  const desktop = input.reach === "off" || input.reach === "on";
+const unique = (hosts: string[]) => hosts.filter((host, index) => hosts.indexOf(host) === index);
 
-  return [
-    {
-      id: "tailscale",
-      ok: onTailnet,
-      title: "Tailscale on this machine and your phone",
-      detail: onTailnet
-        ? `Your phone reaches ${input.machineName} over your own private network, from anywhere. Nothing goes through Weave.`
-        : "A free private network, so your phone reaches this machine from anywhere without opening it to the internet. Install it on both and sign in to the same account.",
-      ...(onTailnet ? {} : { link: { href: "https://tailscale.com/download", label: "Get Tailscale" } }),
-    },
-    {
-      id: "https",
-      ok: https,
-      title: "A secure https:// address",
-      detail: https
-        ? `Your phone opens ${input.phoneUrl}.`
-        : "Phones only install apps and show notifications for https:// addresses. Tailscale gives Fleet one; it may ask you to turn on HTTPS certificates for your network.",
-      ...(https ? {} : { command: `tailscale serve --bg --https=443 http://127.0.0.1:${input.port}` }),
-    },
-    {
-      id: "key",
-      ok: keyAsked,
-      title: "Fleet asks every device for a key",
-      detail: keyAsked
-        ? "Only devices you add here get in, and you can remove any of them."
-        : desktop
-          ? `"Add a phone" asks if other devices may reach ${input.machineName}. Each one then needs its own key.`
-          : "Through tailscale serve every request looks like it comes from this machine, so Fleet has to ask for a key. Start Fleet with:",
-      ...(keyAsked || desktop ? {} : { command: `fleet --port ${input.port} --require-token` }),
-    },
-  ];
+/**
+ * One line for each way the phone can reach the machine, home network first, then Tailscale, then an address of its own.
+ * A line appears only when there is an address behind it. Loopback addresses mean nothing to a phone and are left out.
+ */
+export function reachLines(urls: readonly string[]): ReachLine[] {
+  const byKind = (...kinds: string[]) => urls.filter((url) => kinds.includes(kindOf(url))).map(hostOf);
+  const lan = byKind("lan");
+  const home = lan.length ? lan : byKind("hostname");
+  // Tailscale's name says more than its IP, so the IP only shows when there is no name.
+  const tailnet = byKind("tailnet").length ? byKind("tailnet") : byKind("tailnet-ip");
+  const own = urls.filter((url) => kindOf(url) === "other" && !/^(localhost|127\.|\[::1\])/i.test(hostOf(url))).map(hostOf);
+
+  const lines: ReachLine[] = [];
+  if (home.length) lines.push({ id: "home", title: "At home, on your Wi-Fi", hosts: unique(home) });
+  if (tailnet.length) lines.push({ id: "tailscale", title: "Away from home, with Tailscale on the phone", hosts: unique(tailnet) });
+  if (own.length) lines.push({ id: "own", title: "From anywhere, at your own address", hosts: unique(own) });
+  return lines;
 }

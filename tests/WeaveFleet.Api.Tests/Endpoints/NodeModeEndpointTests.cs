@@ -200,7 +200,7 @@ public sealed class NodeModeEndpointTests :
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var error = await response.Content.ReadFromJsonAsync<JsonElement>();
-        error.GetProperty("error").GetString()!.ShouldContain("only listens on this computer");
+        error.GetProperty("error").GetString()!.ShouldContain("only listens on this machine");
     }
 
     // ── The web app, for this computer's own desktop app ──────────────────────
