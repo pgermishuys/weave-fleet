@@ -15,6 +15,7 @@ import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.v
 import FoundMachinesCard from "@/components/settings/FoundMachinesCard.vue";
 import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
 import MachinePage from "@/components/settings/MachinePage.vue";
+import NewServerCard from "@/components/settings/NewServerCard.vue";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { usePreferencesStore } from "@/stores/preferences";
 import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
@@ -56,9 +57,9 @@ const openEntry = computed(() => entries.value.find((entry) => entry.key === pag
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
 const addForm = reactive({ link: "", token: "", code: "" });
-type AddMode = "found" | "setup" | "link";
-const addModes: AddMode[] = ["found", "setup", "link"];
-const modeLabels: Record<AddMode, string> = { found: "Found", setup: "Set it up from here", link: "Paste a pairing link" };
+type AddMode = "found" | "setup" | "server" | "link";
+const addModes: AddMode[] = ["found", "setup", "server", "link"];
+const modeLabels: Record<AddMode, string> = { found: "Found", setup: "Set it up from here", server: "On a new server", link: "Paste a pairing link" };
 // Found is where Add a machine opens: a waiting machine needs nothing pasted.
 const addMode = shallowRef<AddMode>("found");
 /** Set when a machine can't be set up from here: the link card says which machine and what to run on it. */
@@ -284,6 +285,10 @@ onUnmounted(() => {
           @added="onSetUp"
           @use-link="onUseLink"
           @running="setupRunning = $event"
+        />
+        <NewServerCard
+          v-else-if="addMode === 'server'"
+          @joined="onSetUp"
         />
         <template v-else>
           <p

@@ -267,17 +267,48 @@ describe("Settings → Machines", () => {
       await flushPromises();
     }
 
-    it("opens on Found, with Set it up from here and Paste a pairing link as the other choices", async () => {
+    it("opens on Found, with Set it up from here, On a new server and Paste a pairing link as the other choices", async () => {
       routes["/api/machines"] = () => json({ machines: [] });
       routes["/api/machines/found"] = () => json({ machines: [] });
       const wrapper = mount(MachinesSection);
       await flushPromises();
       await wrapper.find("[data-testid='machines-add']").trigger("click");
       await flushPromises();
-      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["Found", "Set it up from here", "Paste a pairing link"]);
+      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["Found", "Set it up from here", "On a new server", "Paste a pairing link"]);
       expect(wrapper.find("[data-testid='machines-add-mode-found']").attributes("aria-selected")).toBe("true");
       expect(wrapper.find("[data-testid='machines-found-empty']").exists()).toBe(true);
       expect(wrapper.find("[data-testid='machines-add-link']").exists()).toBe(false);
+    });
+
+    it("On a new server shows the line to paste, and closes with the machine's name when one joins", async () => {
+      let listed: unknown[] = [];
+      routes["/api/machines"] = () => json({ machines: listed });
+      routes["/api/machines/found"] = () => json({ machines: [] });
+      routes["/api/machines/join-code"] = () => json({
+        code: "J8RT-4WXN", expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(), addresses: ["http://100.64.0.2:6262"],
+        target: "http://100.64.0.2:6262#J8RT-4WXN", machineName: "studio",
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+      try {
+        const wrapper = mount(MachinesSection);
+        await flushPromises();
+        await wrapper.find("[data-testid='machines-add']").trigger("click");
+        await flushPromises();
+        await wrapper.find("[data-testid='machines-add-mode-server']").trigger("click");
+        await flushPromises();
+
+        expect(wrapper.find("[data-testid='machines-new-server-line']").text()).toContain("--join 'http://100.64.0.2:6262#J8RT-4WXN'");
+        expect(wrapper.find("[data-testid='machines-add-submit']").exists()).toBe(false);
+
+        listed = [{ id: "a".repeat(32), name: "atlas", baseUrl: "http://100.64.0.9:6262", os: "linux", status: "online", addedAt: "2026-11-19T10:01:00.000Z", lastSeenAt: null, token: "fdt_d1.secret" }];
+        await vi.advanceTimersByTimeAsync(3500);
+        await flushPromises();
+
+        expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false);
+        expect(wrapper.text()).toContain("Added atlas.");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("shows the pasted link's field on the Paste a pairing link tab", async () => {

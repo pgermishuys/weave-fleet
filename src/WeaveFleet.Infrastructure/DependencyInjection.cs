@@ -340,6 +340,12 @@ public static class DependencyInjection
         // Your Fleet (Labs): every machine keeps the list, and machines are introduced to each other.
         services.AddSingleton<WeaveFleet.Application.Machines.FleetRemovals>();
         services.AddSingleton<WeaveFleet.Application.Machines.FleetRoster>();
+        // A machine joining with a one-time code from its terminal (install.sh --join). The inviting machine contacts the
+        // joining one while the joiner waits, so the wait is longer than for other machine calls.
+        services.AddSingleton<WeaveFleet.Application.Machines.JoinCodeStore>();
+        services.AddSingleton<WeaveFleet.Application.Machines.FleetJoin>();
+        services.AddHttpClient(WeaveFleet.Application.Machines.FleetJoin.JoinHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(60))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(8) });
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.FleetRosterSync>();
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.FleetRosterSync>());
         // Scoped: it counts the caller's own sessions.

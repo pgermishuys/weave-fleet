@@ -128,6 +128,20 @@ While `fleet node pair` (or `fleet node up`, which runs it) has a live code, the
 - **"atlas wants to join your Fleet".** With Your Fleet on (Settings → Labs), every connected screen looks every 20 seconds (`GET /api/machines/found`, which a paired phone or signed-in screen may read; only the owner adds). The desktop app and browsers show a notice with an Add button that opens Add a machine → Found, where the code is checked. The native phone app shows the same line as a banner on the Sessions screen, asked for from the machine it is paired with. Nothing is pushed: Fleet has no native push sender, so a screen that isn't open doesn't hear.
 - **The desktop app's first run.** The window looks once for a machine that is waiting. If it finds one it shows "Found your Fleet" with the same code check, and after joining asks "Where should new sessions run?". If nothing is waiting it shows nothing and doesn't look again; Add a machine → Found is always there.
 
+### On a new server: `install.sh --join`
+
+Settings → Machines → Add a machine → **On a new server** gives one line to paste on a server that has no Fleet yet (in a terminal or a cloud server's start-up script):
+
+```sh
+curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh -s -- --join 'http://100.64.0.2:6262,http://192.168.1.20:6262#J8RT-4WXN'
+```
+
+- **The line.** The machine you're on makes a join code (`POST /api/machines/join-code`, owner only) and the line carries every address that machine can be reached at, like a pairing code does. The code works once and for 30 minutes, lives in memory only and is stored hashed. The tab counts down, offers a new code when it runs out, and closes with "Added atlas" when a machine joins.
+- **On the server.** `install.sh` installs Fleet, runs `fleet node up --yes` (a machine with no screen, kept running as a service) and then `fleet node join '<line>'`, printing each step. `--yes` picks Tailscale when it is on, else "only over SSH", which no other machine can reach: join then says so and to run `fleet node up --lan` first.
+- **Joining.** `fleet node join` asks the machine running here (`POST /api/machine/join`, with its own token over loopback). That machine makes a pairing code of its own and sends it with the join code to the Fleet (`POST /api/pairing/join`, rate limited like pairing). The Fleet uses the join code up first, then adds the machine the way Add a machine does, with a key the new machine made for it. The master tokens never cross the network. With Your Fleet on, the Fleet then introduces the new machine to every other machine (see above), and `fleet node join` turns Your Fleet on on the new machine for the introduction back. A Fleet with it off lists the new machine only itself, and `join` says so.
+- **Errors.** A code that expired, was used, or never existed gives "This join code has expired or was already used. Make a new one in Add a machine → On a new server." A new machine the Fleet can't reach back says so, and the code is used up.
+- **Windows.** `fleet node join` is in `launcher.cmd` too; `install.sh` is Linux and macOS only.
+
 ### Set a machine up from here (over SSH)
 
 No command on the other machine: if you can `ssh` to it, Fleet sets it up. Settings → Machines → **Add a machine** →

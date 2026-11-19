@@ -108,6 +108,42 @@ public static class DeviceEndpoints
         .Produces<MachinePairingCodeResponse>(200)
         .WithName("CreateMachinePairingCode");
 
+        // `fleet node join '<address>#CODE'`, asked of the node on this machine: joins it to the Fleet that made the line. The
+        // node sends the join code with a pairing code of its own, and the Fleet adds it the way "Add a machine" does. A node
+        // can do it: nothing here needs a web app.
+        machine.MapPost("/join", async (
+            JoinFleetRequest request,
+            FleetJoin join,
+            MachineIdentityStore identities,
+            LoopbackAuthPolicy policy,
+            TailnetName tailnet,
+            CancellationToken ct) =>
+        {
+            var (target, problem) = JoinTarget.Parse(request.Target);
+            if (target is null)
+                return Results.BadRequest(new ErrorResponse(problem!));
+
+            var identity = identities.Get();
+            var addresses = policy.IsRemoteReachable
+                ? PairingAddresses.For(null, identity.PublicUrl, MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct), policy.Reach).Select(address => address.Url))
+                : [];
+
+            var result = await join.JoinAsync(target, addresses, ct);
+            var body = new JoinFleetResponse(StatusName(result.Status), result.Message, result.FleetMachineId, result.FleetMachineName, result.Listed, result.FleetKeepsList);
+            return result.Status == JoinStatus.Joined
+                ? Results.Ok(body)
+                : Results.Json(body, ApiJsonContext.Default.JoinFleetResponse, statusCode: result.Status switch
+                {
+                    JoinStatus.Invalid => StatusCodes.Status400BadRequest,
+                    JoinStatus.CodeRefused => StatusCodes.Status404NotFound,
+                    JoinStatus.TooManyTries => StatusCodes.Status429TooManyRequests,
+                    _ => StatusCodes.Status502BadGateway,
+                });
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<JoinFleetResponse>(200)
+        .WithName("JoinFleet");
+
         machine.MapGet("/devices", async (DeviceTokenService devices) =>
             Results.Ok(new DeviceListResponse(await devices.ListAsync())))
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
@@ -276,6 +312,31 @@ public static class DeviceEndpoints
         .Produces<WaitingResponse>(200)
         .WithName("GetWaitingMachine");
 
+        // A new server joining: the join code is the credential. It is used up first; then this machine adds the sender by the
+        // pairing code the sender made, so the sender's master token and this machine's never move.
+        pairing.MapPost("/join", async (
+            JoinRequest request,
+            FleetJoin join,
+            ManualCodeAttempts attempts,
+            CancellationToken ct) =>
+        {
+            if (Limited(attempts, request.Code) is { } limited)
+                return limited;
+
+            var (status, message, answer) = await join.AcceptAsync(request, ct);
+            if (answer is not null)
+                return Results.Ok(answer);
+            return Results.Json(new ErrorResponse(message), ApiJsonContext.Default.ErrorResponse, statusCode: status switch
+            {
+                JoinStatus.CodeRefused => StatusCodes.Status404NotFound,
+                JoinStatus.Invalid => StatusCodes.Status400BadRequest,
+                _ => StatusCodes.Status502BadGateway,
+            });
+        })
+        .AllowAnonymous()
+        .Produces<JoinAnswer>(200)
+        .WithName("JoinFleetWithCode");
+
         pairing.MapPost("/redeem", async (
             HttpContext http,
             PairingRedeemRequest request,
@@ -322,6 +383,16 @@ public static class DeviceEndpoints
         BearerTokenHandler.AuthenticatedWithToken(http.User)
         && FleetClaims.DeviceIdOf(http.User) is { } deviceId
         && (await devices.ListAsync()).Any(d => d.Id == deviceId && d.Kind == DeviceKinds.Machine);
+
+    private static string StatusName(JoinStatus status) => status switch
+    {
+        JoinStatus.Joined => "joined",
+        JoinStatus.CodeRefused => "code-refused",
+        JoinStatus.TooManyTries => "too-many-tries",
+        JoinStatus.Unreachable => "unreachable",
+        JoinStatus.Refused => "refused",
+        _ => "invalid",
+    };
 
     private static IResult? Limited(ManualCodeAttempts attempts, string? manualCode)
     {

@@ -9,8 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Options Program.cs reads that people don't pass to `fleet`: dev switches, import-legacy-sessions' own options, and
-# --node, which `fleet node` passes.
-APP_ONLY_OPTIONS="--harness --transport --import-legacy-sessions --source --node"
+# --node, which `fleet node` passes, and --join-wait, which `fleet node join` passes.
+APP_ONLY_OPTIONS="--harness --transport --import-legacy-sessions --source --node --join-wait"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -156,6 +156,25 @@ if run_fleet node --json; then
 elif [ -f "$WORK/out" ]; then
   fail "fleet node --json started the app"
 fi
+
+# `fleet node join '<address>#CODE'` asks the running node to join the Fleet that made the line, and starts nothing.
+run_fleet node join 'http://100.64.0.5:6262#J8RT-4WXN' --port 5512 || true
+if expect_started node join 'http://100.64.0.5:6262#J8RT-4WXN' --port 5512; then
+  grep '^args=' "$WORK/out" | grep -q -- "--node-join http://100.64.0.5:6262#J8RT-4WXN --join-wait 30" || fail "fleet node join didn't pass the line: $(tr '\n' ' ' < "$WORK/out")"
+  started_as_node && fail "fleet node join started the app as a node: $(tr '\n' ' ' < "$WORK/out")"
+  expect_record "port=5512" "node join --port 5512"
+fi
+# Without the line (or with an option where it goes) it stops before the app runs.
+for args in "node join" "node join --port 5512"; do
+  # shellcheck disable=SC2086
+  if run_fleet $args; then
+    fail "fleet $args should fail"
+  elif [ -f "$WORK/out" ]; then
+    fail "fleet $args ran the app"
+  elif ! grep -q "fleet node join needs the line" "$WORK/stdout"; then
+    fail "fleet $args: unexpected output: $(cat "$WORK/stdout")"
+  fi
+done
 
 # install-service and uninstall-service, against stand-ins for systemctl, loginctl and launchctl that record their
 # calls. A uname that says Darwin turns the same launcher to its macOS branch.
