@@ -151,18 +151,43 @@ public static class MachinesEndpoints
         group.MapPost("/{id}/device-grant", async (
             HttpContext http,
             string id,
+            DeviceGrantRequest? body,
             WeaveFleet.Application.Devices.DeviceTokenService devices,
+            YourFleetFeature yourFleet,
             DeviceGrantService grants,
             CancellationToken cancellationToken) =>
         {
-            if (FleetClaims.DeviceIdOf(http.User) is not { } deviceId)
+            // With Your Fleet on (Labs), a screen signed in as the owner (a browser, the desktop app's window) asks the
+            // same way a phone does, naming itself.
+            string grantee, name;
+            string? platform;
+            var isScreen = false;
+            if (FleetClaims.DeviceIdOf(http.User) is { } deviceId)
+            {
+                var device = await devices.ValidateDeviceAsync(deviceId);
+                if (device is null)
+                    return Results.Unauthorized();
+                grantee = deviceId;
+                name = device.Name;
+                platform = (await devices.ListAsync()).FirstOrDefault(d => d.Id == deviceId)?.Platform;
+            }
+            else if (FleetClaims.IsOwner(http.User) && await yourFleet.IsEnabledAsync())
+            {
+                // Its key is a device token on the other machine like a phone's, kept under the screen's id here so
+                // removing the machine (and, in a later PR, the screen) removes it.
+                if (!YourFleet.IsValidScreenId(body?.ScreenId))
+                    return Results.BadRequest(new ErrorResponse("screenId is a random id of up to 64 letters, digits, - or _."));
+                isScreen = true;
+                grantee = YourFleet.ScreenPrefix + body!.ScreenId;
+                name = string.IsNullOrWhiteSpace(body.Name) ? "A browser" : body.Name.Trim();
+                platform = "other";
+            }
+            else
+            {
                 return Results.BadRequest(new ErrorResponse("Only a paired device asks for a device grant; a machine uses its machine token."));
-            var device = await devices.ValidateDeviceAsync(deviceId);
-            if (device is null)
-                return Results.Unauthorized();
-            var platform = (await devices.ListAsync()).FirstOrDefault(d => d.Id == deviceId)?.Platform;
+            }
 
-            var result = await grants.GrantAsync(deviceId, device.Name, platform, id, cancellationToken);
+            var result = await grants.GrantAsync(grantee, name, platform, id, cancellationToken, isScreen);
             return result.Grant is { } grant
                 ? Results.Ok(new DeviceGrantResponse(grant.MachineId, grant.BaseUrl, grant.Token))
                 : result.Failure == GrantFailure.NoSuchMachine

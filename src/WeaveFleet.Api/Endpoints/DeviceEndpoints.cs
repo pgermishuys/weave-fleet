@@ -99,12 +99,22 @@ public static class DeviceEndpoints
         .WithName("ListDevices");
 
         machine.MapDelete("/devices/{id}", async (
+            HttpContext http,
             string id,
             DeviceTokenService devices,
             WeaveFleet.Domain.Repositories.IPushSubscriptionRepository subscriptions,
             WeaveFleet.Application.Machines.DeviceGrantService grants,
             CancellationToken cancellationToken) =>
         {
+            // A machine in the owner's Fleet (it holds a machine-kind token) removes only what a machine made for a phone
+            // or screen: a device with a home. Everything else is the owner's.
+            if (!FleetClaims.IsOwner(http.User))
+            {
+                var target = (await devices.ListAsync()).FirstOrDefault(d => d.Id == id);
+                if (!await IsPeerMachineAsync(http, devices) || target is null || target.PairedVia is null)
+                    return Results.Json(new ErrorResponse("Only the owner removes a device."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            }
+
             if (!await devices.RevokeAsync(id))
                 return Results.NotFound(new ErrorResponse("No such device."));
 
@@ -113,14 +123,15 @@ public static class DeviceEndpoints
             await grants.RevokeAllAsync(id, cancellationToken);
             return Results.NoContent();
         })
-        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .RequireAuthorization()
         .WithName("RemoveDevice");
 
         machine.MapPost("/devices", async (HttpContext http, CreateDeviceRequest request, DeviceTokenService devices) =>
         {
-            // Another machine asks with the machine token it was given. A browser signed in by cookie (even the
+            // Another machine asks with the machine token it was given, or with the machine-kind device token it got by
+            // pairing (that's how a machine added by its pairing code asks). A browser signed in by cookie (even the
             // owner's) or by loopback doesn't mint tokens: pairing is how a browser adds a device.
-            if (!BearerTokenHandler.AuthenticatedWithToken(http.User))
+            if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
                 return Results.Json(new ErrorResponse("Only the machine token can create a device token."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
             if (ValidateDevice(request.Name, request.Platform) is { } invalid)
@@ -133,7 +144,7 @@ public static class DeviceEndpoints
             var (device, token) = await devices.IssueAsync(request.Name!.Trim(), NormalizePlatform(request.Platform), string.IsNullOrEmpty(pairedVia) ? null : pairedVia);
             return Results.Ok(new CreateDeviceResponse(device.Id, token));
         })
-        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .RequireAuthorization()
         .Produces<CreateDeviceResponse>(200)
         .WithName("CreateDevice");
 
@@ -215,6 +226,12 @@ public static class DeviceEndpoints
 
         return app;
     }
+
+    /// <summary>True when the request was made with a machine-kind device token: another machine in the owner's Fleet.</summary>
+    private static async Task<bool> IsPeerMachineAsync(HttpContext http, DeviceTokenService devices) =>
+        BearerTokenHandler.AuthenticatedWithToken(http.User)
+        && FleetClaims.DeviceIdOf(http.User) is { } deviceId
+        && (await devices.ListAsync()).Any(d => d.Id == deviceId && d.Kind == DeviceKinds.Machine);
 
     private static IResult? Limited(ManualCodeAttempts attempts, string? manualCode)
     {

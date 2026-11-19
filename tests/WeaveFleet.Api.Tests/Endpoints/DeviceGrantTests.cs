@@ -9,6 +9,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -185,6 +186,128 @@ public sealed class DeviceGrantTests
 
         (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().ListGrantsForMachineAsync(MachineId(falcon))).ShouldBeEmpty();
+    }
+
+    // ---- Your Fleet (Labs): a screen signed in as the owner gets its own key ----
+
+    [Fact]
+    public async Task With_Your_Fleet_on_an_owner_screen_gets_its_own_token_on_another_machine()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        await ListAsync(hangar, falcon);
+        await TurnOnYourFleetAsync(hangar);
+        using var screen = Client(hangar, MachineToken(hangar));
+
+        var granted = await screen.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "s-1234", name = "Chrome on a laptop" });
+
+        var falconToken = (await granted.ReadSuccessAsync()).GetProperty("token").GetString()!;
+        falconToken.ShouldStartWith("fdt_");
+        falconToken.ShouldNotBe(MachineToken(falcon));
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await Client(falcon, falconToken).GetAsync("/api/machine/access")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        var minted = (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).Single();
+        minted.Name.ShouldBe($"Chrome on a laptop via {Name(hangar)}");
+        minted.PairedVia.ShouldBe(MachineId(hangar));
+        (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().GetGrantAsync("screen:s-1234", MachineId(falcon)))!
+            .RemoteDeviceId.ShouldBe(minted.Id);
+        (await hangar.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty("a screen isn't a paired device on hangar");
+    }
+
+    [Fact]
+    public async Task A_screen_asking_again_replaces_its_key_and_another_screen_keeps_its_own()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        await ListAsync(hangar, falcon);
+        await TurnOnYourFleetAsync(hangar);
+        using var screen = Client(hangar, MachineToken(hangar));
+        async Task<string> AskAsync(string screenId) =>
+            (await (await screen.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId })).ReadSuccessAsync()).GetProperty("token").GetString()!;
+
+        var first = await AskAsync("one");
+        var other = await AskAsync("two");
+        var second = await AskAsync("one");
+
+        (await Client(falcon, first).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await Client(falcon, second).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await Client(falcon, other).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Removing_the_machine_takes_a_screens_key_on_it_away()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        await ListAsync(hangar, falcon);
+        await TurnOnYourFleetAsync(hangar);
+        using var owner = Client(hangar, MachineToken(hangar));
+        var falconToken = (await (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "one" })).ReadSuccessAsync()).GetProperty("token").GetString()!;
+
+        (await owner.DeleteAsync($"/api/machines/{MachineId(falcon)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task With_Your_Fleet_off_an_owner_screen_gets_no_key_and_a_bad_screen_id_is_refused()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        await ListAsync(hangar, falcon);
+        using var owner = Client(hangar, MachineToken(hangar));
+
+        (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "s-1" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
+
+        await TurnOnYourFleetAsync(hangar);
+        (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "has spaces!" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await owner.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
+    }
+
+    // ---- A machine added by its pairing code holds a machine-kind device token, not the machine token ----
+
+    [Fact]
+    public async Task A_machine_added_by_pairing_code_can_make_and_remove_a_screens_key()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        var (_, peerToken) = await falcon.Services.GetRequiredService<DeviceTokenService>().IssueAsync("hangar", "other", kind: DeviceKinds.Machine);
+        await hangar.Services.GetRequiredService<RemoteMachineService>().ImportAsync(
+            [new ImportedMachine(MachineId(falcon), "falcon", "https://falcon.test", peerToken, "linux", null)]);
+        await TurnOnYourFleetAsync(hangar);
+        using var owner = Client(hangar, MachineToken(hangar));
+        var falconToken = (await (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "one" })).ReadSuccessAsync()).GetProperty("token").GetString()!;
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Removing the machine takes the key away, through the peer token.
+        (await owner.DeleteAsync($"/api/machines/{MachineId(falcon)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_peer_machine_token_removes_nothing_but_devices_a_machine_made_and_a_phone_token_makes_nothing()
+    {
+        await using var falcon = Fleet();
+        var devices = falcon.Services.GetRequiredService<DeviceTokenService>();
+        var (_, peerToken) = await devices.IssueAsync("hangar", "other", kind: DeviceKinds.Machine);
+        var (phone, phoneToken) = await devices.IssueAsync("Pixel 9", "android");
+        using var peer = Client(falcon, peerToken);
+
+        (await peer.DeleteAsync($"/api/machine/devices/{phone.Id}")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await Client(falcon, phoneToken).PostAsJsonAsync("/api/machine/devices", new { name = "x", platform = "other" })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        var made = await peer.PostAsJsonAsync("/api/machine/devices", new { name = "Chrome via hangar", platform = "other", pairedVia = "hangar-id" });
+        var madeId = (await made.ReadSuccessAsync()).GetProperty("deviceId").GetString();
+        (await peer.DeleteAsync($"/api/machine/devices/{madeId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    private static async Task TurnOnYourFleetAsync(WebApplicationFactory<Program> factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(YourFleet.PreferenceKey, "true");
     }
 
     private static async Task ListAsync(WebApplicationFactory<Program> home, WebApplicationFactory<Program> other) =>

@@ -31,7 +31,7 @@ public sealed partial class DeviceGrantService(
     /// Makes the phone a token on <paramref name="machineId"/>. A grant made before is replaced: the phone only asks
     /// when it has lost its token or the machine stopped taking it.
     /// </summary>
-    public async Task<GrantResult> GrantAsync(string deviceId, string deviceName, string? platform, string machineId, CancellationToken cancellationToken)
+    public async Task<GrantResult> GrantAsync(string deviceId, string deviceName, string? platform, string machineId, CancellationToken cancellationToken, bool isScreen = false)
     {
         var machine = await repository.GetAsync(machineId);
         if (machine is null)
@@ -102,7 +102,7 @@ public sealed partial class DeviceGrantService(
 
             // The phone may have been removed while the other machine was minting. Its removal either already listed
             // this grant or happened before the check below, which then undoes the grant itself.
-            if (await devices.ValidateDeviceAsync(deviceId) is null)
+            if (!isScreen && await devices.ValidateDeviceAsync(deviceId) is null)
             {
                 await RevokeAsync(machine, new DeviceGrant { DeviceId = deviceId, MachineId = machineId, RemoteDeviceId = minted.DeviceId }, cancellationToken);
                 return GrantResult.Fail(GrantFailure.Refused, "This phone was removed.");

@@ -78,3 +78,58 @@ describe("useMachineGrants", () => {
     expect((await readCredentials())?.grants.map((g) => g.token)).toEqual(["fdt_falcon.2"]);
   });
 });
+
+describe("useMachineGrants on a screen that isn't a paired phone (Your Fleet)", () => {
+  let grantBodies: string[];
+  let yourFleet: string;
+
+  beforeEach(async () => {
+    await clearCredentials();
+    localStorage.clear();
+    grantBodies = [];
+    yourFleet = "true";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url === "/api/preferences") return new Response(JSON.stringify({ YourFleet: yourFleet }), { status: 200 });
+      if (url === "/api/machine") return new Response(JSON.stringify({ id: "home", name: "hangar" }), { status: 200 });
+      const machineId = /\/api\/machines\/([^/]+)\/device-grant/.exec(url)?.[1];
+      if (machineId) {
+        expect(new Headers(init.headers).get("Authorization")).toBeNull();
+        grantBodies.push(String(init.body));
+        return new Response(JSON.stringify({ machineId, baseUrl: `https://${machineId}.ts.net`, token: `fdt_${machineId}.${grantBodies.length}` }), { status: 200 });
+      }
+      return new Response("{}", { status: 404 });
+    }));
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks home for a key by its own id, keeps it apart from a phone's credentials, and asks once", async () => {
+    const grants = useMachineGrants();
+
+    const first = await grants.ensureGrants([falcon]);
+    await grants.ensureGrants([falcon]);
+
+    expect(grantBodies).toHaveLength(1);
+    expect(JSON.parse(grantBodies[0]!)).toMatchObject({ screenId: expect.stringMatching(/^[0-9a-f]{24}$/) });
+    expect(first?.homeMachineId).toBe("home");
+    expect(first?.grants).toEqual([{ machineId: "falcon", baseUrl: "https://falcon.ts.net", token: "fdt_falcon.1" }]);
+    expect(await readCredentials()).toBeNull();
+  });
+
+  it("asks for a new key once when the machine turns it away", async () => {
+    const grants = useMachineGrants();
+    await grants.ensureGrants([falcon]);
+
+    expect(await grants.renewGrant("falcon")).toBe("fdt_falcon.2");
+    expect(await grants.renewGrant("falcon")).toBeNull();
+  });
+
+  it("does nothing with Your Fleet off", async () => {
+    yourFleet = "false";
+    const grants = useMachineGrants();
+
+    expect(await grants.ensureGrants([falcon])).toBeNull();
+    expect(grantBodies).toEqual([]);
+  });
+});
