@@ -547,7 +547,8 @@ app.Lifetime.ApplicationStarted.Register(() =>
         FleetInstrumentation.ServiceVersion.Split('+')[0],
         Path.GetFullPath(fleetOptions.DatabasePath),
         fleetOptions.Desktop.Enabled,
-        DateTimeOffset.UtcNow));
+        DateTimeOffset.UtcNow,
+        loopbackAuthPolicy.RequiresToken));
 });
 app.Lifetime.ApplicationStopped.Register(() => instanceLock?.Dispose());
 
@@ -767,7 +768,9 @@ if (fleetOptions.ServeUi)
 }
 else
 {
-    // A node: no web app, so "/" says what this is and every other page is 404.
+    // A node: no web app for anyone but this computer's own desktop app, so for everyone else "/" says what this is
+    // and every other page is 404.
+    app.UseWebAppForThisComputer();
     app.MapNodeNote();
     app.MapUnknownServerPaths();
 }

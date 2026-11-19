@@ -146,13 +146,16 @@ public sealed class FleetInstanceLock : IDisposable
 /// <param name="DatabasePath">The database Fleet is using.</param>
 /// <param name="Desktop">Whether the desktop app started this Fleet.</param>
 /// <param name="StartedAt">When Fleet started listening.</param>
+/// <param name="RequiresToken">Whether even a request from this computer needs the access token (a node does). The
+/// desktop app then signs in with the key in <c>&lt;db name&gt;.machine.json</c> next to the database.</param>
 public sealed record FleetInstanceInfo(
     int Pid,
     string Url,
     string Version,
     string DatabasePath,
     bool Desktop,
-    DateTimeOffset StartedAt);
+    DateTimeOffset StartedAt,
+    bool RequiresToken = false);
 
 [JsonSerializable(typeof(FleetInstanceInfo))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]

@@ -62,7 +62,7 @@ a terminal, and every terminal step prints the next one.
 Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are the journeys on the proposal page.
 
 - [x] **0. Over SSH port bug.** Merged as #1073.
-- [ ] **1. J8: desktop app on a computer already running `fleet node`.** First reproduce it (Windows: the node's
+- [x] **1. J8: desktop app on a computer already running `fleet node`.** (#1076) First reproduce it (Windows: the node's
   "Fleet node" scheduled task, then the desktop app). Then make the app use that Fleet: read its key file as the same
   user, show the web app itself, and show the "Fleet already runs on this computer" screen. S–M.
 - [ ] **2. Words and next steps.**

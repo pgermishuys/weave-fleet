@@ -94,6 +94,29 @@ public sealed class FleetInstanceLockTests : IDisposable
     }
 
     [Fact]
+    public void The_instance_file_says_whether_even_this_computer_needs_the_key()
+    {
+        using var instance = FleetInstanceLock.TryAcquire(DatabasePath())!;
+
+        instance.WriteInstanceFile(new FleetInstanceInfo(1, "http://127.0.0.1:1", "1.0.0", DatabasePath(), false, DateTimeOffset.UnixEpoch, RequiresToken: true));
+
+        FleetInstanceLock.ReadInstance(DatabasePath())!.RequiresToken.ShouldBeTrue();
+        File.ReadAllText(FleetInstanceLock.GetInstanceFilePath(DatabasePath())).ShouldContain("\"requiresToken\": true");
+    }
+
+    [Fact]
+    public void An_instance_file_from_before_it_says_nothing_about_the_key()
+    {
+        using var instance = FleetInstanceLock.TryAcquire(DatabasePath())!;
+        File.WriteAllText(
+            FleetInstanceLock.GetInstanceFilePath(DatabasePath()),
+            """{ "pid": 1, "url": "http://127.0.0.1:1", "version": "0.23.0", "databasePath": "x", "desktop": false, "startedAt": "2026-09-14T12:00:00+00:00" }""");
+
+        FleetInstanceLock.ReadInstance(DatabasePath())!.RequiresToken.ShouldBeFalse();
+    }
+
+
+    [Fact]
     public void The_instance_file_uses_camel_case_names()
     {
         using var instance = FleetInstanceLock.TryAcquire(DatabasePath())!;

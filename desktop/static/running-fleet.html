@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Fleet</title>
+<style>
+  :root { --bg: #F3F2EF; --card: #ffffff; --text: #1A1918; --muted: #6E6A65; --accent: #5B6EC7; --border: rgba(26, 25, 24, 0.09); color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d10; --card: #1b1b20; --text: #e8e8ec; --muted: #8e8e9a; --accent: #6366f1; --border: rgba(255, 255, 255, 0.075); } }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 0 16px; }
+  main { width: 470px; max-width: 100%; box-sizing: border-box; display: grid; gap: 12px; padding: 22px 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+  img { width: 40px; height: 40px; }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  p { margin: 0; color: var(--muted); }
+  .detail { font-size: 12.5px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+  .actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+  button { font: inherit; font-size: 13px; font-weight: 500; border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .6; cursor: default; }
+</style>
+</head>
+<body>
+<main>
+  <img src="icon.png" alt="">
+  <h1>Fleet already runs on this computer</h1>
+  <p id="message">Fleet runs in the background. The desktop app will use it: the same sessions, harnesses and machines, and it keeps running when you close the window.</p>
+  <p class="detail" id="detail"></p>
+  <div class="actions"><button id="use" type="button" autofocus>Use it</button></div>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  const host = params.get("host") || "This computer";
+  const started = new Date(params.get("since") || "");
+  const since = Number.isNaN(started.getTime()) ? "" : ` (started ${started.toLocaleDateString(undefined, { day: "numeric", month: "short" })})`;
+  document.getElementById("message").textContent = `${host} runs Fleet in the background${since}. The desktop app will use it: the same sessions, harnesses and machines, and it keeps running when you close the window.`;
+  document.getElementById("detail").textContent = `${host} · Fleet ${params.get("version") || ""}`.trim();
+  const use = document.getElementById("use");
+  use.addEventListener("click", () => {
+    use.disabled = true;
+    window.fleetDesktop?.useRunningFleet();
+  });
+</script>
+</body>
+</html>

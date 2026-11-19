@@ -13,6 +13,8 @@ const bridge = {
   openLogs: (): Promise<void> => ipcRenderer.invoke("fleet-desktop:open-logs"),
   /** Tries again after Fleet failed to start (the error page's button). */
   retry: (): Promise<void> => ipcRenderer.invoke("fleet-desktop:retry"),
+  /** The "Fleet already runs on this computer" page's button: use that Fleet. */
+  useRunningFleet: (): Promise<void> => ipcRenderer.invoke("fleet-desktop:use-running-fleet"),
   /** The app's own updates: status, the newer version, download progress. */
   getUpdateState: (): Promise<UpdateState> => ipcRenderer.invoke("fleet-desktop:get-update-state"),
   /** Calls back whenever the update state changes; returns a function that stops it. */

@@ -13,6 +13,8 @@ export interface DesktopSettings {
   window?: Bounds & { maximized?: boolean };
   /** The port the app's own Fleet used last time, so the UI keeps its local storage (theme, drafts). */
   port?: number;
+  /** The person chose to use the Fleet that already runs on this computer (the `fleet node` one), so don't ask again. */
+  useRunningFleet?: boolean;
 }
 
 export class SettingsStore {
