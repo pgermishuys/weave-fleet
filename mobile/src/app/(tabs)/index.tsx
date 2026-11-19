@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Pressable, RefreshControl, SectionList, View } from "react-native";
 import { manager, useFleet } from "~/fleet/hooks";
 import { newPagesOf, pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
-import { joinedText } from "~/fleet/your-fleet-core";
+import { joinedText, wantingText } from "~/fleet/your-fleet-core";
 import { interruptionBanner } from "~/fleet/interruption-core";
 import { rowAge, rowDetail } from "~/fleet/session-list";
 import { Button, EmptyState, FleetMark, InterruptionBanner, JoinedBanner, SectionHeader, SessionRow, Sheet, Text, glyphStatusOf } from "~/kit";
@@ -14,7 +14,7 @@ import type { ConnectionState } from "~/fleet/hub";
 
 export default function Sessions() {
   const { color } = useTheme();
-  const { machines, sections, loading, interrupted, joined } = useFleet();
+  const { machines, sections, loading, interrupted, joined, wanting } = useFleet();
   const [cutOff, setCutOff] = useState(false);
   const [stopping, setStopping] = useState(false);
   const banner = interruptionBanner(interrupted);
@@ -57,8 +57,15 @@ export default function Sessions() {
         sections={sections}
         keyExtractor={(entry) => entry.key}
         stickySectionHeadersEnabled={false}
-        ListHeaderComponent={banner || joined.length > 0 ? (
+        ListHeaderComponent={banner || joined.length > 0 || wanting.length > 0 ? (
           <View>
+          {wanting.map((notice) => (
+            <JoinedBanner
+              key={notice.machineId} testID="wanting-banner" text={wantingText(notice)}
+              onPress={() => manager.dismissWanting(notice.machineId)}
+              onDismiss={() => manager.dismissWanting(notice.machineId)}
+            />
+          ))}
           {joined.map((notice) => (
             <JoinedBanner
               key={notice.machineId} testID="joined-banner" text={joinedText(notice)}

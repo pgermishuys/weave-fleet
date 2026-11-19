@@ -81,7 +81,8 @@ public static class MachinesEndpoints
         group.MapGet("/found", async (FoundMachines found, CancellationToken cancellationToken) =>
             Results.Ok(new FoundMachineListResponse((await found.ListAsync(cancellationToken))
                 .Select(f => new FoundMachineResponse(f.MachineId, f.Name, f.Os, f.BaseUrl, f.Hint, f.Source, f.ExpiresAt)).ToList())))
-        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        // A paired phone and a signed-in screen read it too: they show "atlas wants to join your Fleet". Only the owner adds.
+        .RequireAuthorization("FleetUser")
         .Produces<FoundMachineListResponse>(200)
         .WithName("ListFoundMachines");
 

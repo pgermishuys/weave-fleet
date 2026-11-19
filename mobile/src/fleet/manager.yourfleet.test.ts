@@ -11,6 +11,7 @@ const ATLAS = "https://atlas.tail4f2a.ts.net";
 let listed: { id: string; name: string; baseUrl: string; addresses?: { url: string }[] }[];
 let yourFleet: boolean;
 let atlasAway: boolean;
+let waiting: { machineId: string; name: string }[];
 let requests: { url: string; method: string; auth: string | null }[];
 const realFetch = globalThis.fetch;
 
@@ -62,6 +63,7 @@ beforeEach(() => {
   listed = [{ id: "hangar", name: "hangar", baseUrl: HANGAR }];
   yourFleet = true;
   atlasAway = false;
+  waiting = [];
   requests = [];
   globalThis.fetch = (async (input: string, init?: RequestInit) => {
     const url = String(input);
@@ -75,6 +77,7 @@ beforeEach(() => {
     if (path === "/api/machine") return json({ id: "hangar", addresses: [{ url: HANGAR, kind: "tailnet" }] });
     if (path === "/api/preferences") return json(yourFleet ? { YourFleet: "true" } : {});
     if (path === "/api/machines") return json({ machines: listed });
+    if (path === "/api/machines/found") return json({ machines: waiting });
     if (path === "/api/machines/atlas/device-grant" && init?.method === "POST") {
       return atlasAway ? new Response(JSON.stringify({ error: "atlas is away." }), { status: 502 }) : json({ machineId: "atlas", baseUrl: ATLAS, token: "fdt_atlas" });
     }
@@ -93,6 +96,23 @@ async function settled(manager: FleetManager) {
 }
 
 describe("Your Fleet on the phone", () => {
+  test("a machine waiting to join is announced, and goes when it is in the list, stops waiting or is dismissed", async () => {
+    const { manager, home } = await start();
+    await settled(manager);
+    expect(manager.snapshot().wanting).toEqual([]);
+
+    waiting = [{ machineId: "atlas", name: "atlas" }, { machineId: "hangar", name: "hangar" }];
+    await manager.joinFleet(home());
+    expect(manager.snapshot().wanting).toEqual([{ machineId: "atlas", machineName: "atlas" }]);
+
+    manager.dismissWanting("atlas");
+    expect(manager.snapshot().wanting).toEqual([]);
+
+    waiting = [];
+    await manager.joinFleet(home());
+    expect(manager.snapshot().wanting).toEqual([]);
+  });
+
   test("a phone paired with hangar gets its own key for atlas, without announcing a machine that was there before", async () => {
     listed = [...listed, atlas];
     const { store, manager } = await start();

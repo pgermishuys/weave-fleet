@@ -28,6 +28,14 @@ export interface JoinedNotice {
   at: number;
 }
 
+/** "atlas wants to join your Fleet": a machine that is waiting to be added. Adding it is done on a screen with Fleet's Add a machine. */
+export interface WantingNotice {
+  machineId: string;
+  machineName: string;
+}
+
+export const wantingText = (notice: Pick<WantingNotice, "machineName">) => `${notice.machineName} wants to join your Fleet`;
+
 export const joinedText = (notice: Pick<JoinedNotice, "machineName">) => `${notice.machineName} joined your Fleet`;
 
 export function isYourFleetOn(preferences: Record<string, string> | undefined | null): boolean {

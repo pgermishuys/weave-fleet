@@ -94,7 +94,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
     removal and forget reach every machine, including offline ones when they return.
   - Split into 2–3 PRs: server roster and introductions; phone app grants and notification; removal.
   - J5, J9, J10, J12–J15. L.
-- [ ] **6. Found (decision 3).**
+- [x] **6. Found (decision 3).** (#1084 announce, Found and add; second PR: wants-to-join prompt and the desktop first run)
   - A waiting machine (`fleet node up` / `fleet node pair`) announces itself on Tailscale (share discovery with the
     Teams spike / `MachineCandidates` so they don't fork) and on the home network.
   - Add a machine → Found is the default tab, with a code match.
