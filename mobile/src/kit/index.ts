@@ -10,4 +10,5 @@ export { Markdown } from "./markdown";
 export { PageCard, PageChoiceBar, PagePickCard, PageReplyBar, PageRow, Segments } from "./pages";
 export { ModelChip, Notice, OptionRow, SearchField, WhereLine, type WherePart } from "./new-session";
 export { InterruptedCard, InterruptionBanner } from "./interrupted";
+export { JoinedBanner } from "./joined";
 export { AddressList, RouteLine } from "./addresses";

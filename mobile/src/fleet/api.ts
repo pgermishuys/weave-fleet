@@ -4,6 +4,7 @@ import type { NewSessionRequest } from "@fleet/lib/new-session-request";
 import type { PermissionAsk } from "@fleet/composables/use-session-permissions";
 import type { ServerCanvasSnapshot } from "@fleet/lib/server-canvas";
 import type { Machine } from "~/fleet/machines-core";
+import type { Grant, ListedMachine } from "~/fleet/your-fleet-core";
 
 export type { SessionListItem, PermissionAsk };
 
@@ -82,7 +83,11 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
     /** Where the machine says it answers now: its Tailscale name and IP, its local network addresses, its host name. */
     machine: () => request<{ id: string; addresses?: { url: string; kind: string }[] | null }>("/api/machine"),
     /** The machines this one is home to, each with its addresses in the owner's order. */
-    machines: () => request<{ machines: { id: string; addresses?: { url: string }[] | null }[] }>("/api/machines"),
+    machines: () => request<{ machines: ListedMachine[] }>("/api/machines"),
+    /** The machine's switches (Settings → Labs among them), for Your Fleet. */
+    preferences: () => request<Record<string, string>>("/api/preferences"),
+    /** The phone's own key on another machine in this machine's list: this machine makes it there and hands it over. */
+    deviceGrant: (machineId: string) => request<Grant>(`/api/machines/${id(machineId)}/device-grant`, { method: "POST" }),
     /** Saves a machine's addresses in a new order on its home (every one of them, as home lists them). */
     reorderAddresses: (machineId: string, urls: string[]) => request(`/api/machines/${id(machineId)}`, { method: "PUT", body: JSON.stringify({ addresses: urls }) }),
     skipPageChoice: (sessionId: string, callId: string) => post(`/api/sessions/${id(sessionId)}/page-choices/${id(callId)}/skip`, {}),

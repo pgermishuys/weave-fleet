@@ -5,7 +5,6 @@ import { useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, View } from "react-native";
 import { Heading, PanelPage } from "~/ui/page";
 import { manager, useFleet } from "~/fleet/hooks";
-import { machines as store } from "~/fleet/machines";
 import type { ConnectionState } from "~/fleet/hub";
 import { moveAddress } from "~/fleet/routes-core";
 import { AddressList, Button, Card, Icon, RouteLine, Text } from "~/kit";
@@ -55,7 +54,7 @@ export default function Machines() {
           <View style={{ gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text weight="semibold" size={16} numberOfLines={1} ellipsizeMode="middle" style={{ flex: 1 }}>{m.machineName}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${m.machineName}`} hitSlop={8} onPress={() => confirmRemove(m.machineName, () => void store.remove(m.machineId))} style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${m.machineName}`} hitSlop={8} onPress={() => confirmRemove(m.machineName, () => void manager.forget(m.machineId))} style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}>
                 <Icon name="trash" size={18} color={color.error} />
               </Pressable>
             </View>

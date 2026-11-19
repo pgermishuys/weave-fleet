@@ -5,6 +5,7 @@ import { applySessionsEvent, sectionSessions, type SessionSection } from "~/flee
 import { machineApi, type MachineApi, type SessionListItem } from "~/fleet/api";
 import { MachineHub, type ConnectionState } from "~/fleet/hub";
 import type { Machine, MachinesStore } from "~/fleet/machines-core";
+import { isYourFleetOn, machineFromGrant, machinesToJoin, Roster, type JoinedNotice } from "~/fleet/your-fleet-core";
 import {
   adoptOrder, betterAddress, canUse, isBest, learnAddresses, orderForHome, pickAddress, probeFor, recordOutcomes, RECHECK_MS,
   reorderAddresses, seedAddresses, type MachineAddress, type Probe, type ProbeOutcome,
@@ -27,6 +28,8 @@ export interface FleetSnapshot {
   interrupted: InterruptedEntry[];
   /** True until each machine has answered once. */
   loading: boolean;
+  /** Machines that joined the Fleet since the phone last looked (Your Fleet), newest first. */
+  joined: JoinedNotice[];
 }
 
 interface Conn {
@@ -53,13 +56,16 @@ export class FleetManager {
   private conns = new Map<string, Conn>();
   private listeners = new Set<() => void>();
   private foreground = true;
-  private cached: FleetSnapshot = { machines: [], sections: [], interrupted: [], loading: false };
+  private cached: FleetSnapshot = { machines: [], sections: [], interrupted: [], loading: false, joined: [] };
+  private joined: JoinedNotice[] = [];
+  private joining = new Set<string>();
 
   /** `probe` asks who answers at an address, `makeHub` opens a machine's hub; tests replace them. */
   constructor(
     private store: MachinesStore,
     private probe: (machineId: string) => Probe = probeFor,
     private makeHub: (...args: ConstructorParameters<typeof MachineHub>) => MachineHub = (...args) => new MachineHub(...args),
+    private roster: Roster = new Roster({ get: async () => null, set: async () => {}, remove: async () => {} }),
   ) {
     store.subscribe(() => this.sync());
     this.sync();
@@ -79,6 +85,8 @@ export class FleetManager {
       this.conns.delete(id);
     }
     for (const machine of paired) if (!this.conns.has(machine.machineId)) this.conns.set(machine.machineId, this.connect(machine));
+    // Pairing a machine by hand again undoes removing it from this phone.
+    for (const machine of paired) if (!machine.via) void this.roster.undecline(machine.machineId);
     this.publish();
   }
 
@@ -102,6 +110,7 @@ export class FleetManager {
       hub: this.makeHub(route, () => this.publish(), () => {
         void this.refetch(conn);
         void this.learn(conn).then(() => this.tryBetter(conn));
+        void this.joinFleet(conn);
       }, async () => void (await this.pick(conn))),
     };
     conn.hub.subscribeSessions((event) => {
@@ -221,6 +230,62 @@ export class FleetManager {
     if (conn.hub.state !== "connected") return;
     await this.learn(conn);
     await this.tryBetter(conn);
+    await this.joinFleet(conn);
+  }
+
+  // ─── Your Fleet (Labs) ────────────────────────────────────────────────────
+
+  /**
+   * With Your Fleet on at a machine the phone paired with, asks it for the phone's own key on every other machine in
+   * its list, so each is reached directly and none has to be paired. A machine that is new to the list since the last
+   * time is announced (`joined`). One pass per machine at a time. A key this machine gave out that the other machine
+   * turned away is asked for again.
+   */
+  async joinFleet(conn: Conn): Promise<void> {
+    const home = conn.machine;
+    if (home.via || conn.hub.state !== "connected" || this.joining.has(home.machineId)) return;
+    this.joining.add(home.machineId);
+    try {
+      if (!isYourFleetOn(await conn.api.preferences().catch(() => null))) return;
+      const { machines: listed } = await conn.api.machines();
+      const fresh = await this.roster.see([home.machineId, ...listed.map((m) => m.id)]);
+      const declined = await this.roster.declined();
+      const paired = this.store.all();
+      const wanted = [
+        ...machinesToJoin(listed, paired, home.machineId, declined),
+        ...listed.filter((m) => paired.some((p) => p.machineId === m.id && p.via === home.machineId) && this.conns.get(m.id)?.hub.state === "signed-out"),
+      ];
+      for (const machine of wanted) {
+        try {
+          const made = machineFromGrant(machine, await conn.api.deviceGrant(machine.id), home.machineId, Date.now());
+          if (!made) continue;
+          await this.store.add(made);
+          await this.roster.joined(made.machineId);
+          if (fresh.has(machine.id)) {
+            this.joined = [{ machineId: made.machineId, machineName: made.machineName, at: Date.now() }, ...this.joined.filter((j) => j.machineId !== made.machineId)];
+            this.publish();
+          }
+        } catch {
+          // This one is away or refused; the next pass asks again.
+        }
+      }
+    } catch {
+      // Home didn't answer; the next pass asks again.
+    } finally {
+      this.joining.delete(home.machineId);
+    }
+  }
+
+  dismissJoined(machineId?: string) {
+    this.joined = machineId ? this.joined.filter((j) => j.machineId !== machineId) : [];
+    this.publish();
+  }
+
+  /** The person removed a machine from this phone. One it got a key for through Your Fleet isn't asked for again. */
+  async forget(machineId: string): Promise<void> {
+    if (this.store.get(machineId)?.via) await this.roster.decline(machineId);
+    await this.store.remove(machineId);
+    this.dismissJoined(machineId);
   }
 
   /**
@@ -322,6 +387,7 @@ export class FleetManager {
         state: c.hub.state,
       })),
       sections: sectionSessions(conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, items: c.items }))),
+      joined: this.joined,
       loading: conns.some((c) => !c.loaded && c.hub.state !== "signed-out" && c.hub.state !== "offline"),
     };
     for (const listener of this.listeners) listener();
