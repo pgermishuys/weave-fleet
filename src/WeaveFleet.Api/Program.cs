@@ -130,8 +130,6 @@ builder.Services.Configure<FleetOptions>(
 
 // Whether a loopback request may skip authentication is decided by the address Fleet BINDS to, never
 // by the address a request arrives from — a reverse proxy makes every remote caller look like loopback.
-var loopbackAuthPolicy = new LoopbackAuthPolicy(fleetOptions.Host, fleetOptions.Auth.RequireToken);
-builder.Services.AddSingleton(loopbackAuthPolicy);
 // Who this Fleet is to other devices, and the token they present. Lives next to the database.
 builder.Services.AddSingleton(new MachineIdentityStore(fleetOptions.DatabasePath));
 // WebApplicationFactory-based E2E tests call ConfigureWebHost(...).UseEnvironment("Testing") to
@@ -142,6 +140,17 @@ builder.Services.AddSingleton(new MachineIdentityStore(fleetOptions.DatabasePath
 var effectiveEnvironmentName = builder.Configuration["ASPNETCORE_ENVIRONMENT"] ?? builder.Environment.EnvironmentName;
 var isTestHost = string.Equals(effectiveEnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(effectiveEnvironmentName, "Test", StringComparison.OrdinalIgnoreCase);
+
+// The desktop app can let others reach it: more listeners than the loopback one its window uses, every one of them
+// asking for a key. Only the app's own Fleet has them, and Kestrel reads its endpoints from them (see ReachListeners).
+var reachListeners = fleetOptions.Desktop.Enabled && !isTestHost && !fleetOptions.Auth.Enabled
+    ? new ReachListeners(fleetOptions, new ReachStore(fleetOptions.DatabasePath))
+    : null;
+if (reachListeners is not null)
+    builder.Services.AddSingleton(reachListeners);
+builder.Services.AddSingleton(new ReachStore(fleetOptions.DatabasePath));
+var loopbackAuthPolicy = new LoopbackAuthPolicy(fleetOptions.Host, fleetOptions.Auth.RequireToken, fleetOptions.Port, reachListeners);
+builder.Services.AddSingleton(loopbackAuthPolicy);
 if (!isTestHost)
 {
     builder.Services.AddLauncherPatchStartupService();
@@ -514,7 +523,18 @@ builder.Services.AddOpenApi(options =>
 });
 
 // Use Fleet.Host/Port as the listen URL (overrides the "Urls" config key)
-builder.WebHost.UseUrls(fleetOptions.ListenUrl);
+if (reachListeners is not null)
+{
+    // The desktop app's Fleet lists its endpoints as configuration so it can open and close the ones for other devices
+    // while it runs. They replace the single URL: the loopback one is among them.
+    ((IConfigurationBuilder)builder.Configuration).Add(reachListeners.Source);
+    builder.WebHost.ConfigureKestrel((context, kestrel) =>
+        kestrel.Configure(context.Configuration.GetSection(ReachListeners.Section), reloadOnChange: true));
+}
+else
+{
+    builder.WebHost.UseUrls(fleetOptions.ListenUrl);
+}
 
 var app = builder.Build();
 

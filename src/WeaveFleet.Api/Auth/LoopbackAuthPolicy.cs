@@ -39,35 +39,64 @@ public sealed class LoopbackAuthPolicy
     ];
 
     public LoopbackAuthPolicy(IOptions<FleetOptions> options)
-        : this(options.Value.Host, options.Value.Auth.RequireToken)
+        : this(options.Value.Host, options.Value.Auth.RequireToken, options.Value.Port)
     {
     }
 
-    public LoopbackAuthPolicy(string? host, bool requireToken = false)
+    public LoopbackAuthPolicy(string? host, bool requireToken = false, int port = 0, ReachListeners? reach = null)
     {
         BoundHost = host ?? string.Empty;
-        IsRemoteReachable = IsRemoteReachableHost(host);
+        IsBoundWide = IsRemoteReachableHost(host);
         RequiresToken = requireToken;
+        PrimaryPort = port;
+        Reach = reach;
     }
 
     /// <summary>The configured bind address the policy was derived from.</summary>
     public string BoundHost { get; }
 
-    /// <summary>True when the bind address lets machines other than this one connect.</summary>
-    public bool IsRemoteReachable { get; }
+    /// <summary>The port of the loopback listener, or 0 when the policy doesn't tell listeners apart by port.</summary>
+    public int PrimaryPort { get; }
+
+    /// <summary>The extra listeners the desktop app opens when others may reach it; null when this Fleet has none.</summary>
+    public ReachListeners? Reach { get; }
+
+    /// <summary>True when the configured bind address itself lets machines other than this one connect.</summary>
+    public bool IsBoundWide { get; }
+
+    /// <summary>True when machines other than this one can connect: a wide bind, or an extra listener for them.</summary>
+    public bool IsRemoteReachable => IsBoundWide || (Reach?.HasListeners ?? false);
 
     /// <summary>True when the configuration asks for a credential on every request, loopback ones included.</summary>
     public bool RequiresToken { get; }
 
     /// <summary>True when a loopback request may be authenticated without presenting a credential.</summary>
-    public bool AllowsLoopbackAutoAuth => !IsRemoteReachable && !RequiresToken;
+    public bool AllowsLoopbackAutoAuth => !IsBoundWide && !RequiresToken;
 
     /// <summary>
     /// True when this request should be authenticated without a credential: it arrived over loopback, not through
-    /// a proxy, <em>and</em> Fleet is bound so that only this machine could have sent it.
+    /// a proxy, on the loopback listener, <em>and</em> Fleet is bound so that only this machine could have sent it.
     /// </summary>
     public bool GrantsAutoAuth(HttpContext context)
-        => AllowsLoopbackAutoAuth && IsLoopbackRequest(context) && !CameThroughProxy(context.Request);
+        => AllowsLoopbackAutoAuth && IsLoopbackRequest(context) && !CameThroughProxy(context.Request) && ArrivedOnLoopbackListener(context);
+
+    /// <summary>
+    /// True when the connection came in on the loopback listener: this machine's loopback address, on Fleet's own port.
+    /// The listeners for other devices (and the second loopback port for a tunnel) fail it, so a request on them needs a
+    /// key whatever its remote address or headers claim. A connection without a local endpoint (an in-memory test
+    /// server) counts only while no extra listener is open.
+    /// </summary>
+    public bool ArrivedOnLoopbackListener(HttpContext context)
+    {
+        var local = context.Connection.LocalIpAddress;
+        if (local is null)
+            return !(Reach?.HasListeners ?? false);
+
+        if (!IPAddress.IsLoopback(local.IsIPv4MappedToIPv6 ? local.MapToIPv4() : local))
+            return false;
+
+        return PrimaryPort == 0 || context.Connection.LocalPort == PrimaryPort;
+    }
 
     /// <summary>True when the request carries a header a reverse proxy adds.</summary>
     public static bool CameThroughProxy(HttpRequest request)

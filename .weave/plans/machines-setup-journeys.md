@@ -71,7 +71,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
   - A one-line "what's a machine" on Settings → Machines and in the welcome wizard's last step, with "Add your phone".
   - The phone's pair screen copy.
   - S.
-- [ ] **3. Desktop app reachable (decision 4).**
+- [x] **3. Desktop app reachable (decision 4).** (#1077)
   - Second listener: always asks for a key; loopback bypass only on the loopback listener.
   - A test that a forwarded-for-loopback request on the network listener still needs a key.
   - The "Let others reach studio" dialog: Tailscale and home network / home network only / my own address, showing the

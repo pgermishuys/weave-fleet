@@ -20,6 +20,11 @@ const DROPPED_NAMES = ["URLS", "ASPNETCORE_URLS", "DOTNET_URLS", "ASPNETCORE_ENV
  * `Fleet__Host: "127.0.0.1"` is load-bearing for that. Fleet only grants the loopback bypass when it binds to a
  * loopback address, since anything wider can be fronted by a proxy that makes every outside caller look local.
  * Bind the bundled Fleet anywhere else and the window would be asked for a login token it is never given.
+ *
+ * Letting a phone or another machine reach the app ("Let others reach studio" in Settings → Machines) doesn't change
+ * that. Fleet opens its extra listeners itself, on Tailscale and the home network, remembers the choice next to its
+ * database (`fleet.reach.json`) and opens them again on every start. Those listeners always ask for a key; the no-key
+ * sign-in belongs to the loopback listener alone.
  */
 export function buildServerEnv(base: NodeJS.ProcessEnv, paths: FleetPaths, port: number): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};

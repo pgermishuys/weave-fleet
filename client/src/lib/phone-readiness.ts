@@ -21,6 +21,11 @@ export interface ReadinessInput {
   addresses: readonly { url: string; kind?: string }[];
   requiresToken: boolean;
   port: number;
+  /**
+   * The desktop app's "Let others reach this machine": `off` until someone asks, `on` once they do (every other device
+   * then needs a key), `unavailable` for a Fleet started from a terminal, which has flags instead.
+   */
+  reach?: "off" | "on" | "unavailable";
 }
 
 function hostOf(url: string | null): string {
@@ -36,6 +41,8 @@ export function phoneReadiness(input: ReadinessInput): ReadinessItem[] {
   const host = hostOf(input.phoneUrl);
   const onTailnet = host.endsWith(".ts.net") || input.addresses.some((address) => address.kind === "tailnet");
   const https = !!input.phoneUrl && input.phoneUrl.toLowerCase().startsWith("https://");
+  const keyAsked = input.requiresToken || input.reach === "on";
+  const desktop = input.reach === "off" || input.reach === "on";
 
   return [
     {
@@ -58,12 +65,14 @@ export function phoneReadiness(input: ReadinessInput): ReadinessItem[] {
     },
     {
       id: "key",
-      ok: input.requiresToken,
+      ok: keyAsked,
       title: "Fleet asks every device for a key",
-      detail: input.requiresToken
+      detail: keyAsked
         ? "Only devices you add here get in, and you can remove any of them."
-        : "Through tailscale serve every request looks like it comes from this machine, so Fleet has to ask for a key. Start Fleet with:",
-      ...(input.requiresToken ? {} : { command: `fleet --port ${input.port} --require-token` }),
+        : desktop
+          ? `"Add a phone" asks if other devices may reach ${input.machineName}. Each one then needs its own key.`
+          : "Through tailscale serve every request looks like it comes from this machine, so Fleet has to ask for a key. Start Fleet with:",
+      ...(keyAsked || desktop ? {} : { command: `fleet --port ${input.port} --require-token` }),
     },
   ];
 }

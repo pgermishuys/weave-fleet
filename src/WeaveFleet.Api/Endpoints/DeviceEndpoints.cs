@@ -84,7 +84,7 @@ public static class DeviceEndpoints
             var identity = identities.Get();
             var code = codes.Create();
             var addresses = policy.IsRemoteReachable
-                ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct)).Select(address => address.Url).ToList()
+                ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct), policy.Reach).Select(address => address.Url).ToList()
                 : [];
             return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, identity.Name ?? Environment.MachineName, addresses, MachineEndpoints.PairingLink(addresses, code.ManualCode)));
         })

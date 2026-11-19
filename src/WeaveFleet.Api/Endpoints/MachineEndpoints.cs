@@ -42,7 +42,7 @@ public static class MachineEndpoints
                 Update = ToUpdate(updates.State, downloads, restart, rules),
                 // Where it can be reached now, so a Fleet that has it in its list learns a new LAN address on its own.
                 // The tailnet name as last read: asking Tailscale can take seconds when it's down.
-                Addresses = policy.IsRemoteReachable ? ReachableAddresses(fleetOptions, tailnet.Current()) : null,
+                Addresses = policy.IsRemoteReachable ? ReachableAddresses(fleetOptions, tailnet.Current(), policy.Reach) : null,
             }))
             .Produces<MachineResponse>(200)
             .WithName("GetMachine");
@@ -169,7 +169,7 @@ public static class MachineEndpoints
             options.Port,
             policy.IsRemoteReachable,
             !policy.AllowsLoopbackAutoAuth,
-            policy.IsRemoteReachable ? ReachableAddresses(options, tailnetName) : []);
+            policy.IsRemoteReachable ? ReachableAddresses(options, tailnetName, policy.Reach) : []);
 
     /// <summary>
     /// The link another Fleet pastes into Add a machine: the first address, then <c>/add-machine</c>, with the code in
@@ -182,13 +182,18 @@ public static class MachineEndpoints
     /// Addresses another device could use, when Fleet listens beyond loopback. Tailnet first: it's the one that travels,
     /// and when Tailscale gave this machine a name, the name goes before its IP.
     /// </summary>
-    internal static List<MachineAddress> ReachableAddresses(FleetOptions options, string? tailnetName = null)
+    internal static List<MachineAddress> ReachableAddresses(FleetOptions options, string? tailnetName = null, ReachListeners? reach = null)
     {
-        var addresses = AddressesFor(options);
+        // The desktop app listens on the addresses it was told to, not on every interface: list those.
+        var addresses = reach is { HasListeners: true } && !IsBoundWide(options)
+            ? reach.Listening.Select(address => new MachineAddress($"http://{address.Address}:{options.Port}", address.Kind)).ToList()
+            : AddressesFor(options);
         if (tailnetName is not null && addresses.Any(address => address.Kind == "tailnet"))
             addresses.Insert(0, new MachineAddress($"http://{tailnetName}:{options.Port}", "tailnet"));
         return addresses;
     }
+
+    private static bool IsBoundWide(FleetOptions options) => LoopbackAuthPolicy.IsRemoteReachableHost(options.Host);
 
     private static List<MachineAddress> AddressesFor(FleetOptions options)
     {
