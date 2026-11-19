@@ -37,14 +37,19 @@ export function machinesNeedingGrants(
     && !credentials.grants.some((grant) => grant.machineId === machine.id));
 }
 
-/** Asks home for the phone's own token on `machineId`. Throws with home's reason when it can't. */
-export async function requestGrant(machineId: string, homeToken: string | null): Promise<MachineGrant> {
+/**
+ * Asks home for the phone's own token on `machineId`. Throws with home's reason when it can't. A screen that isn't a
+ * paired phone (Your Fleet, Labs) names itself with `screen`, and home keys the token by its id.
+ */
+export async function requestGrant(machineId: string, homeToken: string | null, screen?: { screenId: string; name: string }): Promise<MachineGrant> {
   const headers: Record<string, string> = {};
   if (homeToken) headers.Authorization = `Bearer ${homeToken}`;
+  if (screen) headers["Content-Type"] = "application/json";
   const response = await fetch(`/api/machines/${encodeURIComponent(machineId)}/device-grant`, {
     method: "POST",
     headers,
     credentials: "include",
+    body: screen ? JSON.stringify(screen) : undefined,
   });
   if (!response.ok) {
     let message = `Couldn't get a key for that machine (${response.status}).`;

@@ -63,3 +63,10 @@ public sealed record SshProbeResponse(string State, string? Os, string? Version,
 
 /// <summary>A machine being set up: <paramref name="Status"/> is running, done or failed. <paramref name="Machine"/> is there when done.</summary>
 public sealed record SetupJobResponse(string Id, string Destination, string Status, IReadOnlyList<SetupStep> Steps, MachineEntryResponse? Machine, string? Error, MachineDiagnosis? Diagnosis);
+
+/// <summary>
+/// Your Fleet: a screen that isn't a paired phone (a browser or the desktop app's window, signed in as the owner) asks
+/// for its own key. <paramref name="ScreenId"/> is a random id the screen made for itself and keeps, so asking again
+/// replaces its key and doesn't pile up new ones.
+/// </summary>
+public sealed record DeviceGrantRequest(string? ScreenId, string? Name);

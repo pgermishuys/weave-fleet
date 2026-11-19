@@ -5889,6 +5889,11 @@ export interface components {
             status: string;
             createdAt: string;
         };
+        /** @description Your Fleet: a screen that isn't a paired phone asks for its own key. */
+        DeviceGrantRequest: {
+            screenId: null | string;
+            name: null | string;
+        };
         DeviceGrantResponse: {
             machineId: string;
             baseUrl: string;
@@ -16558,7 +16563,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeviceGrantRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

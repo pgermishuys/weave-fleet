@@ -23,6 +23,7 @@ import {
 } from "@/lib/machines";
 import { DiagnosedError, mixedContentDiagnosis, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { readCredentialsSync } from "@/lib/device-credentials";
+import { screenGrantFor } from "@/lib/phone/screen-keys";
 import type { MachineUpdate } from "@/lib/fleet-updates";
 import { FeedError, HIDDEN_CLOSE_MS, MachineFeed, type FeedRequest } from "@/lib/machine-feed";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -357,7 +358,9 @@ export const useMachinesStore = defineStore("machines", () => {
   const source = shallowRef<MachineListSource>("pending");
 
   function fromServer(machine: ServerMachine): MachineConnection | null {
-    const token = machine.token ?? readCredentialsSync()?.grants.find((grant) => grant.machineId === machine.id)?.token ?? null;
+    // Under Your Fleet (Labs) the phone pages use the key home minted for this screen, not the machine's own token.
+    const screenKey = typeof window !== "undefined" && window.location.pathname.startsWith("/phone") ? screenGrantFor(machine.id)?.token : null;
+    const token = screenKey ?? machine.token ?? readCredentialsSync()?.grants.find((grant) => grant.machineId === machine.id)?.token ?? null;
     if (!token) return null;
     return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt, sshDestination: machine.sshDestination ?? null, tunnelUp: machine.tunnelUp ?? null, diagnosis: machine.diagnosis ?? null, addresses: machine.addresses ?? null };
   }

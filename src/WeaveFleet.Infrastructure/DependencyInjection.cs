@@ -429,6 +429,7 @@ public static class DependencyInjection
         // Jobs: one queue that free seats on any machine pick up. The dispatcher idles unless a user has jobs and has them on.
         services.AddSingleton<IJobRepository, JobRepository>();
         services.AddScoped<WeaveFleet.Application.Jobs.JobsFeature>();
+        services.AddScoped<WeaveFleet.Application.Machines.YourFleetFeature>();
         services.AddSingleton<WeaveFleet.Application.Jobs.JobMachineCache>();
         services.AddScoped<WeaveFleet.Application.Jobs.IJobMachines, WeaveFleet.Application.Jobs.JobMachines>();
         services.AddScoped<WeaveFleet.Application.Jobs.IJobSessions, WeaveFleet.Application.Jobs.JobSessions>();
