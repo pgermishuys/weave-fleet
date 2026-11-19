@@ -78,7 +78,7 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
     addresses Fleet found.
   - The desktop app keeps the choice.
   - J2. M.
-- [ ] **4. Codes carry every address; machines with no screen connect phones (decisions 2, 7).**
+- [x] **4. Codes carry every address; machines with no screen connect phones (decisions 2, 7).** (#1080)
   - Pairing payload with every address; the phone tries each one with the id check.
   - Drop the 409.
   - `fleet node up` and `fleet node pair` print a terminal QR code plus the code, and `fleet node up` checks Tailscale

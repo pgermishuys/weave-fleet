@@ -676,6 +676,33 @@ if defined HOST_OVERRIDE (
 )
 set "TS_IP="
 where tailscale >nul 2>&1 && for /f "delims=" %%A in ('tailscale ip -4 2^>nul') do if not defined TS_IP set "TS_IP=%%A"
+rem What this machine has before anything is asked. A missing piece says what to do next; none of it stops the setup.
+echo Checking what %COMPUTERNAME% has
+echo.
+if defined TS_IP (
+    echo   + Tailscale is on      !TS_IP!
+) else (
+    where tailscale >nul 2>&1 && (
+        echo   - Tailscale            installed, not signed in. Run tailscale up so your phone reaches this machine away from home.
+    ) || (
+        echo   - Tailscale            not installed. Without it your phone reaches this machine only on your home network.
+        echo                          Get it from tailscale.com/download, then run tailscale up and fleet node up again.
+    )
+)
+set "FOUND_HARNESS="
+where claude >nul 2>&1 && (
+    set "FOUND_HARNESS=1"
+    echo   + Claude Code          will run sessions here
+)
+where opencode >nul 2>&1 && (
+    set "FOUND_HARNESS=1"
+    echo   + OpenCode             will run sessions here
+)
+if not defined FOUND_HARNESS (
+    echo   ! No harness           sessions need one on this machine. Install Claude Code, then run claude once to sign in:
+    echo                          irm https://claude.ai/install.ps1 ^| iex
+)
+echo.
 set "CURRENT_HOST="
 for /f "usebackq delims=" %%H in (`%PS_CMD% -NoProfile -Command "$t = Get-ScheduledTask -TaskName 'Fleet node' -ErrorAction SilentlyContinue; if ($t -and $t.Actions[0].Arguments -match '--host ''([^'']*)''') { $Matches[1] }"`) do set "CURRENT_HOST=%%H"
 set "CURRENT_PRIVATE="

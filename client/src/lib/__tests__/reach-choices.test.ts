@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { reachChoices } from "../reach-choices";
-import { phoneReadiness } from "../phone-readiness";
 
 const found = [
   { url: "http://studio.tail4f2a.ts.net:6262", kind: "tailnet" as const },
@@ -40,25 +39,5 @@ describe("the choices in Let others reach studio", () => {
 
     expect(both?.recommended).toBe(false);
     expect(both?.hint("studio")).toContain("at home only");
-  });
-});
-
-describe("the phone checklist in the desktop app", () => {
-  const base = { machineName: "studio", phoneUrl: null, addresses: [], requiresToken: false, port: 6262 };
-
-  it("no longer sends the desktop app to a command-line flag", () => {
-    for (const reach of ["off", "on"] as const) {
-      const key = phoneReadiness({ ...base, reach }).find((item) => item.id === "key");
-      expect(key?.command).toBeUndefined();
-      expect(JSON.stringify(key)).not.toContain("--require-token");
-    }
-    expect(phoneReadiness({ ...base, reach: "off" }).find((item) => item.id === "key")?.ok).toBe(false);
-    expect(phoneReadiness({ ...base, reach: "on" }).find((item) => item.id === "key")?.ok).toBe(true);
-  });
-
-  it("keeps the flag for a Fleet started from a terminal", () => {
-    const key = phoneReadiness({ ...base, reach: "unavailable" }).find((item) => item.id === "key");
-
-    expect(key?.command).toBe("fleet --port 6262 --require-token");
   });
 });

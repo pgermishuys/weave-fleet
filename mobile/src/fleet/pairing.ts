@@ -1,7 +1,7 @@
 // Pairing with a Fleet: reading what was scanned or typed, and the two calls that trade a one-time code for a device key.
-import { decodePairingFragment, normalizeManualCode } from "@fleet/lib/pairing";
+import { decodePairingFragment, normalizeManualCode, pairingAddresses } from "@fleet/lib/pairing";
 import type { Machine } from "~/fleet/machines-core";
-import { seedAddresses } from "~/fleet/routes-core";
+import { canUse, kindOf, probeFor, raceAddresses, seedAddresses, type Probe } from "~/fleet/routes-core";
 
 export class PairingError extends Error {}
 
@@ -11,6 +11,10 @@ export interface PairingTarget {
   baseUrl: string;
   secret?: string;
   manualCode?: string;
+  /** What a scanned code says about the machine, so each address can be checked against its id before the secret goes there. */
+  machineId?: string;
+  /** Every address the phone may use, best first. More than one means the code carried several; `baseUrl` is the first until one answers. */
+  addresses?: string[];
 }
 
 /** https only; plain http is for this computer (the walk-through build talks to a Fleet on localhost). */
@@ -28,7 +32,13 @@ export function targetFromScan(text: string): PairingTarget | null {
   const hash = text.trim().split("#")[1];
   const payload = hash ? decodePairingFragment(`#${hash}`) : null;
   if (!payload) return null;
-  return { baseUrl: checkAddress(payload.url), secret: payload.secret };
+  // Every address in the code that this phone may use. Plain http is fine on Tailscale and the home network, once the
+  // machine's id has answered there (`resolvePairing`); a single address from an older code keeps the old https rule.
+  const all = pairingAddresses(payload);
+  if (all.length === 1) return { baseUrl: checkAddress(all[0]), secret: payload.secret };
+  const usable = all.filter((url) => canUse(url));
+  if (usable.length === 0) throw new PairingError(HTTPS_ONLY);
+  return { baseUrl: usable[0], secret: payload.secret, machineId: payload.machineId, addresses: usable };
 }
 
 /** What typing an address and a code means. */
@@ -64,8 +74,23 @@ async function post(target: PairingTarget, path: string, body: object): Promise<
   return response.json();
 }
 
-export async function previewPairing(target: PairingTarget): Promise<{ machineId: string; machineName: string }> {
-  return (await post(target, "/api/pairing/preview", {})) as { machineId: string; machineName: string };
+/**
+ * The address to talk to: the first of the code's addresses where the machine answers with its own id. Nothing is sent
+ * to an address that doesn't. A code with one address is used as it is.
+ */
+export async function resolvePairing(target: PairingTarget, probe: Probe | null = target.machineId ? probeFor(target.machineId) : null): Promise<PairingTarget> {
+  const addresses = target.addresses ?? [];
+  if (addresses.length < 2 || !probe) return target;
+  const { winner } = await raceAddresses(addresses, probe);
+  if (!winner) throw new PairingError(`Couldn't reach Fleet at ${addresses.length === 2 ? "either address" : "any of its addresses"} in this code. Is the phone on the same Wi-Fi, or on Tailscale?`);
+  return { ...target, baseUrl: winner };
+}
+
+/** Which machine the code opens, and the address that answered for it; `target` is the one to redeem with. */
+export async function previewPairing(target: PairingTarget): Promise<{ machineId: string; machineName: string; target: PairingTarget }> {
+  const resolved = await resolvePairing(target);
+  const answer = (await post(resolved, "/api/pairing/preview", {})) as { machineId: string; machineName: string };
+  return { ...answer, target: resolved };
 }
 
 export async function redeemPairing(target: PairingTarget, deviceName: string, platform: string): Promise<Machine> {
@@ -78,8 +103,11 @@ export async function redeemPairing(target: PairingTarget, deviceName: string, p
     machineId: body.machine.id,
     machineName: body.machine.name ?? "Fleet",
     baseUrl: target.baseUrl,
-    // The rest of its addresses come from the machine itself once the phone is connected.
-    addresses: seedAddresses(target.baseUrl),
+    // The other addresses in the code stay on the list; the machine reports its own once the phone is connected.
+    addresses: [
+      ...seedAddresses(target.baseUrl),
+      ...(target.addresses ?? []).filter((url) => url.toLowerCase() !== target.baseUrl.toLowerCase()).map((url) => ({ url, kind: kindOf(url), learned: true })),
+    ],
     token: body.token,
     deviceId: body.deviceId,
     pairedAt: Date.now(),

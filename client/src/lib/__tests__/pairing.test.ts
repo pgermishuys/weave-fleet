@@ -7,6 +7,7 @@ import {
   guessPlatform,
   isLoopbackHost,
   normalizeManualCode,
+  pairingAddresses,
   pairingUrl,
   supportsInstall,
   type PairingPayloadV1,
@@ -48,6 +49,34 @@ describe("pairing payload", () => {
     expect(decodePairingFragment("#p=%%%")).toBeNull();
     expect(decodePairingFragment("")).toBeNull();
     expect(decodePairingFragment("#q=1")).toBeNull();
+  });
+});
+
+describe("a code with every address", () => {
+  const many: PairingPayloadV1 = { ...payload, url: "http://hangar.ts.net:6262", urls: ["http://hangar.ts.net:6262", "http://192.168.1.31:6262"] };
+
+  it("round-trips the addresses", () => {
+    expect(decodePairingFragment(new URL(pairingUrl(many)).hash)).toEqual(many);
+  });
+
+  it("reads a code from an older Fleet, which has only url", () => {
+    const decoded = decodePairingFragment(new URL(pairingUrl(payload)).hash);
+    expect(decoded?.urls).toBeUndefined();
+    expect(pairingAddresses(decoded!)).toEqual(["https://hangar.tail9c2e.ts.net"]);
+  });
+
+  it("lists url first, then the rest, each once", () => {
+    expect(pairingAddresses({ url: "http://a:1/", urls: ["http://b:1", "http://a:1", "HTTP://B:1/"] })).toEqual(["http://a:1", "http://b:1"]);
+  });
+
+  it("drops an address that isn't http(s) and keeps the code", () => {
+    const encoded = Buffer.from(JSON.stringify({ ...many, urls: [...many.urls!, "javascript:alert(1)", 7] })).toString("base64url");
+    expect(decodePairingFragment(`#p=${encoded}`)?.urls).toEqual(many.urls);
+  });
+
+  it("reads what the server encodes, with urls", () => {
+    const json = JSON.stringify({ v: 1, machineId: "m", machineName: "n", url: "http://x:6262", secret: "s", urls: ["http://x:6262", "http://y:6262"] });
+    expect(decodePairingFragment(`#p=${Buffer.from(json).toString("base64url")}`)?.urls).toEqual(["http://x:6262", "http://y:6262"]);
   });
 });
 

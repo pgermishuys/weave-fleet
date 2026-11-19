@@ -17,6 +17,11 @@ export interface PairingPayloadV1 {
   url: string;
   /** The one-time secret. */
   secret: string;
+  /**
+   * Every address the machine can be reached on, best first, `url` among them. A phone tries each and checks the
+   * machine's id before it sends the secret. Codes from a Fleet before this field carry only `url`.
+   */
+  urls?: string[];
 }
 
 function toBase64Url(text: string): string {
@@ -67,13 +72,31 @@ export function decodePairingFragment(hash: string): PairingPayloadV1 | null {
   }
   if (!/^https?:\/\//i.test(candidate.url as string)) return null;
 
+  const urls = Array.isArray(candidate.urls)
+    ? candidate.urls.filter((url): url is string => typeof url === "string" && /^https?:\/\//i.test(url))
+    : [];
+
   return {
     v: 1,
     machineId: candidate.machineId as string,
     machineName: candidate.machineName as string,
     url: candidate.url as string,
     secret: candidate.secret as string,
+    ...(urls.length > 0 ? { urls } : {}),
   };
+}
+
+/** Every address a code carries, best first: `url`, then the rest of `urls`, without repeats. An old code has just `url`. */
+export function pairingAddresses(payload: Pick<PairingPayloadV1, "url" | "urls">): string[] {
+  const seen = new Set<string>();
+  const all: string[] = [];
+  for (const url of [payload.url, ...(payload.urls ?? [])]) {
+    const trimmed = url.replace(/\/+$/, "");
+    if (seen.has(trimmed.toLowerCase())) continue;
+    seen.add(trimmed.toLowerCase());
+    all.push(trimmed);
+  }
+  return all;
 }
 
 /** Whether `host` (a hostname, no port) only means this computer. */

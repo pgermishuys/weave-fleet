@@ -175,16 +175,32 @@ public sealed class NodeModeEndpointTests :
     }
 
     [Fact]
-    public async Task Pairing_a_phone_points_at_a_fleet_with_the_web_app()
+    public async Task A_node_makes_a_code_a_phone_can_scan()
     {
         var factory = _node;
         using var client = CreateClient(factory, Token(factory));
 
         var response = await client.PostAsJsonAsync("/api/machine/pairing", new { baseUrl = "https://atlas.tail9c2e.ts.net" });
 
-        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var made = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var payload = made.GetProperty("payload");
+        payload.GetProperty("url").GetString().ShouldBe("https://atlas.tail9c2e.ts.net");
+        payload.GetProperty("urls").EnumerateArray().Select(u => u.GetString()).ShouldBe(["https://atlas.tail9c2e.ts.net"]);
+        made.GetProperty("url").GetString().ShouldStartWith("https://atlas.tail9c2e.ts.net/pair#p=");
+    }
+
+    [Fact]
+    public async Task A_node_that_only_listens_on_loopback_has_no_address_to_put_in_a_code()
+    {
+        var factory = _node;
+        using var client = CreateClient(factory, Token(factory));
+
+        var response = await client.PostAsJsonAsync("/api/machine/pairing", new { });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var error = await response.Content.ReadFromJsonAsync<JsonElement>();
-        error.GetProperty("error").GetString()!.ShouldContain("needs a Fleet with the web app");
+        error.GetProperty("error").GetString()!.ShouldContain("only listens on this machine");
     }
 
     // ── The web app, for this computer's own desktop app ──────────────────────

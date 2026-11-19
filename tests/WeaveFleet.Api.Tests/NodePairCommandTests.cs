@@ -26,6 +26,32 @@ public sealed class NodePairCommandTests
     }
 
     [Fact]
+    public async Task With_a_phone_link_it_prints_a_scannable_code_and_the_code_to_type()
+    {
+        var phoneLink = "http://100.64.90.72:2113/pair#p=eyJ2IjoxfQ";
+        var handler = new Handler(HttpStatusCode.OK, Answer.Replace("\"link\":", $"\"phoneLink\":\"{phoneLink}\",\"link\":"));
+        var (exit, output, error) = await RunAsync(handler, "0.0.0.0", "env-token-0123456789");
+
+        exit.ShouldBe(0, error);
+        output.ShouldContain("Connect a phone or a desktop app to falcon");
+        output.ShouldContain("scan this code");
+        output.ShouldContain("▀");
+        output.ShouldContain("7K3M-Q9ZD");
+        output.ShouldContain("http://100.64.90.72:2113/add-machine#7K3M-Q9ZD");
+    }
+
+    [Fact]
+    public void The_terminal_code_is_a_square_of_half_blocks_on_a_white_ground()
+    {
+        var lines = TerminalQr.Lines("http://100.64.90.72:2113/pair#p=abc", indent: 2);
+
+        lines.Count.ShouldBeGreaterThan(10);
+        lines.ShouldAllBe(line => line.StartsWith("  [30;47m") && line.EndsWith("[0m"));
+        var widths = lines.Select(line => line.Length).Distinct().ToList();
+        widths.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task With_json_it_prints_one_line_for_another_fleet_to_read_over_ssh()
     {
         var output = new StringWriter();

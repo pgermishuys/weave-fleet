@@ -43,8 +43,10 @@ screen says so.
 
 ## Pairing
 
-1. On the machine: Settings → Machines → This machine → **Add your phone**. The first time, Fleet asks which address
-   the phone opens (the `https://<machine>.<tailnet>.ts.net` one); it saves it as the machine's phone address.
+1. On the machine: Settings → Machines → This machine → **Add your phone**. The code carries every address Fleet can be
+   reached on (Tailscale, the home network), and the card lists them under "Your phone will reach hangar". Nothing
+   asks which one: the phone tries each. A tunnel or a domain of your own goes under **Use my own address**. On a
+   machine with no screen, `fleet node up` or `fleet node pair` prints the QR code in the terminal.
 2. On the phone: scan the QR code with the camera. The page asks **Connect this phone to hangar?** with a name for the
    phone. Connect.
 3. The phone now has its own key to that machine. Settings → Machines → **Devices with access** lists it with when it
@@ -56,9 +58,10 @@ A key that isn't used for 30 days stops working; pair again.
 
 No camera? Open `<address>/pair` on the phone and type the code shown under the QR code (`XXXX-XXXX`).
 
-Settings → Machines → **Add your phone** first checks what the phone needs, with a ✓ for each and the command to run
-for anything missing: Tailscale on both, an https:// address (`tailscale serve`), and Fleet asking for a key
-(`--require-token`).
+The card says where the phone will reach the machine: at home on your Wi-Fi, away from home with Tailscale on the
+phone, or at an address of your own. The web app on a phone installs and gets notifications only from an https://
+address (`tailscale serve`); the phone app uses plain http to a Tailscale or home-network address once the machine's id
+answers there.
 
 **Adding Fleet to an iPhone's Home Screen keeps you signed in.** iOS 17.2 and later copy Safari's cookies into the
 Home Screen app (not its other storage), so Fleet opens there signed in and gets the phone a fresh key for itself
@@ -131,9 +134,8 @@ that machine's own Settings → Machines → Devices with access.
 
 ## Reach it from outside your network
 
-Tailscale is the easiest way, not the only one. The phone opens one address: the one saved as the machine's phone
-address (Settings → Machines → This machine → **Add your phone** asks for it, and **Reach it from outside** there lets
-you change it). Any `https://` address that reaches this machine will do:
+Tailscale is the easiest way, not the only one. The code carries the addresses Fleet found, and the address saved as
+the machine's phone address goes first (Settings → Machines → This machine → **Add your phone** → **Use my own address**). Any `https://` address that reaches this machine will do:
 
 - Tailscale with `tailscale serve`, as above.
 - A tunnel you run yourself, for example a reverse SSH tunnel to a server of yours, or a tunnel service, that ends
