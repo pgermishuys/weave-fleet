@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatTime } from "@/lib/format";
 import { reachLine } from "@/lib/machine-reach-line";
 
 const tailnet = { kind: "tailnet" as const };
@@ -29,7 +30,7 @@ describe("reachLine", () => {
   it("says when a machine stopped answering, apart from the Tailscale case", () => {
     const at = new Date(2026, 10, 19, 8, 40).getTime();
     expect(reachLine({ name: "atlas", answering: false, offlineSince: at, addresses: [tailnet] }))
-      .toEqual({ text: "Off since 08:40", tone: "out" });
+      .toEqual({ text: `Off since ${formatTime(at)}`, tone: "out" });
     expect(reachLine({ name: "atlas", answering: false, addresses: [lan] }).text).toBe("Not reachable");
   });
 });
