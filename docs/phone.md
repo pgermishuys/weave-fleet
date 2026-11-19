@@ -4,14 +4,32 @@ Fleet runs as an app on your phone: notifications when an agent needs you, a lis
 across every machine, and each session to read, answer and steer. It's the same Fleet, served by your own machine
 and installed to the Home Screen. Nothing goes through a Weave server.
 
+## The phone app and the web app
+
+There are two ways to use Fleet on a phone. Both look at the machines you've connected; neither runs anything itself.
+
+- **The phone app** (iOS and Android, built from `mobile/`). Install it, then connect it to each machine: on the machine,
+  open Fleet and choose **Add your phone** (Settings → Machines), or run `fleet node pair` on a machine with no screen.
+  In the app, scan the code, or type the machine's address and the code under the QR code. The app pairs with each
+  machine separately and keeps a key for each, so connect it once per machine. It tries a machine's addresses in order
+  and checks the machine's id before it sends a key. Besides `https://`, it uses plain `http://` to a Tailscale address
+  (Tailscale encrypts it) or a private address on your home network, never to a name that could resolve anywhere.
+  The rest of this page, from [Pairing](#pairing) on, describes the web app.
+- **The web app**: Fleet opened in the phone's browser and added to the Home Screen. It needs `https://` to install and
+  to send notifications, and gets keys for your other machines through the machine it paired with (see
+  [One phone, every machine](#one-phone-every-machine-the-home-machine)).
+
+A machine with no screen (`fleet node up`) has no web app, so it has no Add your phone button: it prints its pairing
+link with `fleet node pair`, and the phone app takes that code.
+
 ## What you need
 
-- Your computer and your phone on the same [Tailscale](https://tailscale.com) tailnet.
+- Your machine and your phone on the same [Tailscale](https://tailscale.com) tailnet.
 - Fleet behind `tailscale serve`, so the phone gets HTTPS:
 
   ```sh
-  fleet --port 2113 --require-token
-  tailscale serve --bg --https=443 http://127.0.0.1:2113
+  fleet --require-token
+  tailscale serve --bg --https=443 http://127.0.0.1:6262
   ```
 
   HTTPS certificates have to be on for the tailnet (admin console → DNS → HTTPS Certificates). `--require-token`
@@ -19,13 +37,13 @@ and installed to the Home Screen. Nothing goes through a Weave server.
 - iPhone: iOS 16.4 or later, and Fleet added to the Home Screen (iOS only sends web notifications to Home Screen
   apps). Android: Chrome.
 
-**Plain http still works, but only as a web page.** Opened as `http://100.x.y.z:2113` the phone can pair and use
+**Plain http still works, but only as a web page.** Opened as `http://100.x.y.z:6262` the phone can pair and use
 Fleet in the browser, but browsers only install apps and allow notifications on https (or `localhost`). The setup
 screen says so.
 
 ## Pairing
 
-1. On the computer: Settings → Machines → This machine → **Add a phone**. The first time, Fleet asks which address
+1. On the machine: Settings → Machines → This machine → **Add your phone**. The first time, Fleet asks which address
    the phone opens (the `https://<machine>.<tailnet>.ts.net` one); it saves it as the machine's phone address.
 2. On the phone: scan the QR code with the camera. The page asks **Connect this phone to hangar?** with a name for the
    phone. Connect.
@@ -38,14 +56,14 @@ A key that isn't used for 30 days stops working; pair again.
 
 No camera? Open `<address>/pair` on the phone and type the code shown under the QR code (`XXXX-XXXX`).
 
-Settings → Machines → **Add a phone** first checks what the phone needs, with a ✓ for each and the command to run
+Settings → Machines → **Add your phone** first checks what the phone needs, with a ✓ for each and the command to run
 for anything missing: Tailscale on both, an https:// address (`tailscale serve`), and Fleet asking for a key
 (`--require-token`).
 
 **Adding Fleet to an iPhone's Home Screen keeps you signed in.** iOS 17.2 and later copy Safari's cookies into the
 Home Screen app (not its other storage), so Fleet opens there signed in and gets the phone a fresh key for itself
 and for your other machines; the key left behind in Safari stops working. On older iOS the Home Screen app starts
-empty and asks to pair once more: make a new code on the computer.
+empty and asks to pair once more: make a new code on the machine.
 
 ## Notifications
 
@@ -55,7 +73,7 @@ After pairing, the phone shows **Notifications**:
    menu ⋮ → Install app); notifications work in Chrome without installing.
 2. Choose what to be told about: **Needs you** (a command or edit waits for approval, or a workflow waits on you),
    **Questions**, **Finished**, **Failed**, and **Quiet while I'm at the desk** (no pushes while Fleet is open and
-   visible on a computer).
+   visible on a desktop).
 3. **Turn on notifications**, then **Send a test notification**.
 
 Tapping a notification opens the session at the ask. On Android a permission ask has **Allow once** and **Deny** on
@@ -74,7 +92,7 @@ and without the details the phone uses.
 To read and answer sessions on another machine, the phone needs its own key there too. Home gets it one on each listed
 machine (a device grant) the first time the phone opens its inbox, without the phone ever seeing that machine's own
 token. The other machine has to be reachable from the phone over https (`https://falcon.<tailnet>.ts.net`); one listed
-by an http address shows as "Reachable only from computers".
+by an http address shows as "Reachable only from machines".
 
 If home is off or unreachable, notifications stop for every machine, and the inbox marks the machines it can't reach.
 
@@ -97,7 +115,7 @@ If home is off or unreachable, notifications stop for every machine, and the inb
   typed; **Send now** steers the agent mid-turn where the harness can. **+** adds photos, a file, a command (`!`) or a
   side question (`/btw`). The **⋯** menu has Changes, Files, Terminal, Fork, Rename, Archive.
 - **Not on the phone**: terminals, the editor and app previews. The phone says so, runs a one-off `!` command instead,
-  or sends you a link to open the session on the computer. A machine without the web app (a node) has no such link:
+  or sends you a link to open the session on the computer. A machine without the web app (one run with `fleet node`) has no such link:
   open the session in Fleet on the computer the phone is paired with.
 - **When a machine stops answering**: the session stays as you last saw it, the header says when the machine was last
   heard, and what you type is held on the phone and sent when it's back. Answers to permission asks are never held.
@@ -114,13 +132,13 @@ that machine's own Settings → Machines → Devices with access.
 ## Reach it from outside your network
 
 Tailscale is the easiest way, not the only one. The phone opens one address: the one saved as the machine's phone
-address (Settings → Machines → This machine → **Add a phone** asks for it, and **Reach it from outside** there lets
-you change it). Any `https://` address that reaches this computer will do:
+address (Settings → Machines → This machine → **Add your phone** asks for it, and **Reach it from outside** there lets
+you change it). Any `https://` address that reaches this machine will do:
 
 - Tailscale with `tailscale serve`, as above.
 - A tunnel you run yourself, for example a reverse SSH tunnel to a server of yours, or a tunnel service, that ends
   in HTTPS.
-- A domain of your own pointing at this computer behind a reverse proxy that has a certificate.
+- A domain of your own pointing at this machine behind a reverse proxy that has a certificate.
 
 Fleet runs no relay: the phone talks to your address and nothing goes through Weave. Keep `--require-token` on
 whatever address is reachable from the internet. The phone needs `https://` to install the app and get notifications.

@@ -1,7 +1,7 @@
 /**
  * What a computer needs before a phone can use Fleet from anywhere, in plain words, worked out from what Fleet
  * already knows about itself (`GET /api/machine/access`) and the address the phone will open. Settings → Machines →
- * Add a phone shows it as a short checklist, with the command to run for anything missing. No Vue.
+ * Add your phone shows it as a short checklist, with the command to run for anything missing. No Vue.
  */
 
 export interface ReadinessItem {

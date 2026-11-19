@@ -12,10 +12,10 @@ import { ThemeProvider, useTheme, type Scheme } from "~/theme";
 
 const ADDRESSES: MachineAddress[] = [
   { url: "https://studio-desktop.tail4f2a.ts.net", kind: "tailnet", learned: false, lastResult: "no-answer" },
-  { url: "http://100.88.14.3:2113", kind: "tailnet-ip", learned: true, lastResult: "no-answer" },
-  { url: "http://192.168.1.42:2113", kind: "lan", learned: true, lastResult: "ok" },
-  { url: "http://192.168.1.17:2113", kind: "lan", learned: true, lastResult: "other-machine" },
-  { url: "http://studio-desktop:2113", kind: "hostname", learned: true },
+  { url: "http://100.88.14.3:6262", kind: "tailnet-ip", learned: true, lastResult: "no-answer" },
+  { url: "http://192.168.1.42:6262", kind: "lan", learned: true, lastResult: "ok" },
+  { url: "http://192.168.1.17:6262", kind: "lan", learned: true, lastResult: "other-machine" },
+  { url: "http://studio-desktop:6262", kind: "hostname", learned: true },
 ];
 
 const STATUSES: GlyphStatus[] = ["working", "retry", "needs-you", "idle", "error", "done", "running"];

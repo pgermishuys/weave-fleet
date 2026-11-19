@@ -12,7 +12,7 @@ import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
 
 /**
- * Settings → Machines → This machine → Add a phone: a one-time QR code (and a code to type) a phone scans to get
+ * Settings → Machines → This machine → Add your phone: a one-time QR code (and a code to type) a phone scans to get
  * its own key. The code works once and expires in 10 minutes. The secret is only ever in the QR URL's fragment
  * and on screen; it isn't kept anywhere.
  */
@@ -357,7 +357,7 @@ onUnmounted(stopTimer);
             v-else
             aria-hidden="true"
           />
-          Add a phone
+          Add your phone
         </Button>
         <span class="text-xs text-muted">The phone gets its own key, so removing it signs out only that phone.</span>
       </div>
@@ -386,7 +386,7 @@ onUnmounted(stopTimer);
         />
         <div class="min-w-0 flex-1">
           <h4 class="text-sm font-semibold text-text">
-            Add a phone
+            Add your phone
           </h4>
           <p class="mt-1 text-sm text-muted">
             Scan with the phone's camera. The code works once and expires in 10 minutes.

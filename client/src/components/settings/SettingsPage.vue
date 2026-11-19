@@ -34,7 +34,7 @@ const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
   skills: { title: "Skills & tools", line: "What agents can use: skills, tools and, with Mods on, mods." },
   memory: { title: "Memory", line: "What Fleet remembers about each repository." },
   folders: { title: "Folders", line: "Where your repositories are, how worktrees are named, and the disk they take." },
-  machines: { title: "Machines", line: "The machines you work on, phones and devices, and the access token." },
+  machines: { title: "Machines", line: "A machine is anywhere Fleet runs: the desktop app, or a server running fleet node. Your phone and browsers look at them." },
   labs: { title: "Labs", line: "Experiments. They can change or go away, and each is off until you turn it on." },
   updates: { title: "Updates & about", line: "Every version and update: Fleet, harnesses and machines, and what's new." },
   plugins: { title: "Plugins", line: "Add-ons that put things in Fleet: rail icons, settings pages and pickers. Turn one off and everything it adds goes with it." },

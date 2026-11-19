@@ -5,7 +5,7 @@ import { seedAddresses } from "~/fleet/routes-core";
 
 export class PairingError extends Error {}
 
-export const HTTPS_ONLY = "Fleet's address must start with https://. In Fleet on the machine, Settings → Machines → Add a phone shows how.";
+export const HTTPS_ONLY = "Fleet's address must start with https://. In Fleet on the machine, Settings → Machines → Add your phone shows how.";
 
 export interface PairingTarget {
   baseUrl: string;

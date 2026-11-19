@@ -632,11 +632,13 @@ node_up() {
     done
   fi
   echo "✓ Master token stays on this machine"
-  echo ""
-  echo "$LINK_OUTPUT"
   if [ "$UP_CHOICE" = ssh-only ]; then
+    # Its own pairing answer says to run fleet node up, which is what just ran: say the SSH step instead.
     echo ""
-    echo "From the Fleet you work from, open Settings → Machines → Add a machine → Over SSH."
+    echo "Only this machine can reach it. From the Fleet you work from, open Settings → Machines → Add a machine → Over SSH."
+  else
+    echo ""
+    echo "$LINK_OUTPUT"
   fi
 }
 
