@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
@@ -10,6 +11,7 @@ using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Machines;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -660,6 +662,10 @@ public sealed class FleetRosterTests
                     services.AddHttpClient(RemoteMachineService.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Router);
                     services.AddHttpClient(FleetJoin.JoinHttpClientName).ConfigurePrimaryHttpMessageHandler(() => Router);
                     services.AddSingleton<ISelfAddresses>(new FixedAddresses(addresses));
+                    // The tests run the sync themselves (SettleAsync, SyncAllAsync). A background pass of its own would
+                    // reach out from a machine the Router marks Down (Down only blocks calls to it) and race the asserts.
+                    foreach (var hosted in services.Where(d => d.ServiceType == typeof(IHostedService) && d.ImplementationFactory is not null && d.ImplementationFactory.Method.ReturnType == typeof(FleetRosterSync)).ToList())
+                        services.Remove(hosted);
                 });
             Router.Targets[name] = factory.Server.CreateHandler();
             var node = new Node(name, factory, addresses);
