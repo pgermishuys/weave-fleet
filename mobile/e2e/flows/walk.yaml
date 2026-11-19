@@ -226,6 +226,8 @@ appId: io.tryweave.fleet
 - scroll
 - takeScreenshot: 16-kit-lower
 - scroll
+- takeScreenshot: 16a-kit-no-fleet
+- scroll
 - scroll
 - scroll
 - takeScreenshot: 17-kit-end
