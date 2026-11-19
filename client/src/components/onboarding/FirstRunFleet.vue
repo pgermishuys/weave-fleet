@@ -111,7 +111,7 @@ function finish(): void {
               data-testid="first-run-machine"
               @click="runHere(entry.key)"
             >
-              {{ entry.isLive ? `This computer (${entry.name})` : entry.name }}
+              {{ entry.isLive ? `This machine (${entry.name})` : entry.name }}
             </Button>
           </li>
         </ul>
