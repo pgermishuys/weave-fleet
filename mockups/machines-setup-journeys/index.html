@@ -1,0 +1,1402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet on every machine: every setup journey</title>
+<style>
+:root {
+  --panel-bg:#141418; --card-bg:#1b1b20; --main-bg:#0d0d10; --rail-bg:#0d0d10;
+  --border:rgba(255,255,255,.075); --border-strong:rgba(255,255,255,.14);
+  --text:#e8e8ec; --muted:#8e8e9a; --accent:#6365f1; --accent-text:#8284F4; --accent-dim:rgba(99,102,241,.15);
+  --running:#22c55e; --running-text:#22c55e; --idle:#f59e0b; --idle-text:#f59e0b; --complete-text:#4F8FF7;
+  --error:#ef4444; --error-text:#EF5E5F;
+  --radius-card:10px; --radius-btn:8px; --radius-panel:12px; --transition:150ms ease-out;
+  --sans:"Inter Variable","Inter",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono Variable","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --page-bg:#0a0a0c; --doc-text:#d6d6dc; --shadow:0 18px 50px -20px rgba(0,0,0,.7);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --panel-bg:#FFFFFF; --card-bg:#ffffff; --main-bg:#F3F2EF; --rail-bg:#FFFFFF;
+    --border:rgba(26,25,24,.09); --border-strong:rgba(26,25,24,.18);
+    --text:#1A1918; --muted:#67645F; --accent:#5B6EC7; --accent-text:#4D5EA9; --accent-dim:rgba(91,110,199,.12);
+    --running:#16A149; --running-text:#107435; --idle:#D27306; --idle-text:#975304; --complete-text:#2159D4;
+    --error:#dc2626; --error-text:#B92323;
+    --page-bg:#E7E5E0; --doc-text:#2a2826; --shadow:0 18px 50px -24px rgba(26,25,24,.35);
+    color-scheme: light;
+  }
+}
+* { box-sizing:border-box; }
+html, body { margin:0; background:var(--page-bg); color:var(--doc-text); font-family:var(--sans); font-size:15px; line-height:1.55; }
+a { color:var(--accent-text); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.wrap { max-width:1200px; margin:0 auto; padding:36px 24px 80px; }
+header.top h1 { font-size:30px; line-height:1.2; margin:0 0 10px; color:var(--text); letter-spacing:-.01em; }
+header.top .lede { font-size:17px; max-width:840px; margin:0 0 6px; }
+.kicker { font:600 12px var(--sans); letter-spacing:.08em; text-transform:uppercase; color:var(--accent-text); margin-bottom:10px; }
+.meta { color:var(--muted); font-size:13px; }
+nav.tabs { position:sticky; top:0; z-index:5; background:var(--page-bg); display:flex; gap:4px; flex-wrap:wrap; padding:12px 0; margin:22px 0 6px; border-bottom:1px solid var(--border); }
+nav.tabs button { font:500 14px var(--sans); color:var(--muted); background:transparent; border:1px solid transparent; border-radius:var(--radius-btn); padding:7px 12px; cursor:pointer; transition:background var(--transition), color var(--transition); }
+nav.tabs button:hover { color:var(--text); background:var(--card-bg); }
+nav.tabs button[aria-selected="true"] { color:var(--text); background:var(--accent-dim); border-color:color-mix(in srgb, var(--accent) 45%, transparent); }
+nav.tabs .n { display:inline-grid; place-items:center; width:20px; height:20px; border-radius:50%; background:var(--card-bg); border:1px solid var(--border-strong); font-size:11px; margin-right:6px; color:var(--text); }
+section.tab { display:none; } section.tab.on { display:block; }
+h2 { font-size:23px; color:var(--text); margin:24px 0 6px; letter-spacing:-.005em; }
+h3 { font-size:16px; color:var(--text); margin:26px 0 8px; }
+p { margin:0 0 12px; }
+.sub { color:var(--muted); margin-bottom:16px; max-width:880px; }
+.demo { border-left:3px solid var(--accent); padding:12px 16px; background:var(--card-bg); border-radius:0 var(--radius-card) var(--radius-card) 0; margin:16px 0 22px; color:var(--text); font-size:16.5px; max-width:900px; }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+@media (max-width:880px){ .cols,.cols3 { grid-template-columns:1fr; } }
+.card { background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius-card); padding:16px 18px; }
+.card h4 { margin:0 0 6px; font-size:14.5px; color:var(--text); }
+.card p, .card li { font-size:14px; }
+.card ul, .card ol { margin:6px 0 0; padding-left:18px; } .card li { margin:3px 0; }
+.tag { display:inline-block; font:500 11.5px var(--sans); padding:1px 8px; border-radius:999px; border:1px solid var(--border-strong); color:var(--muted); vertical-align:1px; white-space:nowrap; }
+.tag.ok { color:var(--running-text); border-color:color-mix(in srgb,var(--running) 40%,transparent); }
+.tag.new { color:var(--accent-text); border-color:color-mix(in srgb,var(--accent) 45%,transparent); }
+.tag.warn { color:var(--idle-text); border-color:color-mix(in srgb,var(--idle) 45%,transparent); }
+.tag.bad { color:var(--error-text); border-color:color-mix(in srgb,var(--error) 45%,transparent); }
+code, .mono { font-family:var(--mono); font-size:12.5px; }
+code { background:var(--card-bg); border:1px solid var(--border); border-radius:5px; padding:0 5px; color:var(--text); overflow-wrap:anywhere; }
+table.t { width:100%; border-collapse:collapse; font-size:14px; margin:8px 0 16px; }
+table.t th, table.t td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+table.t th { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
+table.t td:first-child { color:var(--text); font-weight:500; }
+.tablewrap { overflow-x:auto; }
+.decide { background:color-mix(in srgb, var(--idle) 9%, var(--card-bg)); border:1px solid color-mix(in srgb, var(--idle) 35%, transparent); border-radius:var(--radius-card); padding:14px 18px; margin:18px 0; }
+.decide h4 { margin:0 0 6px; color:var(--idle-text); font-size:14px; }
+.why { color:var(--muted); font-size:13.5px; }
+.i { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; vertical-align:-3px; }
+.i.sm { width:14px; height:14px; } .i.lg { width:22px; height:22px; } .i.xl { width:30px; height:30px; }
+
+/* ── setups picture ── */
+.setup { display:flex; flex-direction:column; gap:10px; }
+.setup .lane { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.node { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--border-strong); background:var(--main-bg); border-radius:var(--radius-btn); padding:6px 10px; font-size:13px; color:var(--text); }
+.node small { color:var(--muted); font-size:11.5px; display:block; line-height:1.2; }
+.node.screen { border-style:dashed; }
+.arrow { color:var(--muted); font-size:13px; }
+
+/* ── flow stepper ── */
+.flow { margin-top:6px; }
+.stepbar { display:flex; gap:6px; flex-wrap:wrap; margin:12px 0 14px; }
+.stepbar button { font:500 13px var(--sans); background:var(--card-bg); color:var(--muted); border:1px solid var(--border); border-radius:var(--radius-btn); padding:6px 11px; cursor:pointer; transition:all var(--transition); }
+.stepbar button:hover { color:var(--text); }
+.stepbar button[aria-pressed="true"] { color:var(--text); background:var(--accent-dim); border-color:color-mix(in srgb,var(--accent) 45%,transparent); }
+.stepbar .nav { margin-left:auto; display:flex; gap:6px; }
+.step { display:none; } .step.on { display:block; }
+.caption { font-size:14.5px; color:var(--text); max-width:900px; margin:0 0 14px; }
+.caption .why { display:block; margin-top:4px; }
+.stage { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+.scrollx { overflow-x:auto; max-width:100%; flex:1 1 560px; min-width:0; padding-bottom:6px; }
+
+/* ── desktop window ── */
+.win { min-width:620px; background:var(--main-bg); border:1px solid var(--border-strong); border-radius:var(--radius-panel); box-shadow:var(--shadow); overflow:hidden; color:var(--text); font-size:13px; position:relative; }
+.win .bar { height:30px; display:flex; align-items:center; gap:6px; padding:0 12px; border-bottom:1px solid var(--border); background:var(--rail-bg); font-size:12px; color:var(--muted); }
+.win .bar i { width:10px; height:10px; border-radius:50%; background:var(--border-strong); display:inline-block; }
+.win .bar span { margin-left:8px; }
+.win .body { display:flex; min-height:430px; }
+.win .rail { width:46px; background:var(--rail-bg); display:flex; flex-direction:column; align-items:center; gap:14px; padding:12px 0; color:var(--muted); border-right:1px solid var(--border); }
+.win .rail .on { color:var(--text); background:var(--accent-dim); border-radius:8px; padding:5px; margin:-5px; }
+.win .menu { width:150px; padding:12px 8px; border-right:1px solid var(--border); font-size:12.5px; color:var(--muted); }
+.win .menu b { display:block; font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; margin:8px 6px 4px; font-weight:600; }
+.win .menu div { padding:4px 6px; border-radius:6px; }
+.win .menu div.on { color:var(--text); background:var(--accent-dim); }
+.win .page { flex:1; padding:18px 20px; min-width:0; }
+.win .page h5 { font-size:19px; margin:0 0 2px; font-weight:600; }
+.win .page .desc { color:var(--muted); font-size:12.5px; margin-bottom:14px; }
+.grp { font-size:12.5px; font-weight:600; margin:14px 0 6px; display:flex; align-items:center; gap:8px; }
+.grp .r { margin-left:auto; font-weight:400; }
+.box { background:var(--panel-bg); border:1px solid var(--border); border-radius:var(--radius-card); }
+.row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid var(--border); }
+.row:first-child { border-top:0; }
+.row .who { min-width:0; flex:1; }
+.row .who b { font-weight:600; }
+.row .who small { display:block; color:var(--muted); font-size:11.5px; margin-top:1px; }
+.ic { width:30px; height:30px; display:grid; place-items:center; border-radius:8px; background:var(--accent-dim); color:var(--accent-text); flex:none; }
+.ic.grey { background:color-mix(in srgb,var(--muted) 14%,transparent); color:var(--muted); }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--running); display:inline-block; vertical-align:1px; }
+.dot.off { background:var(--muted); } .dot.warn { background:var(--idle); }
+.btn { display:inline-flex; align-items:center; gap:6px; font:500 12.5px var(--sans); border-radius:var(--radius-btn); padding:5px 11px; border:1px solid var(--border-strong); background:transparent; color:var(--text); white-space:nowrap; }
+.btn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+.btn.ghost { border-color:transparent; color:var(--muted); }
+.btn.sm { padding:3px 8px; font-size:12px; }
+.chip { display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:1px 7px; border-radius:999px; border:1px solid var(--border-strong); color:var(--muted); white-space:nowrap; }
+.chip.ok { color:var(--running-text); border-color:color-mix(in srgb,var(--running) 40%,transparent); }
+.chip.warn { color:var(--idle-text); border-color:color-mix(in srgb,var(--idle) 45%,transparent); }
+.chip.acc { color:var(--accent-text); border-color:color-mix(in srgb,var(--accent) 45%,transparent); }
+.chips { display:inline-flex; gap:4px; flex-wrap:wrap; }
+.note { font-size:12px; color:var(--muted); }
+.callout { border:1px solid color-mix(in srgb,var(--accent) 35%,transparent); background:color-mix(in srgb,var(--accent) 7%,var(--panel-bg)); border-radius:var(--radius-card); padding:12px 14px; }
+.callout.warn { border-color:color-mix(in srgb,var(--idle) 40%,transparent); background:color-mix(in srgb,var(--idle) 7%,var(--panel-bg)); }
+.seg { display:flex; gap:4px; background:var(--main-bg); border:1px solid var(--border); border-radius:var(--radius-btn); padding:3px; margin:8px 0 12px; }
+.seg span { flex:1; text-align:center; padding:5px 6px; border-radius:6px; color:var(--muted); font-size:12.5px; }
+.seg span.on { background:var(--accent-dim); color:var(--text); font-weight:500; }
+.cmd { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11.5px; background:var(--main-bg); border:1px solid var(--border); border-radius:7px; padding:7px 9px; color:var(--text); overflow-wrap:anywhere; }
+.cmd .i { color:var(--muted); margin-left:auto; }
+.overlay { position:absolute; inset:30px 0 0 0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; padding-top:34px; }
+.dialog { width:500px; max-width:92%; background:var(--panel-bg); border:1px solid var(--border-strong); border-radius:var(--radius-panel); padding:18px 20px; box-shadow:var(--shadow); }
+.dialog h6 { font-size:15px; margin:0 0 4px; font-weight:600; }
+.choice { display:flex; gap:10px; border:1px solid var(--border-strong); border-radius:var(--radius-card); padding:10px 12px; margin-top:8px; align-items:flex-start; }
+.choice.on { border-color:var(--accent); background:var(--accent-dim); }
+.choice .rad { width:14px; height:14px; border-radius:50%; border:1.5px solid var(--muted); margin-top:2px; flex:none; }
+.choice.on .rad { border:4px solid var(--accent); }
+.choice b { font-weight:600; } .choice small { display:block; color:var(--muted); font-size:11.5px; }
+.code { font-family:var(--mono); font-size:16px; letter-spacing:.08em; color:var(--text); background:var(--main-bg); border:1px solid var(--border-strong); border-radius:7px; padding:3px 9px; }
+.qr { width:132px; height:132px; background:#fff; border-radius:8px; padding:6px; flex:none; }
+.qr svg { width:100%; height:100%; display:block; }
+.reach { display:grid; gap:6px; margin-top:6px; }
+.reach div { display:flex; align-items:center; gap:7px; font-size:12.5px; }
+.reach .ok { color:var(--running-text); } .reach .warn { color:var(--idle-text); }
+
+/* ── terminal (always dark) ── */
+.term { flex:1 1 520px; min-width:0; max-width:100%; background:#0b0c0f; color:#d8dae0; border:1px solid #23252c; border-radius:var(--radius-panel); box-shadow:var(--shadow); overflow:hidden; }
+.term .bar { height:28px; display:flex; align-items:center; gap:6px; padding:0 12px; background:#16171c; color:#8b8e99; font-size:12px; font-family:var(--sans); }
+.term .bar i { width:10px; height:10px; border-radius:50%; background:#2c2e36; display:inline-block; }
+.term pre { margin:0; padding:12px 14px; font:12px/1.5 var(--mono); white-space:pre-wrap; overflow-wrap:anywhere; min-height:300px; }
+.term .p { color:#7c83f7; } .term .g { color:#3ccf6e; } .term .y { color:#f2b33c; } .term .m { color:#8b8e99; } .term .b { color:#fff; font-weight:600; } .term .r { color:#f06666; }
+.term .sel { background:#2b2d63; color:#fff; }
+.term .qrt { line-height:1; letter-spacing:0; font-size:9px; color:#fff; background:#0b0c0f; display:inline-block; }
+
+/* ── phone ── */
+.phone { width:272px; flex:none; height:560px; border-radius:38px; border:9px solid #1b1c21; background:var(--main-bg); box-shadow:var(--shadow); overflow:hidden; position:relative; color:var(--text); font-size:13px; display:flex; flex-direction:column; }
+@media (prefers-color-scheme: light) { .phone { border-color:#2a2b30; } }
+.phone .sb { height:28px; display:flex; justify-content:space-between; align-items:center; padding:0 20px; font-size:11.5px; font-weight:600; flex:none; }
+.phone .sb::after { content:""; position:absolute; left:50%; top:6px; width:80px; height:20px; border-radius:12px; background:#000; transform:translateX(-50%); }
+.phone .hd { padding:6px 16px 8px; flex:none; }
+.phone .hd h6 { margin:0; font-size:20px; font-weight:600; }
+.phone .hd small { color:var(--muted); font-size:12px; }
+.phone .ct { flex:1; overflow:hidden; padding:4px 14px; }
+.phone .tb { flex:none; display:flex; justify-content:space-around; border-top:1px solid var(--border); padding:8px 0 16px; color:var(--muted); font-size:10.5px; background:var(--panel-bg); }
+.phone .tb div { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.phone .tb .on { color:var(--accent-text); }
+.phone .prow { display:flex; align-items:center; gap:10px; background:var(--panel-bg); border:1px solid var(--border); border-radius:var(--radius-card); padding:10px; margin-bottom:8px; }
+.phone .prow .who { flex:1; min-width:0; } .phone .prow b { font-weight:600; } .phone .prow small { display:block; color:var(--muted); font-size:11px; }
+.phone .big { display:block; width:100%; text-align:center; padding:10px; border-radius:var(--radius-btn); background:var(--accent); color:#fff; font-weight:600; font-size:13.5px; }
+.phone .big.alt { background:transparent; color:var(--text); border:1px solid var(--border-strong); margin-top:8px; }
+.phone .cam { margin:4px 0 12px; height:250px; border-radius:16px; background:linear-gradient(160deg,#2a2c33,#121317); position:relative; display:grid; place-items:center; }
+.phone .cam .qr { width:120px; height:120px; transform:rotate(-4deg); }
+.phone .cam::before { content:""; position:absolute; width:150px; height:150px; border:3px solid rgba(255,255,255,.85); border-radius:14px; }
+.phone .toast { position:absolute; left:10px; right:10px; top:34px; background:var(--card-bg); border:1px solid var(--border-strong); border-radius:14px; padding:10px 12px; box-shadow:var(--shadow); font-size:12px; display:flex; gap:10px; z-index:2; }
+.phone .sec { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:10px 2px 6px; font-weight:600; }
+.phone .srow { padding:8px 2px; border-bottom:1px solid var(--border); font-size:12.5px; }
+.phone .srow small { color:var(--muted); display:block; font-size:11px; }
+.label-under { text-align:center; font-size:12px; color:var(--muted); margin-top:8px; }
+.col { display:flex; flex-direction:column; }
+
+/* before / after */
+.toggle { display:inline-flex; gap:4px; background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius-btn); padding:3px; margin:8px 0 14px; }
+.toggle button { font:500 13px var(--sans); color:var(--muted); background:transparent; border:0; border-radius:6px; padding:5px 12px; cursor:pointer; }
+.toggle button[aria-pressed="true"] { background:var(--accent-dim); color:var(--text); }
+img.shot { max-width:100%; border:1px solid var(--border-strong); border-radius:var(--radius-card); display:block; }
+ol.issues { padding-left:20px; margin:6px 0 0; } ol.issues li { margin:7px 0; font-size:14px; }
+@media (max-width:600px) { .wrap { padding:24px 16px 60px; } header.top h1 { font-size:24px; } .phone { width:100%; max-width:272px; } }
+</style>
+<style>
+.jpick { display:flex; gap:6px; flex-wrap:wrap; margin:14px 0 6px; padding:8px; background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius-card); }
+.jpick button { font:500 13px var(--sans); background:transparent; color:var(--muted); border:1px solid transparent; border-radius:var(--radius-btn); padding:6px 10px; cursor:pointer; text-align:left; transition:all var(--transition); }
+.jpick button:hover { color:var(--text); background:var(--main-bg); }
+.jpick button[aria-pressed="true"] { color:var(--text); background:var(--accent-dim); border-color:color-mix(in srgb,var(--accent) 45%,transparent); }
+.jpick b { font-family:var(--mono); font-size:11.5px; margin-right:6px; color:var(--accent-text); }
+.journey { display:none; } .journey.on { display:block; }
+.from { display:inline-block; font-size:13px; color:var(--muted); margin:0 0 6px; }
+.go { font:500 12.5px var(--mono); color:var(--accent-text); background:var(--accent-dim); border:1px solid color-mix(in srgb,var(--accent) 35%,transparent); border-radius:6px; padding:1px 7px; cursor:pointer; white-space:nowrap; }
+table.t td .go { margin-right:2px; }
+table.map td { font-size:13.5px; }
+table.map td:nth-child(2) { color:var(--text); font-weight:500; min-width:180px; }
+table.map td:first-child { white-space:nowrap; }
+table.map { table-layout:fixed; min-width:640px; }
+table.map ol { margin:0; padding-left:18px; } table.map li { margin:1px 0; }
+tr.grp td { background:var(--card-bg); color:var(--accent-text) !important; font:600 12px var(--sans) !important; text-transform:uppercase; letter-spacing:.07em; padding:7px 10px; }
+.actions3 .card { border-top:3px solid var(--accent); }
+.browser .bar span.url { background:var(--main-bg); border:1px solid var(--border); border-radius:6px; padding:1px 10px; font-family:var(--mono); font-size:11px; color:var(--muted); margin-left:14px; }
+.dl { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:16px; }
+.dl .box { padding:14px; }
+.dl b { display:block; margin:8px 0 2px; font-size:13.5px; }
+@media (max-width:880px) { .dl { grid-template-columns:1fr; } }
+.sheet { position:absolute; left:0; right:0; bottom:0; background:var(--panel-bg); border-top:1px solid var(--border-strong); border-radius:18px 18px 0 0; padding:14px 16px 22px; box-shadow:0 -10px 30px rgba(0,0,0,.35); z-index:3; }
+.sheet .grab { width:36px; height:4px; border-radius:4px; background:var(--border-strong); margin:0 auto 12px; }
+.phone .dim { position:absolute; inset:0; background:rgba(0,0,0,.45); z-index:2; }
+.field { border:1px solid var(--border-strong); border-radius:8px; padding:8px 10px; font-size:12.5px; color:var(--muted); margin:6px 0; background:var(--main-bg); }
+.field.on { border-color:var(--accent); color:var(--text); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 20h.01M2 8.82a15 15 0 0 1 20 0M5 12.86a10 10 0 0 1 14 0M8.5 16.43a5 5 0 0 1 7 0"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-flow" viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+</svg>
+
+<div class="wrap">
+<header class="top">
+  <div class="kicker">Proposal · 19 November 2026 · second pass</div>
+  <h1>Fleet on every machine: every setup journey</h1>
+  <p class="lede">Every way a customer could set Fleet up, starting from nothing: what they install first, what they want to reach it from, and the clear path for each. One model and three actions cover all of them.</p>
+  <p class="meta">Mockups with invented data: <b>studio</b> Alex's laptop, <b>hangar</b> a Linux box at home reached over SSH, <b>atlas</b> a cloud server, <b>workbench</b> a Linux desktop, Alex's iPhone.</p>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+  <button role="tab" data-tab="map">Every journey</button>
+  <button role="tab" data-tab="desk"><span class="n">A</span>Desktop app first</button>
+  <button role="tab" data-tab="node"><span class="n">B</span>Machine with no screen first</button>
+  <button role="tab" data-tab="phonefirst"><span class="n">C</span>Phone first</button>
+  <button role="tab" data-tab="later">Later changes</button>
+  <button role="tab" data-tab="reach">Where the phone works</button>
+  <button role="tab" data-tab="page">Machines page</button>
+  <button role="tab" data-tab="decide">Decisions and build order</button>
+</nav>
+
+<!-- ═════════ OVERVIEW ═════════ -->
+<section class="tab on" id="overview">
+  <h2>One model: your Fleet, machines and screens</h2>
+  <p class="sub">Every journey below uses the same few words and actions. A customer who learns one journey already knows the rest.</p>
+  <div class="demo"><b>Your Fleet</b> is the machines you've connected together. A <b>machine</b> runs Fleet: the desktop app runs it with a window, <code>fleet node</code> runs it without one. Your phone, a browser and the desktop app's window are <b>screens</b> that look at your Fleet. Connect a screen to <i>any</i> machine and you see all of them. Add a machine from <i>any</i> screen and every screen sees it.</div>
+  <p class="why" style="margin-top:-8px">"Screen" here is a word for this page only. In the app it's "your phone", "this browser" or "the desktop app", and there are never two names for one thing.</p>
+
+  <h3>Three actions, the same everywhere</h3>
+  <div class="cols3 actions3">
+    <div class="card"><h4>Connect a screen</h4><p>A machine shows a code: the desktop app's <b>Add your phone</b>, or the terminal after <code>fleet node up</code>. Scan it or type it. The screen gets its own key for every machine in your Fleet, now and later.</p></div>
+    <div class="card"><h4>Add a machine</h4><p>A new machine waits with a code (<code>fleet node up</code> or <code>fleet node pair</code>) and says it's waiting on Tailscale and your home network. Any connected screen, phone or desktop app, lists it under <b>Found</b>. Check the code matches, then add it. Or paste one line from the desktop app, which adds it straight away.</p></div>
+    <div class="card"><h4>Remove</h4><p>Remove a phone or forget a machine from any screen, and it's gone from every machine in your Fleet. One place, not one per machine.</p></div>
+  </div>
+
+  <h3>Three places to start from</h3>
+  <div class="cols3">
+    <div class="card"><h4><svg class="i"><use href="#i-monitor"/></svg> The desktop app</h4><p>The usual start. Fleet runs on this computer straight away, and its first run offers your phone.</p><p class="why"><span class="go" data-go="desk:j1">J1</span><span class="go" data-go="desk:j2">J2</span><span class="go" data-go="desk:j3">J3</span><span class="go" data-go="desk:j4">J4</span><span class="go" data-go="desk:j5">J5</span></p></div>
+    <div class="card"><h4><svg class="i"><use href="#i-server"/></svg> A machine with no screen</h4><p>A server, a box in the cupboard, a cloud machine. One install line, then <code>fleet node up</code>. Then connect a phone, a desktop app, or both.</p><p class="why"><span class="go" data-go="node:j6">J6</span><span class="go" data-go="node:j7">J7</span><span class="go" data-go="node:j8">J8</span><span class="go" data-go="node:j9">J9</span><span class="go" data-go="node:j10">J10</span></p></div>
+    <div class="card"><h4><svg class="i"><use href="#i-phone"/></svg> The phone</h4><p>Someone installs the phone app first and has nothing for it to connect to. The app tells them where Fleet runs and sends the link to their computer.</p><p class="why"><span class="go" data-go="phonefirst:j11">J11</span></p></div>
+  </div>
+
+  <h3>Why this, and not a "home" machine</h3>
+  <div class="cols">
+    <div class="card"><h4>The journeys rule out a single home</h4><p>In J6 and J9 there's no desktop app at all; a phone and two servers make up the whole Fleet. In J7 the desktop app comes last. A laptop that sleeps can't be the one machine the phone needs in order to learn about the others. So every machine keeps the list, and any of them can add the next.</p></div>
+    <div class="card"><h4>What's in the way today</h4><ul>
+      <li>The desktop app listens on this computer only, so a phone can't reach it (J2, J3).</li>
+      <li>A machine with no screen refuses phone codes (409), so phone-only setups can't start (J6, J9).</li>
+      <li>The phone app pairs each machine on its own and never hears about new ones (J5, J10).</li>
+      <li>Nothing finds machines that are waiting: you copy a link from a terminal (J4, J7).</li>
+      <li>The desktop app and <code>fleet node</code> share <code>~/.weave</code>, so on one computer the app may open the node, which has no web app (J8; read in the code, not tried).</li>
+      <li>Over SSH set-up used the wrong port <span class="tag ok">fixed in #1073</span>.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ═════════ MAP ═════════ -->
+<section class="tab" id="map">
+  <h2>Every journey, from scratch</h2>
+  <p class="sub">What the customer does, in order, and whether it works today. Click a journey to see it.</p>
+  <div class="tablewrap"><table class="t map">
+    <colgroup><col style="width:58px"><col style="width:24%"><col><col style="width:22%"></colgroup>
+    <thead><tr><th></th><th>The customer wants</th><th>Their path</th><th>Today</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td colspan="4">A · Starting with the desktop app</td></tr>
+      <tr><td><span class="go" data-go="desk:j1">J1</span></td><td>Fleet on this computer</td><td><ol><li>Install the desktop app, pick a harness.</li><li>Done. The last step offers the phone.</li></ol></td><td><span class="tag ok">works</span></td></tr>
+      <tr><td><span class="go" data-go="desk:j2">J2</span></td><td>…and my phone, walking around the house</td><td><ol><li>Desktop: <b>Add your phone</b> (welcome, Machines, palette).</li><li>It asks once to let others reach studio.</li><li>Phone app: Scan the code. Done; at home it works on the Wi-Fi.</li></ol></td><td><span class="tag bad">doesn't work</span><div class="why">The app listens on this computer only.</div></td></tr>
+      <tr><td><span class="go" data-go="desk:j3">J3</span></td><td>…and my phone away from home</td><td><ol><li>Phone or desktop: <b>Use studio away from home</b>.</li><li>Tailscale on studio and the phone (Fleet checks both).</li><li>Done; the phone switches address by itself.</li></ol></td><td><span class="tag bad">doesn't work</span><div class="why">Its steps are command-line flags.</div></td></tr>
+      <tr><td><span class="go" data-go="desk:j4">J4</span></td><td>…and a server I only reach by terminal</td><td><ol><li>On it: install line, then <code>fleet node up</code>. It shows a code.</li><li>Desktop: Add a machine → <b>Found</b> → code matches → Add.</li><li>The phone sees it by itself.</li></ol><div class="why">Or Over SSH from the desktop, with no terminal.</div></td><td><span class="tag warn">partly</span><div class="why">Copy a link from the terminal; the phone never sees it.</div></td></tr>
+      <tr><td><span class="go" data-go="desk:j5">J5</span></td><td>…and another server</td><td><ol><li>Desktop: Add a machine → <b>On a new server</b> → copy one line.</li><li>Paste it on the server. It joins; nothing to check.</li><li>Every phone gets a notification.</li></ol></td><td><span class="tag warn">partly</span></td></tr>
+      <tr class="grp"><td colspan="4">B · Starting with a machine that has no screen</td></tr>
+      <tr><td><span class="go" data-go="node:j6">J6</span></td><td>A server, used only from my phone</td><td><ol><li>On it: install line, then <code>fleet node up</code>. It shows a QR code.</li><li>Phone app: Scan the code. Done.</li><li>New sessions from the phone run on the server.</li></ol></td><td><span class="tag bad">doesn't work</span><div class="why">409: needs a Fleet with the web app.</div></td></tr>
+      <tr><td><span class="go" data-go="node:j7">J7</span></td><td>…then the desktop app on another computer</td><td><ol><li>Install the desktop app. First run: <b>Found your Fleet: hangar</b>.</li><li>Approve on the phone, or with <code>fleet node pair</code> on hangar.</li><li>Choose where new sessions run.</li></ol></td><td><span class="tag warn">partly</span><div class="why">Works by pasting a link, after first run.</div></td></tr>
+      <tr><td><span class="go" data-go="node:j8">J8</span></td><td>…then the desktop app on the <i>same</i> computer</td><td><ol><li>Install the desktop app. It says Fleet already runs here and uses that one.</li></ol></td><td><span class="tag bad">likely broken</span><div class="why">The app may open the node, which has no web app. Read in the code; needs a check.</div></td></tr>
+      <tr><td><span class="go" data-go="node:j9">J9</span></td><td>Two servers, only my phone</td><td><ol><li>Server 1 as J6.</li><li>Server 2: <code>fleet node up</code> finds your Fleet and waits.</li><li>Phone: "atlas wants to join" → code matches → Add.</li></ol></td><td><span class="tag bad">doesn't work</span></td></tr>
+      <tr><td><span class="go" data-go="node:j10">J10</span></td><td>Two servers, the desktop app and the phone</td><td><ol><li>Any order of J4–J9. The desktop app joins once and sees both; the phone connects once and sees all three.</li></ol></td><td><span class="tag warn">partly</span><div class="why">The desktop app works with two pastes; the phone can't reach either server.</div></td></tr>
+      <tr class="grp"><td colspan="4">C · Starting with the phone</td></tr>
+      <tr><td><span class="go" data-go="phonefirst:j11">J11</span></td><td>I installed the phone app first</td><td><ol><li>Phone: <b>I don't have Fleet yet</b>.</li><li>Choose computer (desktop app) or server (install line); send it to yourself.</li><li>Install there, come back, scan.</li></ol></td><td><span class="tag warn">dead end</span><div class="why">It says to open Fleet "on the machine".</div></td></tr>
+      <tr class="grp"><td colspan="4">Later changes</td></tr>
+      <tr><td><span class="go" data-go="later:j12">J12</span></td><td>A second phone, a tablet, a browser on another computer</td><td>Same as connecting the first phone, from any machine.</td><td><span class="tag warn">partly</span></td></tr>
+      <tr><td><span class="go" data-go="later:j13">J13</span></td><td>A new laptop, or the desktop app reinstalled</td><td>As J7: first run finds your Fleet; approve on the phone. Forget the old laptop.</td><td><span class="tag warn">partly</span><div class="why">Paste a link for each machine again.</div></td></tr>
+      <tr><td><span class="go" data-go="later:j14">J14</span></td><td>I lost my phone</td><td>Remove it on any screen: signed out of every machine.</td><td><span class="tag warn">partly</span><div class="why">One removal per machine.</div></td></tr>
+      <tr><td><span class="go" data-go="later:j15">J15</span></td><td>A machine is gone for good</td><td>Forget it on any screen: gone everywhere.</td><td><span class="tag warn">partly</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ═════════ A DESKTOP FIRST ═════════ -->
+<section class="tab" id="desk">
+  <div class="jpick" data-group="desk">
+    <button data-j="j1"><b>J1</b>Desktop app alone</button>
+    <button data-j="j2"><b>J2</b>+ phone around the house</button>
+    <button data-j="j3"><b>J3</b>+ phone away from home</button>
+    <button data-j="j4"><b>J4</b>+ a server with no screen</button>
+    <button data-j="j5"><b>J5</b>+ another server</button>
+  </div>
+  <div class="journey" data-j="j1">
+  <h2>J1 · Just the desktop app</h2>
+  <p class="sub">Most people start here. First run says what a machine is in one line, and offers the phone up front, because that's the next thing people want. Nothing about servers until they ask.</p>
+  <div class="flow" data-flow="desktop">
+    <div class="stepbar"></div>
+
+    <div class="step" data-label="First run: last step">
+      <p class="caption">The welcome wizard's last step ("You're all set") gets two lines and one optional button. "Not now" is the default.<span class="why">Today the wizard covers harnesses only, and <code>/welcome</code> is a placeholder.</span></p>
+      <div class="stage"><div class="scrollx"><div class="win">
+        <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+        <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+        <div class="page" style="display:grid;place-items:center">
+          <div class="box" style="width:440px;padding:22px 24px">
+            <div class="ic" style="width:40px;height:40px;background:color-mix(in srgb,var(--running) 15%,transparent);color:var(--running-text)"><svg class="i lg"><use href="#i-check"/></svg></div>
+            <h5 style="margin-top:12px">You're all set</h5>
+            <p class="desc" style="margin-bottom:12px">Claude Code is ready on <b style="color:var(--text)">studio</b>, this machine. Its sessions run here.</p>
+            <div class="row" style="border:1px solid var(--border);border-radius:var(--radius-card)"><div class="ic"><svg class="i"><use href="#i-phone"/></svg></div><div class="who"><b>Use Fleet from your phone</b><small>Answer agents and start sessions away from your desk.</small></div><span class="btn sm">Add your phone</span></div>
+            <div class="row" style="border:1px solid var(--border);border-radius:var(--radius-card);margin-top:8px"><div class="ic grey"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>Got a server or another machine?</b><small>Fleet can run sessions there too. Settings → Machines, any time.</small></div></div>
+            <div style="display:flex;justify-content:flex-end;margin-top:16px"><span class="btn pri">Start using Fleet</span></div>
+          </div>
+        </div></div>
+      </div></div></div>
+    </div>
+
+    <div class="step" data-label="Machines with one machine">
+      <p class="caption">Settings → Machines with one machine. The page answers "what are machines?" in its description, and shows who can see studio: here nothing but this window yet.<span class="why">It replaces the separate "Let other devices reach This machine" group: the phone sits under the machine it reaches.</span></p>
+      <div class="stage"><div class="scrollx"><div class="win">
+        <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+        <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg><span style="flex:1"></span><span class="on"><svg class="i"><use href="#i-gear"/></svg></span></div>
+        <div class="menu"><b>You</b><div>General</div><div>Appearance</div><b>Work</b><div>Folders</div><div class="on">Machines</div><b>Fleet</b><div>Labs</div><div>Updates &amp; about</div></div>
+        <div class="page">
+          <h5>Machines</h5>
+          <div class="desc">A machine is anywhere Fleet runs: this desktop app, or a server running <span class="mono">fleet node</span>. Your phone and browsers look at them.</div>
+          <div class="grp">Your machines <span class="r"><span class="btn sm"><svg class="i sm"><use href="#i-plus"/></svg>Add a machine</span></span></div>
+          <div class="box">
+            <div class="row"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b> <span class="chip acc">this machine</span><small>Desktop app · macOS · Fleet 0.74.0 · 4 sessions</small></div><span class="chip"><span class="dot"></span>live</span></div>
+            <div class="row" style="background:var(--main-bg)"><div class="who"><small style="font-size:12px">Reachable from <b style="color:var(--text)">this machine only</b>. Turn on to use it from your phone or another machine.</small></div><span class="btn sm">Let others reach studio</span></div>
+          </div>
+          <div class="grp">Phones and browsers</div>
+          <div class="box"><div class="row"><div class="ic grey"><svg class="i"><use href="#i-phone"/></svg></div><div class="who"><b>No phone yet</b><small>Connect once and it sees every machine here.</small></div><span class="btn sm pri">Add your phone</span></div></div>
+        </div></div>
+      </div></div></div>
+    </div>
+
+    <div class="step" data-label="Let others reach studio">
+      <p class="caption">One switch replaces the command-line flags. The window keeps signing in without a key; every other device and machine has to bring its own key. Fleet shows the addresses it found, so you never type one.<span class="why">Build note: a second listener (home network and Tailscale) that always asks for a key, next to the loopback one the window uses. The loopback sign-in stays tied to the loopback listener, so a proxy can't fake it.</span></p>
+      <div class="stage"><div class="scrollx"><div class="win">
+        <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+        <div class="body" style="min-height:560px"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+        <div class="menu"><b>Work</b><div>Folders</div><div class="on">Machines</div></div>
+        <div class="page" style="opacity:.35">
+          <h5>Machines</h5><div class="desc">A machine is anywhere Fleet runs…</div>
+          <div class="box" style="height:240px"></div>
+        </div>
+        <div class="overlay"><div class="dialog">
+          <h6>Let your phone and other machines reach studio</h6>
+          <p class="note" style="margin:0 0 10px">studio will listen on these addresses too. Anything that connects needs its own key, which you give it by adding it here, so being on the same network isn't enough.</p>
+          <div class="choice on"><span class="rad"></span><div><b>Tailscale and home network</b> <span class="chip ok">recommended</span><small>Your phone reaches studio at home and away. Only your Tailscale devices can try.</small><div class="chips" style="margin-top:5px"><span class="chip"><svg class="i sm"><use href="#i-globe"/></svg>studio.tail4f2a.ts.net</span><span class="chip"><svg class="i sm"><use href="#i-wifi"/></svg>192.168.1.20</span></div></div></div>
+          <div class="choice"><span class="rad"></span><div><b>Home network only</b><small>At home only. Away from home, the phone shows studio as out of reach.</small></div></div>
+          <div class="choice"><span class="rad"></span><div><b>My own address</b><small>A tunnel or a domain you run, such as https://fleet.example.com.</small></div></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><span class="btn">Cancel</span><span class="btn pri">Turn on</span></div>
+        </div></div>
+        </div>
+      </div></div></div>
+    </div>
+  </div>
+</div>
+  <div class="journey" data-j="j2">
+  <h2>J2 · Desktop app, then your phone around the house</h2>
+  <p class="sub">The phone's code carries every address studio listens on, so no one types or chooses a URL. The desktop app says in plain words where the phone will work: at home, away from home, or both.</p>
+  <div class="flow" data-flow="phone">
+    <div class="stepbar"></div>
+
+    <div class="step" data-label="Code on the desktop">
+      <p class="caption">"Add your phone" opens one card: the code, what the phone will be able to reach, and nothing to fill in. It's the same card from the welcome wizard, Machines, or the command palette.<span class="why">Compare today: a three-item checklist with command-line steps, then "Which address will the phone open?" with a .ts.net placeholder.</span></p>
+      <div class="stage"><div class="scrollx"><div class="win">
+        <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+        <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+        <div class="menu"><b>Work</b><div>Folders</div><div class="on">Machines</div></div>
+        <div class="page">
+          <h5>Add your phone</h5>
+          <div class="desc">‹ Machines</div>
+          <div class="box" style="padding:16px">
+            <div style="display:flex;gap:18px;flex-wrap:wrap">
+              <div class="qr" data-qr="11"></div>
+              <div style="flex:1;min-width:220px">
+                <b style="font-size:14px">1 · Get Weave Fleet on your phone</b>
+                <div class="note" style="margin:2px 0 10px">App Store or Google Play. Search "Weave Fleet".</div>
+                <b style="font-size:14px">2 · Open it and scan this code</b>
+                <div class="note" style="margin:2px 0 6px">Works once, for 10 minutes. No camera? Type <span class="code" style="font-size:13px">H4KD-92QX</span></div>
+                <div class="note" style="display:flex;align-items:center;gap:6px;margin-top:10px"><span class="dot warn"></span>Waiting for your phone… 9:41 left</div>
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+              <b style="font-size:12.5px">Your phone will reach studio</b>
+              <div class="reach">
+                <div class="ok"><svg class="i sm"><use href="#i-check"/></svg>At home, on your Wi-Fi <span class="note mono">192.168.1.20</span></div>
+                <div class="ok"><svg class="i sm"><use href="#i-check"/></svg>Away from home, with Tailscale on the phone <span class="note mono">studio.tail4f2a.ts.net</span></div>
+              </div>
+              <div class="note" style="margin-top:8px">The phone gets its own key, for studio and for every machine you add here later. Remove it here to sign it out of all of them. <a href="#">Use my own address</a></div>
+            </div>
+          </div>
+        </div></div>
+      </div></div>
+      <div class="col"><div class="phone">
+        <div class="sb"><span>9:41</span><span>●●●</span></div>
+        <div class="ct" style="display:flex;flex-direction:column;justify-content:center;text-align:center;padding:0 22px">
+          <div class="ic" style="width:56px;height:56px;margin:0 auto 14px;border-radius:16px"><svg class="i xl"><use href="#i-phone"/></svg></div>
+          <h6 style="font-size:19px;margin:0 0 6px;font-weight:600">Connect to your Fleet</h6>
+          <p class="note" style="font-size:12.5px;margin-bottom:18px">On your computer, open Fleet and choose <b style="color:var(--text)">Add your phone</b>. It's in Settings → Machines.</p>
+          <span class="big">Scan the code</span>
+          <span class="big alt">Type the code</span>
+        </div>
+      </div><div class="label-under">First open of the phone app</div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="Scan">
+      <p class="caption">The phone scans the code. The code holds studio's id, name, a one-time secret and its addresses (Tailscale, home network). The phone tries each address, checks studio's id before it sends anything, and keeps the ones that answer.<span class="why">The scan works from wherever the phone can reach studio. Typing the code instead finds studio on the same Wi-Fi, so no address is needed there either.</span></p>
+      <div class="stage">
+        <div class="col"><div class="phone">
+          <div class="sb"><span>9:41</span><span>●●●</span></div>
+          <div class="hd"><h6>Scan the code</h6><small>In Fleet on your computer: Add your phone</small></div>
+          <div class="ct"><div class="cam"><div class="qr" data-qr="11"></div></div>
+          <p class="note" style="text-align:center">Point the camera at the code.</p></div>
+        </div></div>
+        <div class="col"><div class="phone">
+          <div class="sb"><span>9:41</span><span>●●●</span></div>
+          <div class="hd"><h6>Type the code</h6><small>Shown under the QR code on your computer</small></div>
+          <div class="ct">
+            <div style="font-family:var(--mono);font-size:22px;letter-spacing:.12em;text-align:center;border:1px solid var(--accent);border-radius:10px;padding:12px;margin:10px 0">H4KD-92QX</div>
+            <p class="note">Fleet looks for it on this Wi-Fi.</p>
+            <div class="prow"><span class="dot"></span><div class="who"><b>studio</b><small>Found on this Wi-Fi</small></div></div>
+            <span class="big">Continue</span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="Confirm on the phone">
+      <p class="caption">One confirmation, phrased as "your Fleet". It says what the phone will see, including that more machines will arrive by themselves.</p>
+      <div class="stage">
+        <div class="col"><div class="phone">
+          <div class="sb"><span>9:41</span><span>●●●</span></div>
+          <div class="ct" style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:18px">
+            <div class="ic" style="width:48px;height:48px;border-radius:14px;margin-bottom:12px"><svg class="i lg"><use href="#i-monitor"/></svg></div>
+            <h6 style="font-size:19px;margin:0 0 6px;font-weight:600">Connect this phone to studio?</h6>
+            <p class="note" style="font-size:12.5px">You'll see studio's sessions, answer its agents and get its notifications. Machines added to studio later show up here by themselves.</p>
+            <div class="reach" style="margin:6px 0 16px">
+              <div class="ok"><svg class="i sm"><use href="#i-wifi"/></svg>At home</div>
+              <div class="ok"><svg class="i sm"><use href="#i-globe"/></svg>Away, with Tailscale</div>
+            </div>
+            <span class="big">Connect</span><span class="big alt">Cancel</span>
+          </div>
+        </div></div>
+        <div class="scrollx" style="flex:1 1 420px"><div class="win" style="min-width:420px">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+          <div class="body" style="min-height:230px"><div class="page">
+            <h5>Add your phone</h5>
+            <div class="box" style="padding:16px;margin-top:10px">
+              <div style="display:flex;gap:10px;align-items:center"><div class="ic" style="background:color-mix(in srgb,var(--running) 15%,transparent);color:var(--running-text)"><svg class="i"><use href="#i-check"/></svg></div><div><b>Alex's iPhone is connected</b><div class="note">It sees studio. Machines you add later show up on it too.</div></div></div>
+              <div style="margin-top:12px"><span class="btn sm">Done</span></div>
+            </div>
+          </div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="On the phone">
+      <p class="caption">The phone's Machines tab shows each machine with where it's reachable right now. Away from home and without Tailscale, the row says so and says what would fix it.</p>
+      <div class="stage">
+        <div class="col"><div class="phone">
+          <div class="sb"><span>9:41</span><span>●●●</span></div>
+          <div class="hd"><h6>Machines</h6><small>Your Fleet</small></div>
+          <div class="ct">
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Desktop app · 4 sessions</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-wifi"/></svg>Home Wi-Fi</span></div></div>
+            <p class="note" style="margin-top:12px">Add a machine on your computer, in Fleet's Machines page, and it shows up here.</p>
+          </div>
+          <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+        </div><div class="label-under">At home</div></div>
+        <div class="col"><div class="phone">
+          <div class="sb"><span>13:05</span><span>●●●</span></div>
+          <div class="hd"><h6>Machines</h6><small>Your Fleet</small></div>
+          <div class="ct">
+            <div class="prow"><div class="ic grey"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Out of reach since 08:40</small><span class="chip warn" style="margin-top:4px">Home Wi-Fi only</span></div></div>
+            <div class="callout warn" style="font-size:12px">studio answers only on your home Wi-Fi. Install Tailscale on this phone and studio to reach it from anywhere. <a href="#">How</a></div>
+          </div>
+          <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+        </div><div class="label-under">Away, no Tailscale</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+  <div class="journey" data-j="j3">
+    <h2>J3 · Desktop app, then your phone away from home</h2>
+    <p class="sub">At home the phone uses the Wi-Fi. Away from home it needs a way in, and Fleet runs no relay of its own. Tailscale is the recommended way, and Fleet checks each part rather than listing commands. People with their own tunnel or domain get one field, kept out of the way.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="Set it up">
+        <p class="caption">From the phone's "Home Wi-Fi only" row, or studio's row in Machines: <b>Use studio away from home</b>. Three checks, each done by Fleet, each with one button.</p>
+        <div class="stage"><div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+          <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="menu"><b>Work</b><div>Folders</div><div class="on">Machines</div></div>
+          <div class="page">
+            <h5>Use studio away from home</h5>
+            <div class="desc">‹ Machines · studio</div>
+            <p class="note" style="max-width:520px">Tailscale is a private network between your own devices. Your phone reaches studio through it from anywhere. Nothing goes through Weave.</p>
+            <div class="box">
+              <div class="row"><div class="ic" style="background:color-mix(in srgb,var(--running) 15%,transparent);color:var(--running-text)"><svg class="i"><use href="#i-check"/></svg></div><div class="who"><b>Tailscale on studio</b><small>Signed in · studio.tail4f2a.ts.net</small></div></div>
+              <div class="row"><div class="ic grey"><svg class="i"><use href="#i-phone"/></svg></div><div class="who"><b>Tailscale on Alex's iPhone</b><small>The Fleet app on the phone checks this. Get Tailscale from the App Store, sign in with the same account.</small></div><span class="chip warn"><span class="dot warn"></span>waiting</span></div>
+              <div class="row"><div class="ic grey"><svg class="i"><use href="#i-globe"/></svg></div><div class="who"><b>studio listens on Tailscale</b><small>Only your own Tailscale devices can try, and each still needs its key.</small></div><span class="btn sm pri">Turn on</span></div>
+            </div>
+            <p class="note" style="margin-top:12px">Have your own tunnel or domain? <a href="#">Use my own address</a></p>
+          </div></div>
+        </div></div>
+        <div class="col"><div class="phone">
+          <div class="sb"><span>13:05</span><span>●●●</span></div>
+          <div class="hd"><h6>Away from home</h6><small>studio</small></div>
+          <div class="ct">
+            <p class="note" style="font-size:12.5px">studio answers only on your home Wi-Fi. With Tailscale on this phone and on studio, it answers anywhere.</p>
+            <div class="prow"><svg class="i" style="color:var(--running-text)"><use href="#i-check"/></svg><div class="who"><b>studio is on Tailscale</b></div></div>
+            <div class="prow"><span class="dot warn"></span><div class="who"><b>This phone isn't yet</b><small>Install it, sign in, come back.</small></div></div>
+            <span class="big" style="margin-top:12px">Get Tailscale</span>
+          </div>
+        </div></div>
+        </div>
+      </div>
+      <div class="step" data-label="Done">
+        <p class="caption">When the last check passes, both screens say so. The phone keeps both addresses and uses whichever answers: the Wi-Fi at home, Tailscale away.</p>
+        <div class="stage">
+          <div class="scrollx" style="flex-basis:460px"><div class="win" style="min-width:460px">
+            <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+            <div class="body" style="min-height:250px"><div class="page">
+              <h5>Use studio away from home</h5>
+              <div class="box" style="padding:14px;margin-top:12px"><div style="display:flex;gap:10px;align-items:center"><div class="ic" style="background:color-mix(in srgb,var(--running) 15%,transparent);color:var(--running-text)"><svg class="i"><use href="#i-check"/></svg></div><div><b>Alex's iPhone reaches studio from anywhere</b><div class="note">At home over your Wi-Fi, away over Tailscale.</div></div></div></div>
+            </div></div>
+          </div></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>13:09</span><span>●●●</span></div>
+            <div class="hd"><h6>Machines</h6><small>Your Fleet</small></div>
+            <div class="ct"><div class="prow"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Desktop app · 4 sessions</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-globe"/></svg>Tailscale</span></div></div></div>
+            <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="journey" data-j="j4">
+  <h2>J4 · Desktop app, then a machine with no screen</h2>
+  <p class="sub">hangar is a Linux box Alex reaches only over SSH. The terminal does the work and always prints the next step. The desktop app finds hangar on its own while it waits, and both screens show the same code, so Alex can check it's the right machine before adding it.</p>
+  <div class="flow" data-flow="first">
+    <div class="stepbar"></div>
+
+    <div class="step" data-label="Install">
+      <p class="caption">The install line is the same as today. Its last lines now say what to do next, for both kinds of machine.</p>
+      <div class="stage"><div class="term"><div class="bar"><i></i><i></i><i></i>&nbsp; alex@hangar: ~</div>
+<pre><span class="p">alex@hangar:~$</span> curl -fsSL https://fleet.tryweave.io/install.sh | sh
+Downloading Fleet 0.74.0 for linux-x64… <span class="g">done</span>
+<span class="g">✓</span> Installed in ~/.weave/fleet
+
+<span class="b">Next:</span>
+  This machine has no screen, so run Fleet here without a window and
+  add it to the Fleet you work from:
+
+      <span class="b">fleet node up</span>
+
+  <span class="m">(On a machine with a screen, run `fleet` to open Fleet in your browser.)</span>
+
+<span class="p">alex@hangar:~$</span> <span class="sel"> </span></pre></div></div>
+    </div>
+
+    <div class="step" data-label="fleet node up: checks">
+      <p class="caption"><code>fleet node up</code> checks what hangar has before asking anything, then asks one question with the answer it recommends already picked.<span class="why">The harness check is new: today <code>fleet node up</code> doesn't look for one, so a machine with no harness is only found out when a session is started there.</span></p>
+      <div class="stage"><div class="term"><div class="bar"><i></i><i></i><i></i>&nbsp; alex@hangar: ~</div>
+<pre><span class="p">alex@hangar:~$</span> fleet node up
+
+<span class="b">Setting up hangar as a Fleet machine</span> <span class="m">(no window; sessions run here)</span>
+
+  <span class="g">✓</span> Tailscale is on       hangar.tail4f2a.ts.net
+  <span class="g">✓</span> Home network          192.168.1.31
+  <span class="g">✓</span> Claude Code 2.4.1     will run sessions here
+  <span class="m">–</span> OpenCode              not installed <span class="m">(optional: fleet harness add opencode)</span>
+
+<span class="b">How should your other machines and your phone reach hangar?</span>
+  <span class="sel">› Tailscale and home network</span>  <span class="m">recommended · only your devices can try</span>
+    Home network only            <span class="m">anyone on it can try a code</span>
+    Only over SSH                <span class="m">the desktop app reaches it through SSH; phones can't</span>
+
+<span class="m">↑↓ to choose, Enter to confirm</span></pre></div></div>
+    </div>
+
+    <div class="step" data-label="Waiting to be added">
+      <p class="caption">hangar starts in the background, then waits to be added and shows a code. On studio, Add a machine already lists hangar under <b>Found</b>, because hangar announces itself on Tailscale and the home network while it waits. The same code on both screens means it's the right machine.<span class="why">The terminal QR is for the phone-only setup: the phone app can add a machine too, if no desktop app is around.</span></p>
+      <div class="stage">
+        <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; alex@hangar: ~</div>
+<pre><span class="g">✓</span> Listening on Tailscale and your home network, port 6262
+<span class="g">✓</span> Runs in the background and starts with the machine
+<span class="g">✓</span> Its master key stays on hangar
+
+<span class="b">Add hangar to the Fleet you work from</span>
+  In the desktop app: Settings → Machines → Add a machine.
+  hangar is listed under Found. Check the code matches:
+
+      <span class="b" style="font-size:15px;letter-spacing:.1em">7KQ4-M2XD</span>
+
+  Or scan with the Fleet phone app:
+<span class="qrt" data-tqr="7"></span>
+<span class="y">●</span> Waiting to be added… <span class="m">(9:52 · Ctrl-C to stop waiting; hangar keeps running.
+  A new code: fleet node pair)</span></pre></div>
+        <div class="scrollx" style="flex-basis:520px"><div class="win" style="min-width:520px">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — studio</span></div>
+          <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="page" style="opacity:.3"><h5>Machines</h5><div class="box" style="height:300px;margin-top:20px"></div></div>
+          <div class="overlay"><div class="dialog">
+            <h6>Add a machine</h6>
+            <div class="seg"><span class="on">Found</span><span>Over SSH</span><span>On a new server</span></div>
+            <div class="box">
+              <div class="row"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b> <span class="chip acc">waiting to be added</span><small>Linux · Fleet 0.74.0 · Tailscale · code <span class="mono" style="color:var(--text)">7KQ4-M2XD</span></small></div><span class="btn sm pri">Add</span></div>
+              <div class="row"><div class="ic grey"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>nas</b><small>Tailscale · SSH works · no Fleet yet</small></div><span class="btn sm">Set up over SSH</span></div>
+              <div class="row"><div class="ic grey"><svg class="i"><use href="#i-phone"/></svg></div><div class="who"><b>alex-iphone</b><small>Tailscale · not a machine Fleet can use</small></div></div>
+            </div>
+            <p class="note" style="margin:10px 0 0">Not listed? On that machine run <span class="mono">fleet node up</span>, or <a href="#">paste its pairing link</a>.</p>
+          </div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="Check and add">
+      <p class="caption">Clicking Add shows what adding means, with the code in large type to compare. This is today's MachineAddNote, put next to the code.</p>
+      <div class="stage">
+        <div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — studio</span></div>
+          <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="page" style="opacity:.3"><h5>Machines</h5><div class="box" style="height:300px;margin-top:20px"></div></div>
+          <div class="overlay"><div class="dialog">
+            <h6>Add hangar?</h6>
+            <p class="note">Check this code is the one on hangar's screen:</p>
+            <div style="text-align:center;margin:10px 0 14px"><span class="code" style="font-size:24px;padding:6px 16px">7KQ4-M2XD</span></div>
+            <ul class="note" style="padding-left:18px;margin:0 0 6px">
+              <li>Sessions you start on hangar run there, and show in studio's sessions list.</li>
+              <li>studio can run agents, change files and open terminals on hangar.</li>
+              <li>hangar gives studio a key of its own. Forget hangar here to take it back.</li>
+              <li>Alex's iPhone sees hangar too. <a href="#">Change</a></li>
+            </ul>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><span class="btn">Cancel</span><span class="btn pri">Add hangar</span></div>
+          </div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="Added">
+      <p class="caption">Both screens confirm. The terminal says where hangar's sessions appear and that the phone sees it, so the next step is clear without going back to the desktop.</p>
+      <div class="stage">
+        <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; alex@hangar: ~</div>
+<pre><span class="g">✓ Added to studio</span> <span class="m">(Alex's desktop app)</span>
+
+  hangar's sessions show in studio's sessions list.
+  Phones connected to studio see hangar too.
+
+  <span class="m">Status:       fleet node status
+  Add it elsewhere:  fleet node pair
+  Stop it:      fleet node uninstall-service</span>
+
+<span class="p">alex@hangar:~$</span> <span class="sel"> </span></pre></div>
+        <div class="scrollx" style="flex-basis:520px"><div class="win" style="min-width:520px">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+          <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="page">
+            <h5>Machines</h5>
+            <div class="grp">Your machines <span class="r"><span class="btn sm"><svg class="i sm"><use href="#i-plus"/></svg>Add a machine</span></span></div>
+            <div class="box">
+              <div class="row"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b> <span class="chip acc">this machine</span><small>Desktop app · macOS · 4 sessions</small></div><span class="chip"><span class="dot"></span>live</span></div>
+              <div class="row" style="background:color-mix(in srgb,var(--running) 6%,transparent)"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b> <span class="chip ok">added just now</span><small>No window · Linux · Claude Code · over Tailscale</small></div><span class="btn sm">New session here</span></div>
+            </div>
+          </div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols" style="margin-top:22px">
+    <div class="card"><h4>Can't get a terminal on it, or don't want to?</h4><p><b>Over SSH</b> (today's "Set it up from here") stays as the second way in: pick hangar from the Tailscale or SSH list and studio installs and starts Fleet with your own SSH keys. The only change is the name, so the terminal's "Only over SSH" and the dialog use the same words.</p></div>
+    <div class="card"><h4>Phone only, no desktop app</h4><p>The phone app gets an <b>Add a machine</b> button that scans the terminal's QR code. The phone is then the place that holds hangar's key. It's rare, but it means setup C works for someone with just a phone and a server.</p></div>
+  </div>
+</div>
+  <div class="journey" data-j="j5">
+  <h2>J5 · Desktop app, then another machine, and what the phone does</h2>
+  <p class="sub">For a second machine, Alex is already at the desktop app. So the desktop hands out the code this time: <b>On a new server</b> gives one line to paste over SSH. The line installs Fleet, starts it, and adds it to studio, with no code to check, because the code came from studio. The phone hears about atlas from studio and adds it by itself.</p>
+  <div class="flow" data-flow="more">
+    <div class="stepbar"></div>
+
+    <div class="step" data-label="One line from the desktop">
+      <p class="caption">Add a machine → On a new server. The line carries a one-time join code for studio and studio's addresses, much like the phone's code. It works for 30 minutes and only once.</p>
+      <div class="stage">
+        <div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — studio</span></div>
+          <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="page" style="opacity:.3"><h5>Machines</h5><div class="box" style="height:300px;margin-top:20px"></div></div>
+          <div class="overlay"><div class="dialog">
+            <h6>Add a machine</h6>
+            <div class="seg"><span>Found</span><span>Over SSH</span><span class="on">On a new server</span></div>
+            <p class="note" style="margin:0 0 8px">Paste this on the new machine, in a terminal or a cloud server's start-up script. It installs Fleet, keeps it running, and adds it here.</p>
+            <div class="cmd">curl -fsSL https://fleet.tryweave.io/install.sh | sh -s -- --join 'studio.tail4f2a.ts.net#J8RT-4WXN'<svg class="i"><use href="#i-copy"/></svg></div>
+            <div class="reach" style="margin-top:10px">
+              <div class="ok"><svg class="i sm"><use href="#i-check"/></svg>Works on a machine on your Tailscale or home network</div>
+              <div class="warn"><svg class="i sm"><use href="#i-alert"/></svg>Works once, for 30 minutes. Anyone who has the line can add a machine to studio, so treat it like a password.</div>
+            </div>
+            <div class="note" style="display:flex;align-items:center;gap:6px;margin-top:12px"><span class="dot warn"></span>Waiting for a machine to join…</div>
+          </div></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="atlas joins">
+      <p class="caption">On atlas, the line runs <code>install.sh</code>, then <code>fleet node up --join</code>. It uses the same checks as on hangar, but asks no question: Tailscale is on, so it picks Tailscale. The desktop app shows atlas arriving, step by step.</p>
+      <div class="stage">
+        <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; root@atlas: ~</div>
+<pre><span class="p">root@atlas:~#</span> curl -fsSL https://fleet.tryweave.io/install.sh | sh -s -- --join 'studio.tail4f2a.ts.net#J8RT-4WXN'
+<span class="g">✓</span> Installed Fleet 0.74.0
+<span class="g">✓</span> Tailscale is on        atlas.tail4f2a.ts.net
+<span class="g">✓</span> Claude Code 2.4.1
+<span class="g">✓</span> Listening on Tailscale, port 6262
+<span class="g">✓</span> Runs in the background and starts with the machine
+<span class="g">✓ Added to studio</span>
+  atlas's sessions show in studio's sessions list.
+
+<span class="p">root@atlas:~#</span> <span class="sel"> </span></pre></div>
+        <div class="scrollx" style="flex-basis:520px"><div class="win" style="min-width:520px">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+          <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="page">
+            <h5>Machines</h5>
+            <div class="grp">Your machines</div>
+            <div class="box">
+              <div class="row"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b> <span class="chip acc">this machine</span><small>Desktop app · macOS</small></div><span class="chip"><span class="dot"></span>live</span></div>
+              <div class="row"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>No window · Linux · over Tailscale</small></div><span class="chip"><span class="dot"></span>reachable</span></div>
+              <div class="row" style="background:color-mix(in srgb,var(--running) 6%,transparent)"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b> <span class="chip ok">joined just now</span><small>No window · Linux · Claude Code · over Tailscale</small></div><span class="btn sm">New session here</span></div>
+            </div>
+          </div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="The phone hears about it">
+      <p class="caption">studio tells every connected phone that it has a new machine, along with a key the phone can use for it. The phone adds atlas on its own and checks which of atlas's addresses it can reach.<span class="why">The phone web app already gets device grants like this from its home machine. The native app needs the same thing, plus a push when a machine joins.</span></p>
+      <div class="stage">
+        <div class="col"><div class="phone">
+          <div class="sb"><span>10:12</span><span>●●●</span></div>
+          <div class="toast"><svg class="i"><use href="#i-bell"/></svg><div><b>atlas joined your Fleet</b><div class="note">Added on studio · Linux · Claude Code</div></div></div>
+          <div class="hd" style="margin-top:4px;opacity:.5"><h6>Sessions</h6></div>
+          <div class="ct" style="opacity:.5"><div class="srow">Fix flaky upload retry<small>studio · working</small></div><div class="srow">Nightly dependency bump<small>hangar · done 2h</small></div></div>
+          <div class="tb"><div class="on"><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+        </div><div class="label-under">A notification, nothing to do</div></div>
+        <div class="col"><div class="phone">
+          <div class="sb"><span>10:12</span><span>●●●</span></div>
+          <div class="hd"><h6>Machines</h6><small>Your Fleet · 3 machines</small></div>
+          <div class="ct">
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Desktop app · 4 sessions</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-globe"/></svg>Tailscale</span></div></div>
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>Linux · 1 session</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-globe"/></svg>Tailscale</span></div></div>
+            <div class="prow" style="border-color:color-mix(in srgb,var(--running) 40%,transparent)"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b> <span class="chip ok">new</span><small>Linux · no sessions yet</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-globe"/></svg>Tailscale</span></div></div>
+          </div>
+          <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+        </div><div class="label-under">With Tailscale on the phone</div></div>
+      </div>
+    </div>
+
+    <div class="step" data-label="When the phone can't reach one">
+      <p class="caption">atlas is a cloud server, so it's only on Tailscale. A phone without Tailscale can't reach it. Two ways to handle that; this is decision 6.</p>
+      <div class="stage">
+        <div class="col"><div class="phone">
+          <div class="sb"><span>10:12</span><span>●●●</span></div>
+          <div class="hd"><h6>Machines</h6><small>Your Fleet · 3 machines</small></div>
+          <div class="ct">
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Desktop app</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-wifi"/></svg>Home Wi-Fi</span></div></div>
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>Linux</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-wifi"/></svg>Home Wi-Fi</span></div></div>
+            <div class="prow"><div class="ic grey"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b><small>Only on Tailscale</small><span class="chip warn" style="margin-top:4px">Out of reach from this phone</span></div></div>
+            <div class="callout warn" style="font-size:12px">Install Tailscale on this phone to reach atlas. <a href="#">How</a></div>
+          </div>
+          <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+        </div><div class="label-under"><b>A</b> · Say so, and how to fix it</div></div>
+        <div class="col"><div class="phone">
+          <div class="sb"><span>10:12</span><span>●●●</span></div>
+          <div class="hd"><h6>Machines</h6><small>Your Fleet · 3 machines</small></div>
+          <div class="ct">
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Desktop app</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-wifi"/></svg>Home Wi-Fi</span></div></div>
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>Linux</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-wifi"/></svg>Home Wi-Fi</span></div></div>
+            <div class="prow"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b><small>Linux</small><span class="chip acc" style="margin-top:4px">Through studio</span></div></div>
+            <p class="note">studio passes atlas's traffic on while studio is awake. When studio sleeps, atlas is out of reach too.</p>
+          </div>
+          <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+        </div><div class="label-under"><b>B</b> · studio relays it (Later list)</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ═════════ B NODE FIRST ═════════ -->
+<section class="tab" id="node">
+  <div class="jpick" data-group="node">
+    <button data-j="j6"><b>J6</b>Server + phone, no desktop app</button>
+    <button data-j="j7"><b>J7</b>…then the desktop app elsewhere</button>
+    <button data-j="j8"><b>J8</b>…then the desktop app on the same computer</button>
+    <button data-j="j9"><b>J9</b>Two servers, phone only</button>
+    <button data-j="j10"><b>J10</b>Two servers + desktop app + phone</button>
+  </div>
+
+  <div class="journey" data-j="j6">
+    <h2>J6 · A server, used only from your phone</h2>
+    <p class="from">From scratch: SSH into hangar, nothing else installed anywhere except the phone app.</p>
+    <p class="sub">The install and <code>fleet node up</code> are the same as J4 (checks, then one question about reach). The difference is the end: with no desktop app around, the terminal's QR code is the way in. The phone connects to hangar directly, and hangar becomes the first machine in a Fleet of one.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="Scan the terminal">
+        <p class="caption">After the reach question, <code>fleet node up</code> shows one code for both kinds of screen: scan it with the phone app, or find hangar under Found in a desktop app.<span class="why">Needs: a machine with no screen makes phone codes. Today that's refused with 409.</span></p>
+        <div class="stage">
+          <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; alex@hangar: ~</div>
+<pre><span class="g">✓</span> Listening on Tailscale and your home network, port 6262
+<span class="g">✓</span> Runs in the background and starts with the machine
+
+<span class="b">Connect a phone or a desktop app to hangar</span>
+  Phone: open the Fleet app and scan this code.
+<span class="qrt" data-tqr="5"></span>
+  Desktop app: Settings → Machines → Add a machine.
+  hangar is listed under Found, with the code <span class="b">H4KD-92QX</span>
+
+<span class="y">●</span> Waiting… <span class="m">(9:58 · Ctrl-C to stop; hangar keeps running.
+  A new code: fleet node pair)</span></pre></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>9:41</span><span>●●●</span></div>
+            <div class="hd"><h6>Scan the code</h6><small>From Fleet on a computer or a terminal</small></div>
+            <div class="ct"><div class="cam" style="background:#0b0c0f"><div class="qr" data-qr="5"></div></div><p class="note" style="text-align:center">Point the camera at the code.</p></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="step" data-label="Connected">
+        <p class="caption">The phone confirms what it's connecting to, and says plainly that hangar has no screen, so the phone is where the work happens. The terminal confirms too and prints what to do next.</p>
+        <div class="stage">
+          <div class="col"><div class="phone">
+            <div class="sb"><span>9:41</span><span>●●●</span></div>
+            <div class="ct" style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:18px">
+              <div class="ic" style="width:48px;height:48px;border-radius:14px;margin-bottom:12px"><svg class="i lg"><use href="#i-server"/></svg></div>
+              <h6 style="font-size:19px;margin:0 0 6px;font-weight:600">Connect this phone to hangar?</h6>
+              <p class="note" style="font-size:12.5px">hangar has no screen. You'll start its sessions, answer its agents and get its notifications here. Machines added later show up by themselves.</p>
+              <div class="reach" style="margin:6px 0 16px"><div class="ok"><svg class="i sm"><use href="#i-wifi"/></svg>At home</div><div class="ok"><svg class="i sm"><use href="#i-globe"/></svg>Away, with Tailscale</div></div>
+              <span class="big">Connect</span><span class="big alt">Cancel</span>
+            </div>
+          </div></div>
+          <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; alex@hangar: ~</div>
+<pre><span class="g">✓ Alex's iPhone is connected to hangar</span>
+
+  Start sessions from the phone; they run here.
+  Harnesses here: Claude Code 2.4.1
+
+  <span class="m">Connect another phone or a desktop app: fleet node pair
+  Status:                                 fleet node status</span>
+
+<span class="p">alex@hangar:~$</span> <span class="sel"> </span></pre></div>
+        </div>
+      </div>
+      <div class="step" data-label="First session">
+        <p class="caption">On the phone, New session already knows the only machine there is, and lists hangar's folders. Nothing on the phone mentions machines until there's a second one.</p>
+        <div class="stage">
+          <div class="col"><div class="phone">
+            <div class="sb"><span>9:43</span><span>●●●</span></div>
+            <div class="hd" style="opacity:.4"><h6>Sessions</h6></div>
+            <div class="dim"></div>
+            <div class="sheet"><div class="grab"></div>
+              <b style="font-size:15px">New session</b>
+              <div class="note" style="margin:8px 0 2px">Folder on hangar</div>
+              <div class="field on">~/src/billing-api</div>
+              <div class="field">~/src/web-shop</div>
+              <div class="field" style="color:var(--accent-text)">+ Clone a repository…</div>
+              <div class="field" style="height:56px">Find why invoices round to the wrong cent…</div>
+              <span class="big" style="margin-top:8px">Start</span>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="journey" data-j="j7">
+    <h2>J7 · A server first, then the desktop app on another computer</h2>
+    <p class="from">From scratch: hangar from J6 (with or without the phone), then Alex installs the desktop app on studio.</p>
+    <p class="sub">The desktop app's first run looks for Fleet on Tailscale and the home network before anything else. If your Fleet is already out there, joining it is the first choice, not something found later in Settings. studio then joins your Fleet as a machine too, so its own sessions and hangar's sit in one list.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="First run finds your Fleet">
+        <p class="caption">The welcome's first screen. "Start fresh" is still one click away for someone who wants a separate Fleet.</p>
+        <div class="stage"><div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+          <div class="body"><div class="page" style="display:grid;place-items:center">
+            <div class="box" style="width:460px;padding:22px 24px">
+              <h5>Welcome to Weave Fleet</h5>
+              <p class="desc">Found Fleet on your network.</p>
+              <div class="choice on"><span class="rad"></span><div><b>Join your Fleet</b><small>hangar · Linux · Claude Code · Alex's iPhone is connected</small><small style="margin-top:4px">studio joins as a machine: you see hangar's sessions here, and studio can run its own.</small></div></div>
+              <div class="choice"><span class="rad"></span><div><b>Start fresh on this computer</b><small>A Fleet of its own. You can add hangar later.</small></div></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:16px"><span class="btn pri">Continue</span></div>
+            </div>
+          </div></div>
+        </div></div></div>
+      </div>
+      <div class="step" data-label="Approve">
+        <p class="caption">Joining needs a yes from a screen already in your Fleet, or from hangar's terminal. Both show the same code. With a phone connected, nobody has to open a terminal.</p>
+        <div class="stage">
+          <div class="scrollx" style="flex-basis:480px"><div class="win" style="min-width:480px">
+            <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+            <div class="body"><div class="page" style="display:grid;place-items:center">
+              <div class="box" style="width:400px;padding:20px 22px">
+                <h5>Waiting for a yes</h5>
+                <p class="desc">Approve studio on Alex's iPhone, or on hangar run <span class="mono">fleet node pair</span>. Check the code matches:</p>
+                <div style="text-align:center;margin:14px 0"><span class="code" style="font-size:22px;padding:6px 14px">5R2M-QK8T</span></div>
+                <div class="note" style="display:flex;align-items:center;gap:6px"><span class="dot warn"></span>Asked Alex's iPhone just now</div>
+              </div>
+            </div></div>
+          </div></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>18:20</span><span>●●●</span></div>
+            <div class="hd" style="opacity:.4"><h6>Sessions</h6></div>
+            <div class="dim"></div>
+            <div class="sheet"><div class="grab"></div>
+              <div class="ic" style="width:40px;height:40px;border-radius:12px;margin-bottom:10px"><svg class="i lg"><use href="#i-monitor"/></svg></div>
+              <b style="font-size:15px">studio wants to join your Fleet</b>
+              <p class="note" style="margin:6px 0 10px">A desktop app on macOS. It will see your machines' sessions and can run agents on them.</p>
+              <div style="text-align:center;margin-bottom:12px"><span class="code">5R2M-QK8T</span></div>
+              <span class="big">Allow</span><span class="big alt">Deny</span>
+            </div>
+          </div></div>
+        </div>
+      </div>
+      <div class="step" data-label="Where sessions run">
+        <p class="caption">The harness step comes next, and it knows about hangar: if studio has no harness, "run on hangar" is already the answer.</p>
+        <div class="stage"><div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+          <div class="body"><div class="page" style="display:grid;place-items:center">
+            <div class="box" style="width:460px;padding:22px 24px">
+              <h5>Where should new sessions run?</h5>
+              <p class="desc">You can pick per session too.</p>
+              <div class="choice on"><span class="rad"></span><div><b>hangar</b> <span class="chip">has Claude Code</span><small>Sessions run on the server; studio can sleep.</small></div></div>
+              <div class="choice"><span class="rad"></span><div><b>studio, this computer</b> <span class="chip warn">no harness yet</span><small>Install a harness here next.</small></div></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:16px"><span class="btn pri">Start using Fleet</span></div>
+            </div>
+          </div></div>
+        </div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="journey" data-j="j8">
+    <h2>J8 · A server first, then the desktop app on the same computer</h2>
+    <p class="from">From scratch: workbench (a Linux desktop) runs <code>fleet node</code> as a service. Later Alex installs the desktop app on workbench.</p>
+    <p class="sub">One computer should be one machine, not two Fleets fighting over <code>~/.weave</code>. The app sees the Fleet that's already running and uses it. It can do that safely because it's the same user on the same computer, so it can read the machine's key file.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="Use the one that's running">
+        <p class="caption">Shown instead of the welcome. Its sessions, harnesses and settings are the ones you already have.<span class="why">Today (from the code, not tried): the app finds the node's <code>fleet.instance.json</code> in the shared <code>~/.weave</code> and opens its loopback address. But a node serves no web app and asks for a key, so the window probably shows the node page or nothing. Worth a check of its own.</span></p>
+        <div class="stage"><div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+          <div class="body"><div class="page" style="display:grid;place-items:center">
+            <div class="box" style="width:470px;padding:22px 24px">
+              <div class="ic"><svg class="i"><use href="#i-server"/></svg></div>
+              <h5 style="margin-top:10px">Fleet already runs on this computer</h5>
+              <p class="desc">workbench runs Fleet in the background (started with <span class="mono">fleet node</span>, 12 Nov). The desktop app will use it: same sessions, harnesses and machines, and it keeps running when you close the window.</p>
+              <div class="box" style="padding:10px 12px;background:var(--main-bg)"><div class="note">workbench · Fleet 0.74.0 · 2 machines in your Fleet · Alex's iPhone connected</div></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px"><a href="#" class="note">Run a separate Fleet for the app</a><span class="btn pri">Use it</span></div>
+            </div>
+          </div></div>
+        </div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="journey" data-j="j9">
+    <h2>J9 · Two servers, only your phone</h2>
+    <p class="from">From scratch: hangar and the phone from J6. Then Alex sets up atlas, a cloud server, with no desktop app anywhere.</p>
+    <p class="sub">atlas's <code>fleet node up</code> finds your Fleet on Tailscale and waits to be added. The phone, already connected to hangar, gets the request. Add it there, and hangar and atlas know each other, so the phone (or a desktop app later) sees both.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="atlas waits, the phone asks">
+        <p class="caption">The same code is on atlas's terminal and in the phone's sheet. Away from Tailscale or the home network, atlas can't be found, so the phone's <b>Add a machine</b> scans atlas's terminal QR instead.</p>
+        <div class="stage">
+          <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; root@atlas: ~</div>
+<pre><span class="p">root@atlas:~#</span> fleet node up --tailscale
+<span class="g">✓</span> Tailscale is on        atlas.tail4f2a.ts.net
+<span class="g">✓</span> Claude Code 2.4.1
+<span class="g">✓</span> Listening on Tailscale, port 6262
+<span class="g">✓</span> Runs in the background and starts with the machine
+
+<span class="b">Found your Fleet on Tailscale:</span> hangar <span class="m">(Alex's iPhone)</span>
+  Add atlas from a phone or desktop app connected to it.
+  Check the code matches:  <span class="b">7KQ4-M2XD</span>
+
+<span class="y">●</span> Waiting to be added…</pre></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>11:02</span><span>●●●</span></div>
+            <div class="hd" style="opacity:.4"><h6>Sessions</h6></div>
+            <div class="dim"></div>
+            <div class="sheet"><div class="grab"></div>
+              <div class="ic" style="width:40px;height:40px;border-radius:12px;margin-bottom:10px"><svg class="i lg"><use href="#i-cloud"/></svg></div>
+              <b style="font-size:15px">atlas is waiting to join your Fleet</b>
+              <p class="note" style="margin:6px 0 10px">Linux · Claude Code · found on Tailscale. Your Fleet can run agents, change files and open terminals on it.</p>
+              <div style="text-align:center;margin-bottom:12px"><span class="code">7KQ4-M2XD</span></div>
+              <span class="big">Add atlas</span><span class="big alt">Not mine</span>
+            </div>
+          </div></div>
+        </div>
+      </div>
+      <div class="step" data-label="Both machines">
+        <p class="caption">atlas is in your Fleet. hangar and atlas each keep the list, so the phone keeps working with atlas while hangar is off, and a desktop app joining later sees both.</p>
+        <div class="stage">
+          <div class="term" style="flex-basis:430px"><div class="bar"><i></i><i></i><i></i>&nbsp; root@atlas: ~</div>
+<pre><span class="g">✓ Added to your Fleet by Alex's iPhone</span>
+  Your Fleet: hangar, atlas
+  Start sessions on atlas from the phone or any desktop app.
+
+<span class="p">root@atlas:~#</span> <span class="sel"> </span></pre></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>11:03</span><span>●●●</span></div>
+            <div class="hd"><h6>Machines</h6><small>Your Fleet · 2 machines</small></div>
+            <div class="ct">
+              <div class="prow"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>Linux · 2 sessions</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-globe"/></svg>Tailscale</span></div></div>
+              <div class="prow" style="border-color:color-mix(in srgb,var(--running) 40%,transparent)"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b> <span class="chip ok">new</span><small>Linux · no sessions yet</small><span class="chip ok" style="margin-top:4px"><svg class="i sm"><use href="#i-globe"/></svg>Tailscale</span></div></div>
+              <div class="prow" style="border-style:dashed;justify-content:center;color:var(--accent-text)"><svg class="i sm"><use href="#i-plus"/></svg>Add a machine</div>
+            </div>
+            <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="journey" data-j="j10">
+    <h2>J10 · Two servers, the desktop app and the phone</h2>
+    <p class="from">From scratch, in any order: J4 + J5 (desktop first), or J9 then J7 (servers and phone first, desktop last).</p>
+    <p class="sub">Whatever the order, it ends the same way: three machines, one list, and every screen sees all of them. The only step that differs is the desktop app's first run, which finds the whole Fleet, not one machine.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="Desktop app last">
+        <p class="caption">First run on studio after J9. One join, one approval on the phone, and both servers are there.</p>
+        <div class="stage"><div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet</span></div>
+          <div class="body"><div class="page" style="display:grid;place-items:center">
+            <div class="box" style="width:460px;padding:22px 24px">
+              <h5>Welcome to Weave Fleet</h5>
+              <p class="desc">Found Fleet on your network.</p>
+              <div class="choice on"><span class="rad"></span><div><b>Join your Fleet</b><small>2 machines: hangar, atlas · Alex's iPhone is connected</small></div></div>
+              <div class="choice"><span class="rad"></span><div><b>Start fresh on this computer</b></div></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:16px"><span class="btn pri">Continue</span></div>
+            </div>
+          </div></div>
+        </div></div></div>
+      </div>
+      <div class="step" data-label="The result, any order">
+        <p class="caption">Machines on studio and on the phone after any of the orders.</p>
+        <div class="stage">
+          <div class="scrollx" style="flex-basis:520px"><div class="win" style="min-width:520px">
+            <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+            <div class="body" style="min-height:300px"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div><div class="page">
+              <h5>Machines</h5>
+              <div class="grp">Your machines · 3</div>
+              <div class="box">
+                <div class="row"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b> <span class="chip acc">this machine</span><small>Desktop app · macOS</small></div><span class="chip"><span class="dot"></span>live</span></div>
+                <div class="row"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>No window · Linux · Tailscale</small></div><span class="chip"><span class="dot"></span>reachable</span></div>
+                <div class="row"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b><small>No window · Linux · Tailscale</small></div><span class="chip"><span class="dot"></span>reachable</span></div>
+              </div>
+              <div class="grp">Phones and browsers · 1</div>
+              <div class="box"><div class="row"><div class="ic grey"><svg class="i"><use href="#i-phone"/></svg></div><div class="who"><b>Alex's iPhone</b><small>Sees all 3 machines</small></div></div></div>
+            </div></div>
+          </div></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>18:30</span><span>●●●</span></div>
+            <div class="hd"><h6>Machines</h6><small>Your Fleet · 3 machines</small></div>
+            <div class="ct">
+              <div class="prow"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b><small>Desktop app</small></div></div>
+              <div class="prow"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>Linux</small></div></div>
+              <div class="prow"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b><small>Linux</small></div></div>
+            </div>
+            <div class="tb"><div><svg class="i"><use href="#i-msg"/></svg>Sessions</div><div><svg class="i"><use href="#i-bolt"/></svg>Automations</div><div><svg class="i"><use href="#i-flow"/></svg>Workflows</div><div class="on"><svg class="i"><use href="#i-server"/></svg>Machines</div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ C PHONE FIRST ═════════ -->
+<section class="tab" id="phonefirst">
+  <div class="journey on" data-j="j11">
+    <h2>J11 · The phone app first, with nothing to connect to</h2>
+    <p class="from">From scratch: someone finds Fleet in the App Store before anything else.</p>
+    <p class="sub">The phone can't run Fleet, so its job is to send the person to the right install and wait. The website's download page asks the same question, so both places agree.</p>
+    <div class="flow">
+      <div class="stepbar"></div>
+      <div class="step" data-label="On the phone">
+        <p class="caption">"I don't have Fleet yet" sits under the scan button. It explains where Fleet runs and sends the link to the computer, since the phone isn't where you install it.</p>
+        <div class="stage">
+          <div class="col"><div class="phone">
+            <div class="sb"><span>9:41</span><span>●●●</span></div>
+            <div class="ct" style="display:flex;flex-direction:column;justify-content:center;text-align:center;padding:0 22px">
+              <div class="ic" style="width:56px;height:56px;margin:0 auto 14px;border-radius:16px"><svg class="i xl"><use href="#i-phone"/></svg></div>
+              <h6 style="font-size:19px;margin:0 0 6px;font-weight:600">Connect to your Fleet</h6>
+              <p class="note" style="font-size:12.5px;margin-bottom:18px">Fleet runs on a computer or a server, and shows a code to scan.</p>
+              <span class="big">Scan the code</span>
+              <span class="big alt">Type the code</span>
+              <a href="#" class="note" style="margin-top:14px;color:var(--accent-text)">I don't have Fleet yet</a>
+            </div>
+          </div></div>
+          <div class="col"><div class="phone">
+            <div class="sb"><span>9:41</span><span>●●●</span></div>
+            <div class="hd"><h6>Where will Fleet run?</h6><small>Your agents run there. This phone looks at it.</small></div>
+            <div class="ct">
+              <div class="prow" style="align-items:flex-start"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>On my computer</b><small>Mac, Windows or Linux. Get the desktop app.</small><span class="btn sm" style="margin-top:6px">Send me the link</span></div></div>
+              <div class="prow" style="align-items:flex-start"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>On a server</b><small>A machine you reach by terminal. One line installs it.</small><span class="btn sm" style="margin-top:6px">Copy the line</span></div></div>
+              <p class="note" style="margin-top:10px">When it's running it shows a code. Come back here and scan it.</p>
+            </div>
+          </div></div>
+        </div>
+      </div>
+      <div class="step" data-label="The download page">
+        <p class="caption">fleet.tryweave.io/download asks the same question. Each answer leads to one path: J1, J4/J6, or "you need one of the other two first".</p>
+        <div class="stage"><div class="scrollx"><div class="win browser">
+          <div class="bar"><i></i><i></i><i></i><span class="url">fleet.tryweave.io/download</span></div>
+          <div class="body" style="min-height:330px"><div class="page" style="padding:26px 30px">
+            <h5 style="font-size:24px">Where will Fleet run?</h5>
+            <div class="desc">Your agents run on a machine. Your phone and browser look at it.</div>
+            <div class="dl">
+              <div class="box"><svg class="i lg" style="color:var(--accent-text)"><use href="#i-monitor"/></svg><b>This computer</b><div class="note">The desktop app. Fleet runs here with a window.</div><span class="btn sm pri" style="margin-top:10px">Download for macOS</span></div>
+              <div class="box"><svg class="i lg" style="color:var(--accent-text)"><use href="#i-server"/></svg><b>A server or another machine</b><div class="note">No screen needed. Run this, then <span class="mono">fleet node up</span>:</div><div class="cmd" style="margin-top:8px">curl -fsSL https://fleet.tryweave.io/install.sh | sh</div></div>
+              <div class="box"><svg class="i lg" style="color:var(--accent-text)"><use href="#i-phone"/></svg><b>My phone</b><div class="note">The phone app looks at a Fleet on a computer or server, so set one of those up too.</div><span class="btn sm" style="margin-top:10px">App Store</span> <span class="btn sm" style="margin-top:10px">Google Play</span></div>
+            </div>
+          </div></div>
+        </div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ LATER ═════════ -->
+<section class="tab" id="later">
+  <div class="jpick" data-group="later">
+    <button data-j="j12"><b>J12</b>Another phone or browser</button>
+    <button data-j="j13"><b>J13</b>A new laptop</button>
+    <button data-j="j14"><b>J14</b>A lost phone</button>
+    <button data-j="j15"><b>J15</b>A machine gone</button>
+  </div>
+  <div class="journey" data-j="j12">
+    <h2>J12 · A second phone, a tablet, or a browser on another computer</h2>
+    <p class="sub">Exactly like the first phone (J2 or J6), from <b>any</b> machine in your Fleet: the desktop app's Add your phone, or <code>fleet node pair</code> in a terminal. A browser on another computer opens any machine's address and shows "Connect this browser" with a code to type, which a connected screen approves. Like the phone, it gets keys for every machine.</p>
+  </div>
+  <div class="journey" data-j="j13">
+    <h2>J13 · A new laptop, or the desktop app reinstalled</h2>
+    <p class="sub">The same as J7: first run finds your Fleet, and the phone approves. The old laptop shows as out of reach on the Machines page with a <b>Forget</b> button. Today each machine has to be added again by pasting its link.</p>
+  </div>
+  <div class="journey" data-j="j14">
+    <h2>J14 · A lost phone</h2>
+    <p class="sub">Remove it on any screen. Every machine forgets its key, including machines that are off right now: they hear about it as soon as they're back. Today the native phone app has a separate key on each machine, so it's one removal per machine.</p>
+    <div class="flow"><div class="stepbar"></div>
+      <div class="step" data-label="Remove">
+        <p class="caption">The shared confirm dialog, naming everything the phone loses.</p>
+        <div class="stage"><div class="scrollx"><div class="win">
+          <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+          <div class="body" style="min-height:330px"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg></div>
+          <div class="page" style="opacity:.3"><h5>Machines</h5><div class="box" style="height:240px;margin-top:20px"></div></div>
+          <div class="overlay"><div class="dialog">
+            <h6>Remove Alex's iPhone?</h6>
+            <p class="note">It's signed out of studio, hangar and atlas. atlas is off right now and will forget it when it's back. To use Fleet on that phone again, connect it again.</p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><span class="btn">Cancel</span><span class="btn" style="background:var(--error);border-color:var(--error);color:#fff">Remove phone</span></div>
+          </div></div></div>
+        </div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="journey" data-j="j15">
+    <h2>J15 · A machine gone for good</h2>
+    <p class="sub"><b>Forget</b> it on any screen: every machine and screen in your Fleet stops listing it and throws away its key. Its sessions' history stays readable where it was copied, and is marked as from a machine that's gone. If it comes back by surprise, it's a new machine and has to be added again.</p>
+  </div>
+</section>
+
+<!-- ═════════ REACH ═════════ -->
+<section class="tab" id="reach">
+  <h2>Where the phone works</h2>
+  <p class="sub">This answers "what's the phone URL, and why do I choose it?". Today the QR code carries one address, so Fleet asks which one. In the new setup the code carries every address the machine has, the phone tries each one (checking the machine's id before it sends a key), and the only question left is how far the machine should be reachable.</p>
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th>The machine is reachable on</th><th>Phone on your home Wi-Fi</th><th>Phone away, with Tailscale</th><th>Phone away, no Tailscale</th></tr></thead>
+    <tbody>
+      <tr><td>This computer only <span class="why">(desktop app's default)</span></td><td><span class="tag bad">no</span> <span class="why">Add your phone asks to change this</span></td><td><span class="tag bad">no</span></td><td><span class="tag bad">no</span></td></tr>
+      <tr><td>Home network</td><td><span class="tag ok">yes</span></td><td><span class="tag bad">no</span></td><td><span class="tag bad">no</span> <span class="why">"Home Wi-Fi only"</span></td></tr>
+      <tr><td>Tailscale and home network <span class="tag ok">recommended</span></td><td><span class="tag ok">yes</span></td><td><span class="tag ok">yes</span></td><td><span class="tag bad">no</span> <span class="why">"Install Tailscale on this phone"</span></td></tr>
+      <tr><td>Your own address <span class="why">(a tunnel or domain, https)</span></td><td><span class="tag ok">yes</span></td><td><span class="tag ok">yes</span></td><td><span class="tag ok">yes</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="cols">
+    <div class="card"><h4>The phone app vs the phone web app</h4><p>The phone app may use plain http on Tailscale and home-network addresses once the machine's id checks out. The phone web app (Fleet in the phone's browser) needs https to install and to show notifications. That's why today's checklist asks for https and <code>tailscale serve</code>. With the phone app as the main path, https is only needed for "your own address".</p></div>
+    <div class="card"><h4>Several machines, one phone</h4><p>Each machine has its own row on the phone, with where it's reachable right now. A server only on Tailscale reads "Out of reach from this phone" when the phone has no Tailscale, and says why. Relaying through another machine is on the Later list (see Decisions).</p></div>
+  </div>
+</section>
+
+<!-- ═════════ PAGE ═════════ -->
+<section class="tab" id="page">
+  <h2>The Machines page, after</h2>
+  <p class="sub">One list of machines, and under it one list of the phones and browsers that look at them. Each machine says what it is (desktop app or no window) and how it's reached. "Let other devices reach This machine" goes away: reach is a line on each machine, and phones have their own group.</p>
+  <div class="toggle" role="group" aria-label="Before or after"><button aria-pressed="false" data-ba="before">Today</button><button aria-pressed="true" data-ba="after">Proposed</button></div>
+  <div data-ba-pane="before" hidden>
+    <img class="shot" src="today-add-machine.png" alt="Today's Settings → Machines, with Add a machine open on Paste a pairing link">
+    <p class="why" style="margin-top:8px">Today, in mock mode: "Add a machine" twice, two tabs, an example link with port 2113, and "Let other devices reach This machine" as a separate group.</p>
+  </div>
+  <div data-ba-pane="after">
+    <div class="stage"><div class="scrollx"><div class="win" style="min-width:760px">
+      <div class="bar"><i></i><i></i><i></i><span>Weave Fleet — Settings</span></div>
+      <div class="body"><div class="rail"><svg class="i"><use href="#i-msg"/></svg><svg class="i"><use href="#i-bolt"/></svg><svg class="i"><use href="#i-flow"/></svg><span style="flex:1"></span><span class="on"><svg class="i"><use href="#i-gear"/></svg></span></div>
+      <div class="menu"><b>You</b><div>General</div><div>Appearance</div><b>Agents</b><div>Harnesses</div><b>Work</b><div>Folders</div><div class="on">Machines</div><b>Fleet</b><div>Labs</div><div>Updates &amp; about</div></div>
+      <div class="page">
+        <h5>Machines</h5>
+        <div class="desc">A machine is anywhere Fleet runs: this desktop app, or a server running <span class="mono">fleet node</span>. Your phone and browsers look at them.</div>
+        <div class="grp">Your machines · 3 <span class="r"><span class="btn sm"><svg class="i sm"><use href="#i-plus"/></svg>Add a machine</span></span></div>
+        <div class="box">
+          <div class="row"><div class="ic"><svg class="i"><use href="#i-monitor"/></svg></div><div class="who"><b>studio</b> <span class="chip acc">this machine</span><small>Desktop app · macOS · 4 sessions · reachable from Tailscale and home network</small></div><span class="chip"><span class="dot"></span>live</span><svg class="i" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+          <div class="row"><div class="ic"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>hangar</b><small>No window · Linux · Claude Code · 1 session · over Tailscale</small></div><span class="chip"><span class="dot"></span>reachable</span><svg class="i" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+          <div class="row"><div class="ic"><svg class="i"><use href="#i-cloud"/></svg></div><div class="who"><b>atlas</b><small>No window · Linux · Claude Code · over Tailscale</small></div><span class="chip"><span class="dot"></span>reachable</span><svg class="i" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+          <div class="row"><div class="ic grey"><svg class="i"><use href="#i-server"/></svg></div><div class="who"><b>nas</b><small>Over SSH as alex@nas · Tailscale isn't answering, tried 2 min ago</small></div><span class="chip warn"><span class="dot warn"></span>out of reach</span><svg class="i" style="color:var(--muted)"><use href="#i-chev"/></svg></div>
+        </div>
+        <div class="grp">Phones and browsers · 2 <span class="r"><span class="btn sm"><svg class="i sm"><use href="#i-phone"/></svg>Add your phone</span></span></div>
+        <div class="box">
+          <div class="row"><div class="ic grey"><svg class="i"><use href="#i-phone"/></svg></div><div class="who"><b>Alex's iPhone</b><small>Phone app · sees all 4 machines · last seen 2 minutes ago</small></div><span class="btn sm ghost">Remove</span></div>
+          <div class="row"><div class="ic grey"><svg class="i"><use href="#i-globe"/></svg></div><div class="who"><b>Firefox on taron</b><small>Browser · sees studio only · last seen yesterday</small></div><span class="btn sm ghost">Remove</span></div>
+        </div>
+        <p class="note" style="margin-top:12px">Advanced: access token, addresses Fleet tries, and your own address are on each machine's page.</p>
+      </div></div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- ═════════ DECISIONS ═════════ -->
+<section class="tab" id="decide">
+  <h2>Decisions</h2>
+  <p class="sub">Seven choices shape the build. Each has the one I'd pick.</p>
+  <div class="decide"><h4>1 · Every machine keeps the list ("your Fleet"), not one home machine <span class="tag ok">decided: yes, 19 Nov</span></h4><p style="font-size:14px;margin:0">Any machine can add the next one, and a screen connected to any machine sees them all. <b>Recommended</b>: J6, J9 and J7 have no desktop app or add it last, and a laptop that sleeps can't be the only machine that knows the others. The other way is one home machine that holds every key (today's model, which the phone web app follows): simpler to build, but phone-only setups break when that machine is off.</p></div>
+  <div class="decide"><h4>2 · A machine with no screen can connect phones <span class="tag ok">decided: yes, 19 Nov</span></h4><p style="font-size:14px;margin:0">Drop today's 409 so <code>fleet node up</code> and <code>fleet node pair</code> show a code a phone can scan. <b>Recommended</b>: J6 and J9 need it.</p></div>
+  <div class="decide"><h4>3 · Waiting machines are found, and added from any connected screen <span class="tag ok">decided: yes, 19 Nov</span></h4><p style="font-size:14px;margin:0">While waiting, a machine says so on Tailscale (reusing the Teams spike's discovery) and on the home network. Phones and desktop apps list it under Found, and a matching code adds it. <b>Recommended</b>, with "paste a pairing link" and scanning the terminal's QR code kept as fallbacks.</p></div>
+  <div class="decide"><h4>4 · The desktop app can let others reach it <span class="tag ok">decided: yes, 19 Nov</span></h4><p style="font-size:14px;margin:0">A second listener on Tailscale and the home network that always asks for a key; the window keeps signing in over loopback. Off until Add your phone asks. <b>Recommended</b>: J2 and J3 need it.</p></div>
+  <div class="decide"><h4>5 · The desktop app uses a Fleet already running on the same computer <span class="tag ok">decided: yes, 19 Nov</span></h4><p style="font-size:14px;margin:0">J8: one computer, one machine. The app reads the key file (same user), opens it, and shows the web app itself instead of relying on the node to serve one. <b>Recommended</b>, after a check confirms what happens today.</p></div>
+  <div class="decide"><h4>6 · A machine the phone can't reach <span class="tag ok">decided: A, 19 Nov</span></h4><p style="font-size:14px;margin:0"><b>A, say so and point to Tailscale</b> (recommended now), or <b>B, another machine relays it</b> (Later list).</p></div>
+  <div class="decide"><h4>7 · No address field by default <span class="tag ok">decided: yes, 19 Nov</span></h4><p style="font-size:14px;margin:0">The code carries every address; typing one moves under "Use my own address". <b>Recommended.</b></p></div>
+
+  <h2>Build order</h2>
+  <p class="sub">One PR each, each in its own session. The earlier pieces fix journeys that don't work today; the later ones make the rest smooth.</p>
+  <div class="tablewrap"><table class="t">
+    <thead><tr><th>#</th><th>Piece</th><th>Journeys it opens</th><th>Size</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>Over SSH port bug <span class="tag ok">merged #1073</span></td><td>J4 via SSH</td><td>S</td></tr>
+      <tr><td>1</td><td>Check J8 (desktop app on a machine that already runs a node) and fix what's broken</td><td>J8</td><td>S–M</td></tr>
+      <tr><td>2</td><td>Words and next steps: <code>install.sh</code> → <code>fleet node up</code>, the README, docs port, one-line "what's a machine", the download page</td><td>J4, J6, J11</td><td>S</td></tr>
+      <tr><td>3</td><td>Desktop app reachable (second listener + switch)</td><td>J2, J3</td><td>M</td></tr>
+      <tr><td>4</td><td>Codes carry every address; machines with no screen connect phones; terminal QR</td><td>J2, J6</td><td>M</td></tr>
+      <tr><td>5</td><td>Your Fleet: every machine keeps the list; a screen gets keys for all; add/remove propagates</td><td>J5, J9, J10, J12–J15</td><td>L</td></tr>
+      <tr><td>6</td><td>Found: waiting machines announce themselves; approve from phone or desktop app; desktop first run joins</td><td>J4, J7, J9, J10, J13</td><td>M–L</td></tr>
+      <tr><td>7</td><td>On a new server: <code>install.sh --join</code></td><td>J5</td><td>M</td></tr>
+      <tr><td>8</td><td>Away from home guide (Tailscale checks on both ends); phone's reach rows</td><td>J3</td><td>M</td></tr>
+      <tr><td>9</td><td>Machines page: your machines + phones and browsers</td><td>all</td><td>M</td></tr>
+    </tbody>
+  </table></div>
+  <p class="why">Later list: relaying (decision 6B); challenge-response before sending a key to a fallback address (already on it). Piece 6's Tailscale discovery should share code with the Teams spike so the two don't fork.</p>
+</section>
+</div>
+
+<script>
+const tabs = [...document.querySelectorAll('nav.tabs button')];
+function showTab(id) {
+  tabs.forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === id)));
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('on', s.id === id));
+}
+tabs.forEach(b => b.addEventListener('click', () => { showTab(b.dataset.tab); window.scrollTo({ top: document.querySelector('nav.tabs').offsetTop }); }));
+
+document.querySelectorAll('.flow').forEach(flow => {
+  const steps = [...flow.querySelectorAll('.step')];
+  const bar = flow.querySelector('.stepbar');
+  if (steps.length < 2) { bar.remove(); steps.forEach(s => s.classList.add('on')); flow.go = () => {}; return; }
+  const buttons = steps.map((s, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = `${i + 1} · ${s.dataset.label}`;
+    b.addEventListener('click', () => go(i)); bar.appendChild(b); return b;
+  });
+  const nav = document.createElement('span'); nav.className = 'nav';
+  const prev = document.createElement('button'); prev.type = 'button'; prev.textContent = '‹ Back';
+  const next = document.createElement('button'); next.type = 'button'; next.textContent = 'Next ›';
+  nav.append(prev, next); bar.appendChild(nav);
+  let cur = 0;
+  function go(i) {
+    cur = Math.max(0, Math.min(steps.length - 1, i));
+    steps.forEach((s, j) => s.classList.toggle('on', j === cur));
+    buttons.forEach((b, j) => b.setAttribute('aria-pressed', String(j === cur)));
+    prev.disabled = cur === 0; next.disabled = cur === steps.length - 1;
+  }
+  prev.addEventListener('click', () => go(cur - 1)); next.addEventListener('click', () => go(cur + 1));
+  flow.go = go; go(0);
+});
+
+function showJourney(group, j) {
+  const sec = document.getElementById(group);
+  sec.querySelectorAll('.jpick button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.j === j)));
+  sec.querySelectorAll('.journey').forEach(d => d.classList.toggle('on', d.dataset.j === j));
+}
+document.querySelectorAll('.jpick').forEach(p => {
+  const group = p.dataset.group;
+  p.querySelectorAll('button').forEach(b => b.addEventListener('click', () => showJourney(group, b.dataset.j)));
+  showJourney(group, p.querySelector('button').dataset.j);
+});
+document.querySelectorAll('[data-go]').forEach(el => {
+  el.setAttribute('role', 'link'); el.tabIndex = 0;
+  const go = () => { const [tab, j] = el.dataset.go.split(':'); showTab(tab); if (document.querySelector(`#${tab} .jpick`)) showJourney(tab, j); window.scrollTo({ top: document.querySelector('nav.tabs').offsetTop }); };
+  el.addEventListener('click', go); el.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+});
+
+document.querySelectorAll('[data-ba]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-ba]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('[data-ba-pane]').forEach(p => p.hidden = p.dataset.baPane !== b.dataset.ba);
+}));
+
+function matrix(seed, n = 25) {
+  let s = seed * 9301 + 49297;
+  const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const m = Array.from({ length: n }, () => Array.from({ length: n }, () => rnd() > 0.52));
+  const finder = (r, c) => { for (let i = -1; i < 8; i++) for (let j = -1; j < 8; j++) {
+    const y = r + i, x = c + j; if (y < 0 || x < 0 || y >= n || x >= n) continue;
+    const edge = i === 0 || i === 6 || j === 0 || j === 6, core = i >= 2 && i <= 4 && j >= 2 && j <= 4;
+    m[y][x] = i >= 0 && i <= 6 && j >= 0 && j <= 6 && (edge || core);
+  } };
+  finder(0, 0); finder(0, n - 7); finder(n - 7, 0);
+  return m;
+}
+document.querySelectorAll('[data-qr]').forEach(el => {
+  const m = matrix(+el.dataset.qr), n = m.length; let d = '';
+  m.forEach((row, y) => row.forEach((on, x) => { if (on) d += `M${x} ${y}h1v1h-1z`; }));
+  el.innerHTML = `<svg viewBox="0 0 ${n} ${n}" role="img" aria-label="QR code (illustration)"><path d="${d}" fill="#111"/></svg>`;
+});
+document.querySelectorAll('[data-tqr]').forEach(el => {
+  const m = matrix(+el.dataset.tqr, 21), n = m.length;
+  const at = (y, x) => y >= 0 && y < n && x >= 0 && x < n && m[y][x];
+  let out = '';
+  for (let y = -1; y < n + 1; y += 2) { out += '  ';
+    for (let x = -1; x < n + 1; x++) { const t = !at(y, x), b = !at(y + 1, x); out += t && b ? '█' : t ? '▀' : b ? '▄' : ' '; }
+    out += '\n'; }
+  el.textContent = out;
+});
+
+const q = new URLSearchParams(location.search);
+if (q.get('tab')) showTab(q.get('tab'));
+if (q.get('j')) showJourney(q.get('tab'), q.get('j'));
+if (q.get('step')) { const scope = q.get('j') ? document.querySelector(`#${q.get('tab')} .journey[data-j="${q.get('j')}"]`) : document.getElementById(q.get('tab')); scope?.querySelector('.flow')?.go(+q.get('step')); }
+if (q.get('ba')) document.querySelector(`[data-ba="${q.get('ba')}"]`)?.click();
+</script>
+</body>
+</html>
