@@ -369,7 +369,7 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, UpdateRestartGate restartGate, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, UpdateRestartGate restartGate, SessionFocusTracker focusTracker, CancellationToken ct) =>
         {
             // Restarting into an update: a turn started now would be cut off a moment later.
             if (restartGate.IsRestarting)
@@ -406,6 +406,9 @@ public static class SessionEndpoints
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
             var options = new PromptOptions { Agent = req.Agent, Skills = skills.Value, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
             var result = await sessionPrompting.PromptSessionWithReceiptAsync(id, text.Value, options, req.UserMessageId, req.CorrelationId, ct);
+            // The user prompted it: what Fleet told them before is old news, so the next "finished" is news again.
+            if (result.IsSuccess && !http.IsAgentRequest())
+                focusTracker.Touch(id);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
@@ -423,7 +426,7 @@ public static class SessionEndpoints
         // POST /api/sessions/{id}/queue — queue a message, a slash command or a shell command. Fleet sends it when the
         // turn ends (at once, when the session turns out to be idle); the queue is Fleet's, so leaving the session or
         // closing the browser doesn't lose it. Gated as a prompt is.
-        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, CancellationToken ct) =>
+        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, SessionFocusTracker focusTracker, CancellationToken ct) =>
         {
             // The queue is the user's composer; agents message sessions with their own tool.
             if (http.IsAgentRequest())
@@ -454,6 +457,8 @@ public static class SessionEndpoints
                 id,
                 new QueuePromptRequest(text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort, Skills: skills.Value),
                 ct);
+            if (result.IsSuccess && !http.IsAgentRequest())
+                focusTracker.Touch(id);
             return result.Match(
                 item => Results.Json(QueuedPromptView.From(item), ApiJsonContext.Default.QueuedPromptView, statusCode: StatusCodes.Status201Created),
                 err => err.ToSessionApiResult());

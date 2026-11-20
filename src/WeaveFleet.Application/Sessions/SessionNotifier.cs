@@ -46,6 +46,9 @@ public sealed partial class SessionNotifier(
     // session id → the last notification sent, to skip repeats and the "finished" that follows a failure
     private readonly ConcurrentDictionary<string, Sent> _sent = new(StringComparer.Ordinal);
 
+    // session id → the user's touch count when we last said "finished"; while it still matches, they haven't looked
+    private readonly ConcurrentDictionary<string, int> _finishedAt = new(StringComparer.Ordinal);
+
     /// <summary>Called for every activity change the harness reports, on the relay's pump.</summary>
     public void OnActivityChanged(string sessionId, string activityStatus)
     {
@@ -75,7 +78,14 @@ public sealed partial class SessionNotifier(
             return;
         }
 
+        // Turns the agent starts on its own (a child's report, a wake, a background task) each end with a
+        // "finished". One is news; the rest of them are noise until the user has looked or sent a prompt.
+        if (_finishedAt.TryGetValue(sessionId, out var touches) && touches == focusTracker.Touches(sessionId))
+            return;
+
+        var touchesNow = focusTracker.Touches(sessionId);
         Send(sessionId, reason, SessionNotificationKinds.Finished, "Finished its turn.");
+        _finishedAt[sessionId] = touchesNow;
     }
 
     /// <summary>
@@ -105,6 +115,7 @@ public sealed partial class SessionNotifier(
     {
         _last.TryRemove(sessionId, out _);
         _sent.TryRemove(sessionId, out _);
+        _finishedAt.TryRemove(sessionId, out _);
     }
 
     /// <summary>

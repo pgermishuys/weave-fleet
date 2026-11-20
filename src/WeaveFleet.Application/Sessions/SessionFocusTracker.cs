@@ -13,6 +13,18 @@ public sealed class SessionFocusTracker
     // connection id → the session that tab is looking at
     private readonly ConcurrentDictionary<string, string> _focus = new(StringComparer.Ordinal);
 
+    // session id → how many times the user has touched it (opened, left, prompted)
+    private readonly ConcurrentDictionary<string, int> _touched = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Counts up each time the user touches the session: a tab opens or leaves it, or they send it a prompt.
+    /// A notification that was sent at one count and is followed by the same count has not been seen.
+    /// </summary>
+    public int Touches(string sessionId) => _touched.TryGetValue(sessionId, out var n) ? n : 0;
+
+    /// <summary>Records that the user touched the session, so what Fleet told them about it has been seen.</summary>
+    public void Touch(string sessionId) => _touched.AddOrUpdate(sessionId, 1, static (_, n) => n + 1);
+
     /// <summary>Whether any tab is looking at the session right now.</summary>
     public bool IsWatched(string sessionId) => _focus.Values.Contains(sessionId, StringComparer.Ordinal);
 
@@ -22,6 +34,7 @@ public sealed class SessionFocusTracker
     /// </summary>
     public string? SetFocus(string connectionId, string sessionId, bool focused)
     {
+        Touch(sessionId);
         if (!focused)
             return _focus.TryRemove(new KeyValuePair<string, string>(connectionId, sessionId)) ? sessionId : null;
 
@@ -37,5 +50,10 @@ public sealed class SessionFocusTracker
 
     /// <summary>Forgets a disconnected tab, which counts as looking away. Returns the session it was looking at.</summary>
     public string? RemoveConnection(string connectionId)
-        => _focus.TryRemove(connectionId, out var sessionId) ? sessionId : null;
+    {
+        if (!_focus.TryRemove(connectionId, out var sessionId))
+            return null;
+        Touch(sessionId);
+        return sessionId;
+    }
 }
