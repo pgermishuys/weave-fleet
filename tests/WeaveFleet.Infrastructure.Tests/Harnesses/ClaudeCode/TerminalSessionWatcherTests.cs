@@ -14,6 +14,7 @@ public sealed class TerminalSessionWatcherTests : IDisposable
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), $"fleet-watch-{Guid.NewGuid():N}");
     private readonly Recorder _recorder = new();
+    private readonly CapturingLogger _log = new();
     private readonly TerminalSessionPresence _presence = new(new FakeTimeProvider());
     private readonly TerminalSessionWatcher _watcher;
 
@@ -21,7 +22,7 @@ public sealed class TerminalSessionWatcherTests : IDisposable
     {
         Directory.CreateDirectory(_folder);
         var services = new ServiceCollection().AddSingleton<ITerminalSessions>(_recorder).BuildServiceProvider();
-        _watcher = new TerminalSessionWatcher(_presence, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<TerminalSessionWatcher>.Instance);
+        _watcher = new TerminalSessionWatcher(_presence, services.GetRequiredService<IServiceScopeFactory>(), _log);
     }
 
     public void Dispose()
@@ -38,6 +39,7 @@ public sealed class TerminalSessionWatcherTests : IDisposable
 
         // The MCP server starts before anything is typed: the file isn't there yet.
         _presence.Touch(ClaudeSessionId, "/work/orchard", transcript, "user-1");
+        Assert.True(_watcher.IsFollowing(ClaudeSessionId), $"Not watching. Logged: {string.Join(" | ", _log.Lines)}");
         await File.WriteAllTextAsync(transcript, "{}\n");
 
         var report = await _recorder.Next.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -51,6 +53,18 @@ public sealed class TerminalSessionWatcherTests : IDisposable
         Assert.False(_recorder.Next.Task.IsCompleted);
 
         await _watcher.StopAsync(CancellationToken.None);
+    }
+
+    private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger<TerminalSessionWatcher>
+    {
+        public List<string> Lines { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Lines.Add($"{logLevel}: {formatter(state, exception)} {exception}");
     }
 
     private sealed class Recorder : ITerminalSessions

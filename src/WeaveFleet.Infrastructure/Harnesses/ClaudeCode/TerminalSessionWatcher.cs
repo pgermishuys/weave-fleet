@@ -32,10 +32,17 @@ public sealed partial class TerminalSessionWatcher(
     }
 
     /// <inheritdoc />
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public override Task StartAsync(CancellationToken cancellationToken)
     {
+        // Listening before the service runs, so a session that opens as it starts is never missed.
         presence.Opened += Follow;
         presence.Closed += Unfollow;
+        return base.StartAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
         foreach (var open in presence.OpenSessions())
             Follow(open);
 
@@ -61,6 +68,9 @@ public sealed partial class TerminalSessionWatcher(
                 Unfollow(id);
         }
     }
+
+    /// <summary>Whether the session's transcript is being watched (otherwise its heartbeat reads new turns).</summary>
+    internal bool IsFollowing(string claudeSessionId) => _following.ContainsKey(claudeSessionId);
 
     private void Follow(TerminalSessionPresence.Open open)
     {
@@ -147,7 +157,7 @@ public sealed partial class TerminalSessionWatcher(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Couldn't watch the transcript of terminal session {ClaudeSessionId}; its heartbeat will pick up new turns")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't watch the transcript of terminal session {ClaudeSessionId}; its heartbeat will pick up new turns")]
     private partial void LogNotWatched(Exception ex, string claudeSessionId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't read terminal session {ClaudeSessionId} after it ended")]
