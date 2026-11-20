@@ -17,6 +17,8 @@ public sealed partial class FleetRosterSync(
     FleetOptions options,
     ILogger<FleetRosterSync> logger) : IHostedService, IDisposable
 {
+    internal static readonly TimeSpan PullEvery = TimeSpan.FromMinutes(1);
+
     private readonly CancellationTokenSource _stopping = new();
     private int _running;
     private int _again;
@@ -34,6 +36,8 @@ public sealed partial class FleetRosterSync(
             await RunSafelyAsync(() => roster.SyncWithAsync(id, _stopping.Token));
         };
         machines.Changed += OnChanged;
+        roster.SyncRequested += Trigger;
+        _ = Task.Run(PullPeriodicallyAsync, CancellationToken.None);
         // Whatever changed while this machine was off.
         Trigger();
         return Task.CompletedTask;
@@ -44,6 +48,7 @@ public sealed partial class FleetRosterSync(
     public Task StopAsync(CancellationToken cancellationToken)
     {
         machines.Changed -= OnChanged;
+        roster.SyncRequested -= Trigger;
         try
         {
             _stopping.Cancel();
@@ -57,6 +62,23 @@ public sealed partial class FleetRosterSync(
     }
 
     private void OnChanged(string _) => Trigger();
+
+    // A machine nobody can reach hears nothing from the others, so it looks for what the others gained on its own, once a minute.
+    private async Task PullPeriodicallyAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(PullEvery);
+            while (await timer.WaitForNextTickAsync(_stopping.Token))
+            {
+                if (!await roster.HasOwnAddressAsync(_stopping.Token))
+                    Trigger();
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+        }
+    }
 
     // One pass at a time; a change during a pass earns one more.
     private void Trigger()

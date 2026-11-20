@@ -71,6 +71,14 @@ public sealed partial class FleetRoster(
 
     public void Dispose() => _syncing.Dispose();
 
+    /// <summary>Raised when something asks for the lists to be compared now (the desktop app changed who can reach it).</summary>
+    public event Action? SyncRequested;
+
+    public void RequestSync() => SyncRequested?.Invoke();
+
+    /// <summary>Whether this machine has an address another machine could use to reach it. A desktop app that lets nobody reach it has none.</summary>
+    public async Task<bool> HasOwnAddressAsync(CancellationToken cancellationToken) => (await selfAddresses.ListAsync(cancellationToken)).Count > 0;
+
     /// <summary>Takes in a machine another machine introduces. Checks the machine answers as itself before the key is sent anywhere.</summary>
     public async Task<IntroductionOutcome> AcceptAsync(Introduction introduction, CancellationToken cancellationToken)
     {
@@ -123,8 +131,12 @@ public sealed partial class FleetRoster(
             return;
 
         var self = identity.Get();
-        if (!known.Contains(self.Id))
+        // A machine nobody can reach has no address to introduce itself with: it pulls what it lacks from the peer instead.
+        var reachable = await HasOwnAddressAsync(cancellationToken);
+        if (!known.Contains(self.Id) && reachable)
             await IntroduceAsync(null, peer, cancellationToken);
+        if (!reachable)
+            await PullFromAsync(peer, known, cancellationToken);
 
         foreach (var other in await repository.ListAsync())
         {
@@ -172,6 +184,72 @@ public sealed partial class FleetRoster(
         {
             _syncing.Release();
         }
+    }
+
+
+    /// <summary>
+    /// For a machine that nobody can reach (the desktop app with reach off): asks <paramref name="peer"/> for a key to each
+    /// machine in its list this machine lacks. Each key is made by the machine it opens, through the peer, which holds a
+    /// key there; no owner token is sent on. This machine then reaches those machines outbound. Does nothing when the
+    /// peer has nothing this machine lacks.
+    /// </summary>
+    private async Task PullFromAsync(RemoteMachine peer, HashSet<string> peerList, CancellationToken cancellationToken)
+    {
+        var self = identity.Get();
+        var mine = (await repository.ListAsync()).Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+        if (!peerList.Any(id => id != self.Id && !mine.Contains(id)))
+            return;
+        if (machines.TryTokenOf(peer) is not { } token)
+            return;
+
+        PullAnswer? answer;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{peer.BaseUrl}/api/machine/pull")
+            {
+                Content = JsonContent.Create(new PullRequest(self.Id, self.Name ?? Environment.MachineName, mine.ToList()), FleetRosterJsonContext.Default.PullRequest),
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await httpClients.CreateClient(RemoteMachineService.HttpClientName).SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                return;
+            answer = await response.Content.ReadFromJsonAsync(FleetRosterJsonContext.Default.PullAnswer, cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return;
+        }
+
+        foreach (var introduction in answer?.Introductions ?? [])
+            await AcceptAsync(introduction, cancellationToken);
+    }
+
+    /// <summary>
+    /// A machine that nobody can reach asks this one for keys to the machines in this machine's list that it lacks
+    /// (<c>POST /api/machine/pull</c>). Each machine mints its own key for the caller; the keys come back for the caller to
+    /// use outbound. They are remembered under <c>machine:{caller}</c>, so forgetting the caller takes them away.
+    /// </summary>
+    public async Task<IReadOnlyList<Introduction>> PullForAsync(PullRequest request, CancellationToken cancellationToken)
+    {
+        var self = identity.Get();
+        var selfName = self.Name ?? Environment.MachineName;
+        var have = (request.Have ?? []).ToHashSet(StringComparer.Ordinal);
+        var offered = new List<Introduction>();
+        if (string.IsNullOrWhiteSpace(request.MachineId))
+            return offered;
+
+        foreach (var machine in await repository.ListAsync())
+        {
+            if (machine.Id == request.MachineId || have.Contains(machine.Id) || !IsPairable(machine) || machines.TryTokenOf(machine) is not { } machineToken)
+                continue;
+            var mint = await MintAsync(machine, machineToken, Clip($"{request.Name} via {selfName}", 60), self.Id, request.MachineId, cancellationToken);
+            if (mint is null)
+                continue;
+            await repository.SaveGrantAsync(new DeviceGrant { DeviceId = MachinePrefix + request.MachineId, MachineId = machine.Id, RemoteDeviceId = mint.Value.DeviceId, CreatedAt = time.GetUtcNow() });
+            offered.Add(new Introduction(machine.Id, machine.Name, machine.Os, AddressesOf(machine), mint.Value.Token, self.Id, machine.AddedAt));
+        }
+
+        return offered;
     }
 
     // A machine reached through an SSH tunnel is only reachable from here, so nobody else can be handed it.
@@ -333,6 +411,12 @@ public sealed partial class FleetRoster(
     private static partial void LogSyncFailed(ILogger logger, string machine);
 }
 
+/// <summary>What a machine nobody can reach sends to pull: who it is, and the machines it already has.</summary>
+public sealed record PullRequest(string MachineId, string Name, IReadOnlyList<string>? Have);
+
+/// <summary>The keys the machines in a list made for the caller.</summary>
+public sealed record PullAnswer(IReadOnlyList<Introduction> Introductions);
+
 internal sealed record MintKeyRequest(string Name, string Platform, string PairedVia, string Kind, string MadeFor);
 
 internal sealed record MintedKey(string DeviceId, string Token);
@@ -341,6 +425,8 @@ internal sealed record MintedKey(string DeviceId, string Token);
 public sealed record IntroductionAnswer(string Status);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(Introduction))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(PullRequest))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(PullAnswer))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(IntroductionAnswer))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(MintKeyRequest))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(MintedKey))]

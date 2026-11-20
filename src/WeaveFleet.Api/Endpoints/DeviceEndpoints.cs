@@ -266,6 +266,18 @@ public static class DeviceEndpoints
         .Produces<IntroductionAnswer>(200)
         .WithName("IntroduceMachine");
 
+        // A machine nobody can reach (the desktop app with reach off) asks for keys to the machines in this list that it lacks:
+        // each machine mints its own key for it, through the key this machine holds there. Only the machine token or a machine-kind key.
+        machine.MapPost("/pull", async (HttpContext http, WeaveFleet.Application.Machines.PullRequest request, FleetRoster roster, DeviceTokenService devices, CancellationToken cancellationToken) =>
+        {
+            if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
+                return Results.Json(new ErrorResponse("Only another machine in your Fleet pulls keys."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            return Results.Ok(new WeaveFleet.Application.Machines.PullAnswer(await roster.PullForAsync(request, cancellationToken)));
+        })
+        .RequireAuthorization()
+        .Produces<WeaveFleet.Application.Machines.PullAnswer>(200)
+        .WithName("PullMachineKeys");
+
         // What was forgotten or removed on any machine. A machine sends what it has, and takes what the
         // other keeps, whenever they compare lists. Only the machine token or a machine-kind key.
         machine.MapGet("/removals", async (HttpContext http, WeaveFleet.Application.Machines.FleetRemovals removals, DeviceTokenService devices) =>

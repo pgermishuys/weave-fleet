@@ -100,6 +100,44 @@ public sealed class FleetRosterTests
     }
 
     [Fact]
+    public async Task A_machine_nobody_can_reach_joins_last_and_pulls_keys_to_every_machine_then_pulls_the_ones_added_later()
+    {
+        await using var world = new World();
+        var hangar = await world.StartAsync("hangar");
+        var atlas = await world.StartAsync("atlas");
+        await World.AddAsync(hangar, atlas, byCode: true);
+        await world.SettleAsync();
+        // The desktop app with reach off: it listens on itself only, so it has no address to give anybody.
+        var studio = await world.StartAsync("studio", reachable: false);
+
+        await World.AddAsync(studio, hangar, byCode: true);
+        await world.SettleAsync();
+
+        (await studio.ListAsync()).Select(m => m.Id).Order().ShouldBe(new[] { hangar.Id, atlas.Id }.Order(), "studio lists both");
+        (await studio.Machines.CheckAsync(atlas.Id, CancellationToken.None)).Problem.ShouldBeNull("studio reaches atlas outbound");
+        (await studio.Machines.CheckAsync(hangar.Id, CancellationToken.None)).Problem.ShouldBeNull();
+        // Atlas made the key itself; it is a machine-kind key made for studio, and no owner token went anywhere.
+        var keyOnAtlas = studio.KeyFor(atlas);
+        keyOnAtlas.ShouldStartWith("fdt_");
+        new[] { hangar.OwnerToken, atlas.OwnerToken }.ShouldNotContain(keyOnAtlas);
+        (await atlas.Devices.ListAsync()).Count(d => d.Kind == DeviceKinds.Machine && d.MadeFor == studio.Id).ShouldBe(1);
+        // Nobody can reach studio, so nobody lists it.
+        (await hangar.ListAsync()).Select(m => m.Id).ShouldBe([atlas.Id]);
+        (await atlas.ListAsync()).Select(m => m.Id).ShouldBe([hangar.Id]);
+
+        // A machine added elsewhere later reaches studio on its own sync, in the outbound direction.
+        var workbench = await world.StartAsync("workbench");
+        await World.AddAsync(hangar, workbench, byCode: true);
+        await world.SettleAsync();
+        (await studio.ListAsync()).Select(m => m.Id).Order().ShouldBe(new[] { hangar.Id, atlas.Id, workbench.Id }.Order(), "studio picked up workbench");
+        (await studio.Machines.CheckAsync(workbench.Id, CancellationToken.None)).Problem.ShouldBeNull();
+
+        // Pulling again asks for nothing new: one key per machine for studio.
+        await world.SettleAsync();
+        (await atlas.Devices.ListAsync()).Count(d => d.Kind == DeviceKinds.Machine && d.MadeFor == studio.Id).ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_key_is_made_by_the_machine_it_opens_and_no_owner_token_is_handed_on()
     {
         await using var world = new World();
@@ -758,7 +796,7 @@ public sealed class FleetRosterTests
             return (hangar, atlas, workbench);
         }
 
-        public async Task<Node> StartAsync(string name, bool publicUrl = false)
+        public async Task<Node> StartAsync(string name, bool publicUrl = false, bool reachable = true)
         {
             var addresses = new List<string> { $"https://{name}.test" };
             var factory = new ApiWebApplicationFactory(
@@ -770,7 +808,7 @@ public sealed class FleetRosterTests
                 {
                     services.AddHttpClient(RemoteMachineService.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Router);
                     services.AddHttpClient(FleetJoin.JoinHttpClientName).ConfigurePrimaryHttpMessageHandler(() => Router);
-                    services.AddSingleton<ISelfAddresses>(new FixedAddresses(addresses));
+                    services.AddSingleton<ISelfAddresses>(new FixedAddresses(reachable ? addresses : []));
                     // The tests run the sync themselves (SettleAsync, SyncAllAsync). A background pass of its own would
                     // reach out from a machine the Router marks Down (Down only blocks calls to it) and race the asserts.
                     foreach (var hosted in services.Where(d => d.ServiceType == typeof(IHostedService) && d.ImplementationFactory is not null && d.ImplementationFactory.Method.ReturnType == typeof(FleetRosterSync)).ToList())

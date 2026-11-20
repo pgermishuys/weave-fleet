@@ -993,3 +993,18 @@ changes or a machine answers, the machine compares lists with each machine (`Fle
 so the machines it already holds get introduced to each other and each machine hears about this one. Every key is made
 by the machine it is for (a machine-kind device token) and the owner token is never sent on. A stored `YourFleet`
 preference from before is ignored and not cleaned up: nothing reads it.
+
+### A machine nobody can reach (the desktop app with reach off)
+
+Introductions need an address to deliver a key to, and the desktop app has none until "Add your phone" turns reach on.
+So it **pulls** instead. When it compares lists with a machine it can reach and that machine lists machines it lacks, it
+asks `POST /api/machine/pull` (machine token or machine-kind key; body `{ machineId, name, have }`). That machine asks each
+of the others, through the key it holds there, to mint a machine-kind key for the caller (the same mint call an
+introduction uses, `device_grants` under `machine:{caller}`, `devices.made_for`), and hands the keys back as introductions,
+which the caller takes in like any other (`FleetRoster.AcceptAsync`, so each machine is checked to answer as itself and a
+forgotten one isn't taken back). No owner token is sent on, and a machine that is already in `have` is not asked for again.
+The desktop app then reaches every machine outbound. Nothing can reach it, so the others don't list it.
+
+It looks for what the others gained once a minute (`FleetRosterSync`), since nothing tells it. Changing who can reach it
+(`PUT /api/machine/reach`) compares lists at once (`FleetRoster.RequestSync`), so what waited on an address goes without a
+restart.
