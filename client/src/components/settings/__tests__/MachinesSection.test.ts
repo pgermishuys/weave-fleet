@@ -2,7 +2,6 @@ import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from "@vue/t
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinePage } from "@/composables/use-machine-page";
@@ -101,8 +100,8 @@ describe("Settings → Machines", () => {
       await wrapper.get("[data-testid='machine-forget']").trigger("click");
       await flushPromises();
       expect(confirmAction).toHaveBeenLastCalledWith(expect.objectContaining({
-        title: "Forget mini?",
-        confirmLabel: "Forget machine",
+        title: "Forget mini on every machine in your Fleet?",
+        confirmLabel: "Forget mini",
         destructive: true,
       }));
       expect(wrapper.find("[data-testid='machine-page']").exists()).toBe(true);
@@ -115,10 +114,8 @@ describe("Settings → Machines", () => {
       expect(card().exists()).toBe(false);
     });
 
-    it("forgetting a machine, saying it reaches every machine when Your Fleet is on", async () => {
+    it("forgetting a machine, saying it reaches every machine", async () => {
       const wrapper = mount(MachinesSection);
-      await flushPromises();
-      usePreferencesStore().preferences = { YourFleet: "true" };
       await flushPromises();
 
       confirmAction.mockResolvedValueOnce(false);
@@ -906,12 +903,8 @@ describe("Settings → Machines: your machines, and phones and browsers", () => 
     expect(wrapper.find("[data-testid='machines-add']").exists()).toBe(false);
   });
 
-  it("says Fleet-wide removal only when Your Fleet is on", async () => {
+  it("says removing a phone or browser reaches every machine", async () => {
     const wrapper = mount(MachinesSection);
-    await flushPromises();
-    expect(wrapper.get("[data-testid='machine-phones-group']").text()).not.toContain("on every machine");
-
-    usePreferencesStore().preferences = { YourFleet: "true" };
     await flushPromises();
     expect(wrapper.get("[data-testid='machine-phones-group']").text()).toContain("Remove one and it loses them on every machine.");
   });

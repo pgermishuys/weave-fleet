@@ -150,23 +150,19 @@ public static class DeviceEndpoints
         .Produces<DeviceListResponse>(200)
         .WithName("ListDevices");
 
-        // Your Fleet (Labs): the phones and browsers of the whole Fleet, each once. This machine asks every machine in its list
+        // The phones and browsers of the whole Fleet, each once. This machine asks every machine in its list
         // for what it holds (below) and groups it by phone or browser.
-        machine.MapGet("/screens", async (FleetScreens screens, FleetRemovals removals, CancellationToken cancellationToken) =>
-            !await removals.IsEnabledAsync()
-                ? Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden)
-                : Results.Ok(await screens.ListAsync(cancellationToken)))
+        machine.MapGet("/screens", async (FleetScreens screens, CancellationToken cancellationToken) =>
+            Results.Ok(await screens.ListAsync(cancellationToken)))
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<FleetScreenList>(200)
         .WithName("ListFleetScreens");
 
         // What one machine holds itself, for another machine in the Fleet to group. The machine token or a machine-kind key.
-        machine.MapGet("/screens/local", async (HttpContext http, FleetScreens screens, FleetRemovals removals, DeviceTokenService devices) =>
+        machine.MapGet("/screens/local", async (HttpContext http, FleetScreens screens, DeviceTokenService devices) =>
         {
             if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
                 return Results.Json(new ErrorResponse("Only another machine in your Fleet lists its phones and browsers."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
-            if (!await removals.IsEnabledAsync())
-                return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
             return Results.Ok(await screens.LocalAsync());
         })
         .RequireAuthorization()
@@ -176,8 +172,6 @@ public static class DeviceEndpoints
         // Removes a phone or browser from every machine by its Fleet-wide id (a phone's device id, or screen:{id}).
         machine.MapDelete("/screens/{id}", async (string id, FleetRemovals removals, CancellationToken cancellationToken) =>
         {
-            if (!await removals.IsEnabledAsync())
-                return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128)
                 return Results.BadRequest(new ErrorResponse("That isn't a phone or browser id."));
             await removals.RemoveGranteeAsync(id, cancellationToken);
@@ -212,9 +206,10 @@ public static class DeviceEndpoints
             await subscriptions.DeleteByDeviceAsync(id);
             await grants.RevokeAllAsync(id, cancellationToken);
 
-            // Your Fleet (Labs): the owner removing a phone or a browser removes it from every machine. A key made for it
-            // on another machine goes the same way, through the phone's own id.
-            if (FleetClaims.IsOwner(http.User) && removed is { Kind: DeviceKinds.Device } && await removals.IsEnabledAsync())
+            // The owner removing a phone or a browser removes it from every machine. A key made for it
+            // on another machine goes the same way, through the phone's own id. Not when a machine only takes back one of the
+            // keys it asked for (keyOnly): replacing a key mustn't remove the phone from the Fleet.
+            if (FleetClaims.IsOwner(http.User) && removed is { Kind: DeviceKinds.Device } && http.Request.Query["keyOnly"] != "true")
                 await removals.RemoveGranteeAsync(removed.MadeFor ?? removed.Id, cancellationToken);
             return Results.NoContent();
         })
@@ -257,7 +252,7 @@ public static class DeviceEndpoints
         .Produces<CreateDeviceResponse>(200)
         .WithName("CreateDevice");
 
-        // Your Fleet (Labs): another machine in the owner's Fleet introduces a third (or itself) with a key the third one made for
+        // Another machine in the owner's Fleet introduces a third (or itself) with a key the third one made for
         // this machine, so this machine keeps the whole list too. Only the machine token or a machine-kind key may.
         machine.MapPost("/introductions", async (HttpContext http, Introduction introduction, FleetRoster roster, DeviceTokenService devices, CancellationToken cancellationToken) =>
         {
@@ -271,7 +266,7 @@ public static class DeviceEndpoints
         .Produces<IntroductionAnswer>(200)
         .WithName("IntroduceMachine");
 
-        // Your Fleet (Labs): what was forgotten or removed on any machine. A machine sends what it has, and takes what the
+        // What was forgotten or removed on any machine. A machine sends what it has, and takes what the
         // other keeps, whenever they compare lists. Only the machine token or a machine-kind key.
         machine.MapGet("/removals", async (HttpContext http, WeaveFleet.Application.Machines.FleetRemovals removals, DeviceTokenService devices) =>
         {
@@ -287,9 +282,6 @@ public static class DeviceEndpoints
         {
             if (!BearerTokenHandler.AuthenticatedWithToken(http.User) || !(FleetClaims.IsOwner(http.User) || await IsPeerMachineAsync(http, devices)))
                 return Results.Json(new ErrorResponse("Only another machine in your Fleet sends removals."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
-            // With Your Fleet off here, this machine keeps no list for others to compare with.
-            if (!await removals.IsEnabledAsync())
-                return Results.Json(new ErrorResponse("Your Fleet is off on this machine."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
             var applied = await removals.ApplyAsync(batch.Removals ?? [], batch.From?.Trim(), FleetClaims.DeviceIdOf(http.User), cancellationToken, batch.Fleet);
             return Results.Ok(new RemovalsAnswer(applied));

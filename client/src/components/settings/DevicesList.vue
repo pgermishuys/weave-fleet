@@ -10,10 +10,8 @@ import { confirmAction } from "@/components/ui/confirm";
  * Settings → Machines → This machine → Devices with access: this computer, then each paired device with when it
  * was added and last seen, and Remove. Removing one signs out only that device.
  */
-const props = defineProps<{
+defineProps<{
   devices: readonly PairedDevice[];
-  /** Your Fleet (Labs) is on: removing a phone or a browser reaches every machine. */
-  everywhere?: boolean;
   /** How this computer is signed in, for its row. */
   thisComputer: string;
   /** Phones and browsers only: leaves out the row for the machine itself. */
@@ -40,8 +38,8 @@ function lastSeen(device: PairedDevice): string {
 }
 
 async function remove(device: PairedDevice): Promise<void> {
-  // A phone or a browser (not another machine's key) goes from every machine when Your Fleet is on.
-  const reachesAll = props.everywhere === true && device.kind !== "machine";
+  // A phone or a browser (not another machine's key) goes from every machine (Your Fleet).
+  const reachesAll = device.kind !== "machine";
   const confirmed = await confirmAction(reachesAll
     ? {
         title: `Remove ${device.name} on every machine in your Fleet?`,

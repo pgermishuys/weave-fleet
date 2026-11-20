@@ -32,12 +32,12 @@ public enum IntroductionOutcome
     /// <summary>None of the addresses answered as that machine.</summary>
     Unreachable,
 
-    /// <summary>The key or the machine didn't check out, or Your Fleet is off here.</summary>
+    /// <summary>The key or the machine didn't check out.</summary>
     Refused,
 }
 
 /// <summary>
-/// Your Fleet (Labs): every machine keeps the whole list. Machines are introduced to each other instead of one machine
+/// Your Fleet: every machine keeps the whole list. Machines are introduced to each other instead of one machine
 /// being home:
 /// <list type="bullet">
 /// <item>A machine <b>mints the key another machine uses to reach it</b> (a machine-kind device token on itself) and
@@ -61,7 +61,6 @@ public sealed partial class FleetRoster(
     MachineIdentityStore identity,
     ISelfAddresses selfAddresses,
     FleetRemovals removals,
-    IServiceScopeFactory scopes,
     TimeProvider time,
     ILogger<FleetRoster> logger) : IDisposable
 {
@@ -72,16 +71,10 @@ public sealed partial class FleetRoster(
 
     public void Dispose() => _syncing.Dispose();
 
-    public async Task<bool> IsEnabledAsync()
-    {
-        using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<YourFleetFeature>().IsEnabledAsync();
-    }
-
     /// <summary>Takes in a machine another machine introduces. Checks the machine answers as itself before the key is sent anywhere.</summary>
     public async Task<IntroductionOutcome> AcceptAsync(Introduction introduction, CancellationToken cancellationToken)
     {
-        if (!await IsEnabledAsync() || string.IsNullOrWhiteSpace(introduction.Token) || string.IsNullOrWhiteSpace(introduction.MachineId)
+        if (string.IsNullOrWhiteSpace(introduction.Token) || string.IsNullOrWhiteSpace(introduction.MachineId)
             || introduction.MachineId == identity.Get().Id)
             return IntroductionOutcome.Refused;
         if (await repository.GetAsync(introduction.MachineId) is not null)
@@ -116,7 +109,7 @@ public sealed partial class FleetRoster(
     /// </summary>
     public async Task SyncWithAsync(string machineId, CancellationToken cancellationToken)
     {
-        if (!await IsEnabledAsync() || await repository.GetAsync(machineId) is not { } peer)
+        if (await repository.GetAsync(machineId) is not { } peer)
             return;
         // What was forgotten or removed goes first: a list that still has it mustn't bring it back.
         if (!await removals.ExchangeWithAsync(peer, cancellationToken))
@@ -146,8 +139,6 @@ public sealed partial class FleetRoster(
     /// <summary>Compares this machine's list with every machine in it, one after the other.</summary>
     public async Task SyncAllAsync(CancellationToken cancellationToken)
     {
-        if (!await IsEnabledAsync())
-            return;
         await _syncing.WaitAsync(cancellationToken);
         try
         {

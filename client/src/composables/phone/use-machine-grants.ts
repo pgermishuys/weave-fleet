@@ -2,18 +2,13 @@ import { shallowRef } from "vue";
 import { readCredentials, removeGrant, saveGrant, type DeviceCredentials, type MachineGrant } from "@/lib/device-credentials";
 import { machinesNeedingGrants, RemovedFromFleetError, requestGrant, unreachableReason, type ListedMachine } from "@/lib/phone/grants";
 import { removeScreenGrant, saveScreenGrant, screenCredentials, screenId, screenName } from "@/lib/phone/screen-keys";
-import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 
 /**
- * With Your Fleet on (Labs), a screen that isn't a paired phone (a browser signed in on the machine) holds keys the
+ * A screen that isn't a paired phone (a browser signed in on the machine) holds keys the
  * same way: home mints them for the screen's id. `null` when the screen isn't in that mode.
  */
 async function screenHome(): Promise<{ id: string; name: string } | null> {
   try {
-    const preferences = await fetch("/api/preferences", { credentials: "include" });
-    if (!preferences.ok) return null;
-    const values = await preferences.json() as Record<string, string>;
-    if (values[YOUR_FLEET_PREFERENCE_KEY] !== "true") return null;
     const machine = await fetch("/api/machine", { credentials: "include" });
     if (!machine.ok) return null;
     const body = await machine.json() as { id?: string; name?: string };
@@ -27,7 +22,7 @@ async function screenHome(): Promise<{ id: string; name: string } | null> {
  * The phone's keys to other machines. After pairing and whenever the inbox loads, the phone asks home for its own
  * token on every machine in home's list it lacks one for; a machine that turns a token away gets one fresh request.
  * Machines the phone can't reach directly (http on an https page) are skipped with a reason. A browser that isn't a
- * paired phone does the same under Your Fleet (Labs), with its own id in place of a device token.
+ * paired phone does the same the same way, with its own id in place of a device token.
  */
 export function useMachineGrants() {
   const problems = shallowRef<Record<string, string>>({});

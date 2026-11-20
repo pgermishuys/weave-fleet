@@ -96,8 +96,7 @@ public sealed record JoinResult(JoinStatus Status, string Message, string? Fleet
 /// uses the code up and adds the machine that sent it, by the pairing code that machine made, the same way "Add a
 /// machine" adds one: with a key of its own, and the master token stays where it is. Adding it is what brings it to the
 /// rest of the Fleet (<see cref="FleetRoster"/> introduces it to every machine). The joining machine
-/// (<see cref="JoinAsync"/>) makes that pairing code, sends it with the join code, and turns on Your Fleet so the
-/// introduction back to it is taken.
+/// (<see cref="JoinAsync"/>) makes that pairing code, sends it with the join code, and waits to be listed.
 /// </summary>
 public sealed class FleetJoin(
     JoinCodeStore joinCodes,
@@ -106,7 +105,6 @@ public sealed class FleetJoin(
     IRemoteMachineRepository repository,
     MachineIdentityStore identity,
     IHttpClientFactory httpClients,
-    IServiceScopeFactory scopes,
     TimeProvider time)
 {
     public const string JoinPath = "/api/pairing/join";
@@ -138,7 +136,7 @@ public sealed class FleetJoin(
             }
 
             var self = identity.Get();
-            return (JoinStatus.Joined, "", new JoinAnswer(self.Id, self.Name ?? Environment.MachineName, await IsYourFleetOnAsync()));
+            return (JoinStatus.Joined, "", new JoinAnswer(self.Id, self.Name ?? Environment.MachineName, true));
         }
 
         var reason = lastError.Length == 0 ? "" : $"{lastError} ";
@@ -155,7 +153,6 @@ public sealed class FleetJoin(
             return new JoinResult(JoinStatus.Invalid,
                 "This machine only listens on itself, so the Fleet can't reach it. Run fleet node up and choose Tailscale or Local network, then join again.");
 
-        var wasOn = await SetYourFleetAsync(true);
         var pairing = pairingCodes.Create();
         var body = new JoinRequest(target.Code, pairing.ManualCode, ownAddresses);
         string unreachable = "";
@@ -170,19 +167,17 @@ public sealed class FleetJoin(
                 };
                 using var response = await httpClients.CreateClient(JoinHttpClientName).SendAsync(request, cancellationToken);
                 if (response.StatusCode == HttpStatusCode.NotFound)
-                    return await FailedAsync(wasOn, new JoinResult(JoinStatus.CodeRefused, CodeNotFound));
+                    return new JoinResult(JoinStatus.CodeRefused, CodeNotFound);
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                    return await FailedAsync(wasOn, new JoinResult(JoinStatus.TooManyTries, "Too many codes were tried. Wait a minute and try again."));
+                    return new JoinResult(JoinStatus.TooManyTries, "Too many codes were tried. Wait a minute and try again.");
                 if (!response.IsSuccessStatusCode)
-                    return await FailedAsync(wasOn, new JoinResult(JoinStatus.Refused, await ReadErrorAsync(response, cancellationToken)));
+                    return new JoinResult(JoinStatus.Refused, await ReadErrorAsync(response, cancellationToken));
 
                 var answer = await response.Content.ReadFromJsonAsync(FleetJoinJsonContext.Default.JoinAnswer, cancellationToken);
                 if (answer is null)
-                    return await FailedAsync(wasOn, new JoinResult(JoinStatus.Refused, $"{address} didn't answer like a Fleet."));
+                    return new JoinResult(JoinStatus.Refused, $"{address} didn't answer like a Fleet.");
 
-                // A Fleet that keeps no list won't bring this machine to the others, so this one needn't take part either.
-                if (!answer.YourFleet)
-                    await SetYourFleetAsync(wasOn);
+                // A Fleet on an older build keeps no list (it answers false), so it won't bring this machine to the others.
                 var listed = answer.YourFleet && await WaitForListedAsync(answer.MachineId, cancellationToken);
                 return new JoinResult(JoinStatus.Joined, "", answer.MachineId, answer.Name, listed, answer.YourFleet);
             }
@@ -192,17 +187,11 @@ public sealed class FleetJoin(
             }
         }
 
-        return await FailedAsync(wasOn, new JoinResult(JoinStatus.Unreachable,
-            $"{unreachable} Check that the Fleet you copied the line from is on, and that this machine is on its Tailscale or home network."));
+        return new JoinResult(JoinStatus.Unreachable,
+            $"{unreachable} Check that the Fleet you copied the line from is on, and that this machine is on its Tailscale or home network.");
     }
 
     public const string JoinHttpClientName = "FleetJoin";
-
-    private async Task<JoinResult> FailedAsync(bool wasOn, JoinResult result)
-    {
-        await SetYourFleetAsync(wasOn);
-        return result;
-    }
 
     private async Task<bool> WaitForListedAsync(string machineId, CancellationToken cancellationToken)
     {
@@ -215,23 +204,6 @@ public sealed class FleetJoin(
                 return false;
             await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
         }
-    }
-
-    private async Task<bool> IsYourFleetOnAsync()
-    {
-        using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<YourFleetFeature>().IsEnabledAsync();
-    }
-
-    /// <summary>Sets Your Fleet; returns what it was.</summary>
-    private async Task<bool> SetYourFleetAsync(bool on)
-    {
-        using var scope = scopes.CreateScope();
-        var preferences = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
-        var was = string.Equals(await preferences.GetAsync(YourFleet.PreferenceKey), "true", StringComparison.OrdinalIgnoreCase);
-        if (was != on)
-            await preferences.SetAsync(YourFleet.PreferenceKey, on ? "true" : "false");
-        return was;
     }
 
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)

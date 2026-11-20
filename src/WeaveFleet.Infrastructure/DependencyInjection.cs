@@ -337,7 +337,7 @@ public static class DependencyInjection
             .RemoveAllLoggers()
             .AddLogger<WeaveFleet.Infrastructure.Machines.MachineProbeRequestLogger>();
         services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
-        // Your Fleet (Labs): every machine keeps the list, and machines are introduced to each other.
+        // Your Fleet: every machine keeps the list, and machines are introduced to each other.
         services.AddSingleton<WeaveFleet.Application.Machines.FleetRemovals>();
         services.AddSingleton<WeaveFleet.Application.Machines.FleetRoster>();
         // A machine joining with a one-time code from its terminal (install.sh --join). The inviting machine contacts the
@@ -447,7 +447,6 @@ public static class DependencyInjection
         // Jobs: one queue that free seats on any machine pick up. The dispatcher idles unless a user has jobs and has them on.
         services.AddSingleton<IJobRepository, JobRepository>();
         services.AddScoped<WeaveFleet.Application.Jobs.JobsFeature>();
-        services.AddScoped<WeaveFleet.Application.Machines.YourFleetFeature>();
         services.AddSingleton<WeaveFleet.Application.Jobs.JobMachineCache>();
         services.AddScoped<WeaveFleet.Application.Jobs.IJobMachines, WeaveFleet.Application.Jobs.JobMachines>();
         services.AddScoped<WeaveFleet.Application.Jobs.IJobSessions, WeaveFleet.Application.Jobs.JobSessions>();

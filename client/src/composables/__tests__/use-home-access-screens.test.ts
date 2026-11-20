@@ -1,4 +1,3 @@
-import { shallowRef } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PairedDevice } from "@/lib/devices-api";
 
@@ -19,18 +18,9 @@ describe("useHomeAccess: the phones and browsers", () => {
     listFleetScreens.mockReset();
   });
 
-  it("lists only this machine's devices with Your Fleet off, and never asks the others", async () => {
-    const access = useHomeAccess(shallowRef(false));
-    await access.refreshDevices();
-
-    expect(listFleetScreens).not.toHaveBeenCalled();
-    expect(access.screens.value.map((device) => device.id)).toEqual(["d1"]);
-    expect(access.notAnswering.value).toEqual([]);
-  });
-
-  it("lists the whole Fleet with Your Fleet on, and keeps the machines that didn't answer", async () => {
+  it("lists the whole Fleet, and keeps the machines that didn't answer", async () => {
     listFleetScreens.mockResolvedValue({ screens: [fleetWide], notAnswering: [{ id: "m2", name: "workbench" }] });
-    const access = useHomeAccess(shallowRef(true));
+    const access = useHomeAccess();
     await access.refreshDevices();
 
     expect(access.screens.value).toEqual([fleetWide]);
@@ -39,8 +29,8 @@ describe("useHomeAccess: the phones and browsers", () => {
   });
 
   it("falls back to this machine's own list when the Fleet-wide list can't be had", async () => {
-    listFleetScreens.mockRejectedValue(new Error("Your Fleet is off on this machine."));
-    const access = useHomeAccess(shallowRef(true));
+    listFleetScreens.mockRejectedValue(new Error("An older Fleet has no Fleet-wide list."));
+    const access = useHomeAccess();
     await access.refreshDevices();
 
     expect(access.screens.value.map((device) => device.id)).toEqual(["d1"]);

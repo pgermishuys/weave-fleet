@@ -81,18 +81,15 @@ describe("useMachineGrants", () => {
 
 describe("useMachineGrants on a screen that isn't a paired phone (Your Fleet)", () => {
   let grantBodies: string[];
-  let yourFleet: string;
   let removedAtHome = false;
 
   beforeEach(async () => {
     await clearCredentials();
     localStorage.clear();
     grantBodies = [];
-    yourFleet = "true";
     removedAtHome = false;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
       const url = String(input);
-      if (url === "/api/preferences") return new Response(JSON.stringify({ YourFleet: yourFleet }), { status: 200 });
       if (url === "/api/machine") return new Response(JSON.stringify({ id: "home", name: "hangar" }), { status: 200 });
       const machineId = /\/api\/machines\/([^/]+)\/device-grant/.exec(url)?.[1];
       if (machineId) {
@@ -139,13 +136,5 @@ describe("useMachineGrants on a screen that isn't a paired phone (Your Fleet)", 
     expect(grants.problems.value.falcon).toBe("This device was removed from your Fleet.");
     expect(await grants.renewGrant("falcon")).toBeNull();
     expect(grantBodies).toHaveLength(1);
-  });
-
-  it("does nothing with Your Fleet off", async () => {
-    yourFleet = "false";
-    const grants = useMachineGrants();
-
-    expect(await grants.ensureGrants([falcon])).toBeNull();
-    expect(grantBodies).toEqual([]);
   });
 });

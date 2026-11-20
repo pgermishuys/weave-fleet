@@ -6,7 +6,7 @@ import { machineApi, type MachineApi, type SessionListItem } from "~/fleet/api";
 import { MachineHub, type ConnectionState } from "~/fleet/hub";
 import { phoneTailnet, type PhoneTailnet } from "@fleet/lib/phone-reach";
 import type { Machine, MachinesStore } from "~/fleet/machines-core";
-import { isYourFleetOn, machineFromGrant, machinesToJoin, Roster, type JoinedNotice, type WantingNotice } from "~/fleet/your-fleet-core";
+import { machineFromGrant, machinesToJoin, Roster, type JoinedNotice, type WantingNotice } from "~/fleet/your-fleet-core";
 import {
   adoptOrder, betterAddress, canUse, isBest, learnAddresses, orderForHome, pickAddress, probeFor, recordOutcomes, RECHECK_MS,
   reorderAddresses, seedAddresses, type MachineAddress, type Probe, type ProbeOutcome,
@@ -254,7 +254,7 @@ export class FleetManager {
   // ─── Your Fleet (Labs) ────────────────────────────────────────────────────
 
   /**
-   * With Your Fleet on at a machine the phone paired with, asks it for the phone's own key on every other machine in
+   * At a machine the phone paired with, asks it for the phone's own key on every other machine in
    * its list, so each is reached directly and none has to be paired. A machine that is new to the list since the last
    * time is announced (`joined`). One pass per machine at a time. A key this machine gave out that the other machine
    * turned away is asked for again.
@@ -264,7 +264,6 @@ export class FleetManager {
     if (home.via || conn.hub.state !== "connected" || this.joining.has(home.machineId)) return;
     this.joining.add(home.machineId);
     try {
-      if (!isYourFleetOn(await conn.api.preferences().catch(() => null))) return;
       const { machines: listed } = await conn.api.machines();
       await this.lookForWaiting(conn, listed.map((m) => m.id));
       const fresh = await this.roster.see([home.machineId, ...listed.map((m) => m.id)]);

@@ -27,7 +27,7 @@ public sealed record Device
     public string? CreatedBy { get; init; }
 
     /// <summary>
-    /// What this key was made for (Your Fleet, Labs): the machine whose key it is, or the phone or screen it is a grant
+    /// What this key was made for (Your Fleet): the machine whose key it is, or the phone or screen it is a grant
     /// for. Forgetting that machine or removing that phone revokes it. Null when the owner or a pairing code made it.
     /// </summary>
     public string? MadeFor { get; init; }

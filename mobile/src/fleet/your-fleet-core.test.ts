@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { KeyValueStorage, Machine } from "./machines-core";
-import { isYourFleetOn, joinedText, machineFromGrant, machinesToJoin, Roster } from "./your-fleet-core";
+import { joinedText, machineFromGrant, machinesToJoin, Roster } from "./your-fleet-core";
 
 function memory(): KeyValueStorage {
   const data = new Map<string, string>();
@@ -63,7 +63,4 @@ describe("Roster", () => {
 
 test("words", () => {
   expect(joinedText({ machineName: "atlas" })).toBe("atlas joined your Fleet");
-  expect(isYourFleetOn({ YourFleet: "true" })).toBe(true);
-  expect(isYourFleetOn({ YourFleet: "false" })).toBe(false);
-  expect(isYourFleetOn(null)).toBe(false);
 });

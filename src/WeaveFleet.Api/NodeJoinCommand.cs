@@ -83,7 +83,7 @@ public static class NodeJoinCommand
         else if (keepsList)
             await output.WriteLineAsync($"  {name} is telling the rest of your Fleet about this machine. It shows up everywhere in a moment.");
         else
-            await output.WriteLineAsync($"  Your Fleet is off on {name}, so only {name} lists this machine. Turn it on in Settings → Labs there to share it with the rest.");
+            await output.WriteLineAsync($"  {name} is an older Fleet that keeps no list, so only {name} lists this machine. Update {name} to share it with the rest.");
         return 0;
     }
 

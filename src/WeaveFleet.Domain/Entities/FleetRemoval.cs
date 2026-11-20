@@ -1,7 +1,7 @@
 namespace WeaveFleet.Domain.Entities;
 
 /// <summary>
-/// Something that was forgotten or removed from the whole Fleet (Your Fleet, Labs), kept so a machine that was off, or
+/// Something that was forgotten or removed from the whole Fleet (Your Fleet), kept so a machine that was off, or
 /// holds a stale list, can't bring it back.
 /// </summary>
 /// <param name="Id">A machine's id, or a phone's or screen's id (<c>screen:{id}</c>).</param>

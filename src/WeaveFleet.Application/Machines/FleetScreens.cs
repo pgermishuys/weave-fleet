@@ -33,7 +33,7 @@ public sealed record FleetScreen(
 public sealed record FleetScreenList(IReadOnlyList<FleetScreen> Screens, IReadOnlyList<MachineRef> NotAnswering);
 
 /// <summary>
-/// Your Fleet (Labs): the phones and browsers of the whole Fleet in one list. A phone or browser has one identity across
+/// Your Fleet: the phones and browsers of the whole Fleet in one list. A phone or browser has one identity across
 /// the Fleet: its device on the machine it paired with (or none, for a browser) and the keys other machines made for it
 /// (<c>devices.made_for</c>). This machine asks every machine in its list for the devices it holds, then groups them by that
 /// identity, so each shows once: its own name and platform, the machine it connected through, when it was last seen on any.

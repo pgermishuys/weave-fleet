@@ -1,10 +1,8 @@
-import { onScopeDispose, watch } from "vue";
+import { onScopeDispose } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { Radar } from "lucide-vue-next";
-import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import { useMachinesStore } from "@/stores/machines";
 import { useNoticesStore } from "@/stores/notices";
-import { usePreferencesStore } from "@/stores/preferences";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 
 /** How often a screen looks for machines that want to join. One look listens for a couple of seconds, so it isn't often. */
@@ -14,7 +12,7 @@ export const JOIN_LOOK_EVERY_MS = 20_000;
 export const joinNoticeId = (machineId: string): string => `wants-to-join:${machineId}`;
 
 /**
- * With Your Fleet on (Settings → Labs), says "atlas wants to join your Fleet" on this screen while atlas is waiting (it
+ * Says "atlas wants to join your Fleet" on this screen while atlas is waiting (it
  * ran `fleet node pair` or `fleet node up`). Every connected screen looks on its own, so every one says it. Adding goes
  * through Add a machine → Found, where the code is checked: the notice only gets you there. It goes away when the
  * machine is added or stops waiting.
@@ -22,10 +20,8 @@ export const joinNoticeId = (machineId: string): string => `wants-to-join:${mach
 export function useJoinPrompt(): void {
   const notices = useNoticesStore();
   const machines = useMachinesStore();
-  const preferences = usePreferencesStore();
   const router = useRouter();
   const { openAddMachine } = useSettingsNav();
-  preferences.ensureLoaded();
 
   const announced = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -79,14 +75,7 @@ export function useJoinPrompt(): void {
     announced.clear();
   }
 
-  watch(
-    () => [preferences.hasFetched, preferences.get(YOUR_FLEET_PREFERENCE_KEY, "false")] as const,
-    ([fetched, value]) => {
-      if (fetched && value === "true") start();
-      else stop();
-    },
-    { immediate: true },
-  );
+  start();
 
   onScopeDispose(() => {
     stopped = true;

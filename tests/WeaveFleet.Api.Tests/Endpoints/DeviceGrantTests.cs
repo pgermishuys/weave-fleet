@@ -188,15 +188,14 @@ public sealed class DeviceGrantTests
         (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().ListGrantsForMachineAsync(MachineId(falcon))).ShouldBeEmpty();
     }
 
-    // ---- Your Fleet (Labs): a screen signed in as the owner gets its own key ----
+    // ---- Your Fleet: a screen signed in as the owner gets its own key ----
 
     [Fact]
-    public async Task With_Your_Fleet_on_an_owner_screen_gets_its_own_token_on_another_machine()
+    public async Task An_owner_screen_gets_its_own_token_on_another_machine()
     {
         await using var falcon = Fleet();
         await using var hangar = Fleet(routeTo: falcon);
         await ListAsync(hangar, falcon);
-        await TurnOnYourFleetAsync(hangar);
         using var screen = Client(hangar, MachineToken(hangar));
 
         var granted = await screen.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "s-1234", name = "Chrome on a laptop" });
@@ -221,7 +220,6 @@ public sealed class DeviceGrantTests
         await using var falcon = Fleet();
         await using var hangar = Fleet(routeTo: falcon);
         await ListAsync(hangar, falcon);
-        await TurnOnYourFleetAsync(hangar);
         using var screen = Client(hangar, MachineToken(hangar));
         async Task<string> AskAsync(string screenId) =>
             (await (await screen.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId })).ReadSuccessAsync()).GetProperty("token").GetString()!;
@@ -241,7 +239,6 @@ public sealed class DeviceGrantTests
         await using var falcon = Fleet();
         await using var hangar = Fleet(routeTo: falcon);
         await ListAsync(hangar, falcon);
-        await TurnOnYourFleetAsync(hangar);
         using var owner = Client(hangar, MachineToken(hangar));
         var falconToken = (await (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "one" })).ReadSuccessAsync()).GetProperty("token").GetString()!;
 
@@ -251,35 +248,29 @@ public sealed class DeviceGrantTests
     }
 
     [Fact]
-    public async Task With_Your_Fleet_off_an_owner_screen_gets_no_key_and_a_bad_screen_id_is_refused()
+    public async Task A_bad_screen_id_is_refused()
     {
         await using var falcon = Fleet();
         await using var hangar = Fleet(routeTo: falcon);
         await ListAsync(hangar, falcon);
         using var owner = Client(hangar, MachineToken(hangar));
 
-        (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "s-1" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
-
-        await TurnOnYourFleetAsync(hangar);
         (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "has spaces!" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await owner.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
     }
 
-    // ---- The native phone app: reads the switch and the list, then asks for a key for every machine it lacks ----
+    // ---- The native phone app: reads the list, then asks for a key for every machine it lacks ----
 
     [Fact]
-    public async Task The_phone_app_reads_the_switch_and_the_list_without_tokens_then_gets_keys_for_each_machine()
+    public async Task The_phone_app_reads_the_list_without_tokens_then_gets_keys_for_each_machine()
     {
         await using var falcon = Fleet();
         await using var hangar = Fleet(routeTo: falcon);
         await ListAsync(hangar, falcon);
-        await TurnOnYourFleetAsync(hangar);
         var (_, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
         using var phone = Client(hangar, phoneToken);
 
-        (await (await phone.GetAsync("/api/preferences")).ReadSuccessAsync()).GetProperty(YourFleet.PreferenceKey).GetString().ShouldBe("true");
         var list = (await (await phone.GetAsync("/api/machines")).ReadSuccessAsync()).GetProperty("machines");
         var listed = list.EnumerateArray().Single();
         listed.GetProperty("id").GetString().ShouldBe(MachineId(falcon));
@@ -301,7 +292,6 @@ public sealed class DeviceGrantTests
         var (_, peerToken) = await falcon.Services.GetRequiredService<DeviceTokenService>().IssueAsync("hangar", "other", kind: DeviceKinds.Machine);
         await hangar.Services.GetRequiredService<RemoteMachineService>().ImportAsync(
             [new ImportedMachine(MachineId(falcon), "falcon", "https://falcon.test", peerToken, "linux", null)]);
-        await TurnOnYourFleetAsync(hangar);
         using var owner = Client(hangar, MachineToken(hangar));
         var falconToken = (await (await owner.PostAsJsonAsync($"/api/machines/{MachineId(falcon)}/device-grant", new { screenId = "one" })).ReadSuccessAsync()).GetProperty("token").GetString()!;
         (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -326,12 +316,6 @@ public sealed class DeviceGrantTests
         var made = await peer.PostAsJsonAsync("/api/machine/devices", new { name = "Chrome via hangar", platform = "other", pairedVia = "hangar-id" });
         var madeId = (await made.ReadSuccessAsync()).GetProperty("deviceId").GetString();
         (await peer.DeleteAsync($"/api/machine/devices/{madeId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
-    }
-
-    private static async Task TurnOnYourFleetAsync(WebApplicationFactory<Program> factory)
-    {
-        using var scope = factory.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(YourFleet.PreferenceKey, "true");
     }
 
     private static async Task ListAsync(WebApplicationFactory<Program> home, WebApplicationFactory<Program> other) =>

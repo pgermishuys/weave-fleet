@@ -36,7 +36,7 @@ public interface IRemoteMachineRepository
 
     Task DeleteGrantAsync(string deviceId, string machineId);
 
-    /// <summary>What was forgotten or removed from the whole Fleet (Your Fleet, Labs).</summary>
+    /// <summary>What was forgotten or removed from the whole Fleet (Your Fleet).</summary>
     Task<IReadOnlyList<FleetRemoval>> ListRemovalsAsync();
 
     Task<FleetRemoval?> GetRemovalAsync(string id);

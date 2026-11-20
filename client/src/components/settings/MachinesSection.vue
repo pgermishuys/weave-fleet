@@ -16,9 +16,6 @@ import FoundMachinesCard from "@/components/settings/FoundMachinesCard.vue";
 import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
 import MachinePage from "@/components/settings/MachinePage.vue";
 import NewServerCard from "@/components/settings/NewServerCard.vue";
-import { usePreferenceSwitch } from "@/composables/use-preference-switch";
-import { usePreferencesStore } from "@/stores/preferences";
-import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { diagnosisOf, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
@@ -44,15 +41,10 @@ const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2
 
 const machines = useMachinesStore();
 const { entries, home } = storeToRefs(machines);
-// Your Fleet (Labs): removing a phone reaches every machine, and the Fleet-wide parts show.
-usePreferencesStore().ensureLoaded();
-const { enabled: yourFleetOn } = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
 const page = useMachinePage();
 const lines = useMachineLines();
 const { stateLine, capabilityLine, harnessVersions, location } = lines;
-const homeAccess = useHomeAccess(yourFleetOn);
-// The switch may load after the list: ask again for the other kind of list when it changes.
-watch(yourFleetOn, () => { if (homeAccess.access.value) void homeAccess.refreshDevices(); });
+const homeAccess = useHomeAccess();
 const { access, isDevice, loaded: accessLoaded, error: accessError, screens, notAnswering } = homeAccess;
 const openEntry = computed(() => entries.value.find((entry) => entry.key === page.openKey.value) ?? null);
 
@@ -549,7 +541,7 @@ onUnmounted(() => {
     <SettingGroup
       id="phones"
       title="Phones and browsers"
-      :hint="yourFleetOn ? 'Every phone and browser that has keys, wherever it connected. Remove one and it loses them on every machine.' : 'The phones and browsers that have keys on this machine.'"
+      hint="Every phone and browser that has keys, wherever it connected. Remove one and it loses them on every machine."
       data-testid="machine-phones-group"
     >
       <ErrorNote
@@ -585,7 +577,6 @@ onUnmounted(() => {
         <DevicesList
           :devices="screens"
           :this-computer="thisComputer"
-          :everywhere="yourFleetOn"
           :not-answering="notAnswering.map((machine) => machine.name)"
           hide-this-machine
           @removed="homeAccess.refreshDevices()"

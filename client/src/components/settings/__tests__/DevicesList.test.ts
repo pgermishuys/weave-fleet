@@ -40,18 +40,18 @@ describe("DevicesList: Remove", () => {
     await flushPromises();
 
     expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({
-      title: "Remove Robin's phone?",
-      body: "It loses access to this machine at once. Other devices aren't affected.",
-      confirmLabel: "Remove device",
+      title: "Remove Robin's phone on every machine in your Fleet?",
+      body: expect.stringContaining("loses its keys on every machine"),
+      confirmLabel: "Remove Robin's phone",
       destructive: true,
     }));
     expect(removeDevice).toHaveBeenCalledWith("d1");
     expect(wrapper.emitted("removed")).toEqual([["d1"]]);
   });
 
-  it("says it reaches every machine when Your Fleet is on, for a phone but not for a machine's key", async () => {
+  it("says it reaches every machine, for a phone but not for a machine's key", async () => {
     confirmAction.mockResolvedValue(false);
-    const wrapper = mount(DevicesList, { props: { devices: [phone, studio], thisComputer: "x", everywhere: true } });
+    const wrapper = mount(DevicesList, { props: { devices: [phone, studio], thisComputer: "x" } });
 
     await wrapper.get("[data-testid='remove-device-d1']").trigger("click");
     await flushPromises();
@@ -91,7 +91,7 @@ describe("DevicesList: Remove", () => {
   it("lists a phone of the whole Fleet with the machine it connected through, and removes it by its Fleet-wide id", async () => {
     confirmAction.mockResolvedValueOnce(true);
     const iphone: PairedDevice = { ...phone, id: "screen:abc", name: "Alex's iPhone", throughName: "atlas", fleetWide: true };
-    const wrapper = mount(DevicesList, { props: { devices: [iphone], thisComputer: "x", everywhere: true, hideThisMachine: true } });
+    const wrapper = mount(DevicesList, { props: { devices: [iphone], thisComputer: "x", hideThisMachine: true } });
 
     expect(wrapper.get("[data-testid='device-row']").text()).toContain("Connected through atlas, added");
 

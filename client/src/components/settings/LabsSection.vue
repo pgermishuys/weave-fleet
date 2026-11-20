@@ -12,7 +12,6 @@ import { MEMORY_PREFERENCE_KEY, MEMORY_SEARCH_PREFERENCE_KEY } from "@/lib/agent
 import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { TERMINAL_SESSIONS_PREFERENCE_KEY } from "@/lib/terminal-sessions";
-import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -24,7 +23,6 @@ preferencesStore.ensureLoaded();
 
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
-const yourFleet = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
 const terminalSessions = usePreferenceSwitch(TERMINAL_SESSIONS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
 const memorySearch = usePreferenceSwitch(MEMORY_SEARCH_PREFERENCE_KEY);
@@ -79,28 +77,6 @@ function openRoute(path: string): void {
             aria-label="Keep every machine live"
             data-testid="live-machines-switch"
             @click="liveMachines.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        id="your-fleet"
-        title="Your Fleet"
-        summary="Connect a phone or browser to one machine and it reaches the others you add there."
-        :adds="addsWhenOn(yourFleet.enabled.value, 'Keys for other machines on a browser or phone')"
-        @open="setActiveSection('machines')"
-      >
-        <template #more>
-          A machine keeps the list of the machines you add to it. A browser or phone connected to it gets its own key for each of them, so you don't pair every machine again. Only this machine's list is used for now; copying it between machines comes later.
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="yourFleet.enabled.value"
-            :saving="yourFleet.saving.value"
-            :disabled="preferencesStore.isLoading || yourFleet.saving.value"
-            aria-label="Enable Your Fleet"
-            data-testid="your-fleet-switch"
-            @click="yourFleet.toggle"
           />
         </template>
       </SettingRow>

@@ -6,9 +6,9 @@ using WeaveFleet.Application.Machines;
 namespace WeaveFleet.Infrastructure.Machines;
 
 /// <summary>
-/// Runs <see cref="FleetRoster"/> in the background (Your Fleet, Labs): when this machine's list changes it compares
+/// Runs <see cref="FleetRoster"/> in the background (Your Fleet): when this machine's list changes it compares
 /// lists with every machine in it, and when a machine answers again it compares lists with that one, so a machine that
-/// was off catches up. Does nothing with the Labs switch off. Local mode only.
+/// was off catches up. Local mode only.
 /// </summary>
 public sealed partial class FleetRosterSync(
     RemoteMachineService machines,

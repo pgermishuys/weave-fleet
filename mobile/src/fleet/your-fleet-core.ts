@@ -1,10 +1,7 @@
-// "Your Fleet" (Labs) on the phone: the machines in the Fleet the phone is paired with, and the keys it asks for.
+// "Your Fleet" on the phone: the machines in the Fleet the phone is paired with, and the keys it asks for.
 // Pure: the storage comes in from outside, and so does every call to a machine.
 import type { Machine, KeyValueStorage } from "~/fleet/machines-core";
 import { canUse, kindOf, seedAddresses, type MachineAddress } from "~/fleet/routes-core";
-
-/** The preference on a machine that turns Your Fleet on (Settings → Labs). */
-export const YOUR_FLEET_PREFERENCE = "YourFleet";
 
 /** A machine in a paired machine's list, as `GET /api/machines` gives it to a phone (no token). */
 export interface ListedMachine {
@@ -37,10 +34,6 @@ export interface WantingNotice {
 export const wantingText = (notice: Pick<WantingNotice, "machineName">) => `${notice.machineName} wants to join your Fleet`;
 
 export const joinedText = (notice: Pick<JoinedNotice, "machineName">) => `${notice.machineName} joined your Fleet`;
-
-export function isYourFleetOn(preferences: Record<string, string> | undefined | null): boolean {
-  return preferences?.[YOUR_FLEET_PREFERENCE] === "true";
-}
 
 /**
  * The machines in `listed` the phone has no key for. A machine the phone paired with itself, home, and one the person

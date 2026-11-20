@@ -114,6 +114,9 @@ Each piece is one PR in its own fresh session. Sizes are rough. "J" numbers are 
 - [x] **10. Phone first (J11).** (#1085; website: pgermishuys/weave-website#38) The phone app's "I don't have Fleet yet" with "Send me the link" / "Share the line".
   The website download page "Where will Fleet run?" lives in the weave-website repo: in a weave-website PR (to follow).
   S–M.
+- [x] **11. Your Fleet is always on (user, 20 Nov 2026: "turn it on for everyone").** No Labs switch, no `YourFleet` preference check on the server,
+  the web client or the phone app; a stored `YourFleet` preference is ignored. An install that had it off and added machines the old way
+  keeps them and fills in its roster on start (live-checked from a build of main). S.
 
 Later list: native system push (APNs/FCM) for the phone app's "joined your Fleet" and "wants to join" notices; today they're a banner inside the app (user, 19 Nov 2026); relaying through another machine (decision 6B); challenge-response before sending a key to a fallback
 address (already on the list).

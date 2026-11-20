@@ -44,7 +44,7 @@ public sealed record RemoteMachine
     /// </summary>
     public string? SshDestination { get; init; }
 
-    /// <summary>The id of the machine that introduced this one when your Fleet copied its list here (Your Fleet, Labs); null when it was added here directly.</summary>
+    /// <summary>The id of the machine that introduced this one when your Fleet copied its list here (Your Fleet); null when it was added here directly.</summary>
     public string? IntroducedBy { get; init; }
 }
 
