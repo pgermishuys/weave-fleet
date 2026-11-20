@@ -106,6 +106,19 @@ public sealed class OpenCode2PluginNoticeTests
         history.ShouldHaveSingleItem().Parts.OfType<TextPart>().ShouldHaveSingleItem().Text.ShouldStartWith("<subagent ");
     }
 
+    [Fact]
+    public void A_background_result_notice_in_the_newer_shape_shows_whole_too()
+    {
+        // Newer V2 wraps every kind in <background-result kind=…>; the metadata still says what it is.
+        var metadata = JsonDocument.Parse("""{"source":"shell","shellID":"sh_1","state":"completed"}""").RootElement.Clone();
+        var text = "<background-result kind=\"shell\" id=\"sh_1\" state=\"completed\" command=\"ls\">\nout\n</background-result>";
+        var history = OpenCode2History.ToHarnessMessages([SyntheticMessage("ls") with { Text = text, Metadata = metadata }]);
+
+        var message = history.ShouldHaveSingleItem();
+        message.Role.ShouldBe(OpenCode2Mapper.NoticeRole);
+        message.Parts.OfType<TextPart>().ShouldHaveSingleItem().Text.ShouldBe(text);
+    }
+
     private static OpenCode2Message SyntheticMessage(string? description) => new()
     {
         Id = Note,

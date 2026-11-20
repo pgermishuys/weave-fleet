@@ -2,7 +2,7 @@ import { computed, type Ref } from "vue";
 import { storeToRefs } from "pinia";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { parseSessionReferences, type SessionReference } from "@/lib/session-references";
-import { parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
+import { looksLikeBackgroundNotice, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
 import type { RunningWorkItem } from "@/lib/running-work";
 import { compactionOf, foldCompactionSummaries, type CompactionView } from "@/lib/compaction";
 import { modelDisplayName } from "@/lib/agent-model-choice";
@@ -220,7 +220,7 @@ export function useActivityMessages(options: ActivityMessagesOptions) {
 
     // A notice of background work: how it ended can change after it arrives (Fleet stopped it).
     const body = messageBody(message);
-    if (body.startsWith("<shell ") || body.startsWith("<subagent ")) {
+    if (looksLikeBackgroundNotice(body)) {
       inputs.push(finished);
     }
 
