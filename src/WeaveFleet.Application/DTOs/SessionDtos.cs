@@ -88,6 +88,9 @@ public sealed record SessionListResponse(
 
     /// <summary>When the session's last turn stopped on a failure and no turn has started since, or null: the row says so.</summary>
     public WeaveFleet.Application.Sessions.SessionFailureView? Failed { get; init; }
+
+    /// <summary>A terminal has the session open now (its <c>fleet mcp</c> is reporting in): the list's "In terminal" chip.</summary>
+    public bool InTerminal { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>

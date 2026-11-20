@@ -239,6 +239,47 @@ public sealed class MessageRepository : IMessageRepository
         return result > 0;
     }
 
+    public async Task ClaimTranscriptEntriesAsync(string sessionId, IReadOnlyCollection<string> entryUuids)
+    {
+        if (entryUuids.Count == 0)
+            return;
+
+        using var conn = _connectionFactory.CreateConnection();
+        foreach (var uuid in entryUuids)
+        {
+            await conn.ExecuteNonQueryAsync(
+                """
+                INSERT OR IGNORE INTO transcript_claims (session_id, entry_uuid)
+                SELECT @SessionId, @EntryUuid FROM sessions WHERE id = @SessionId AND user_id = @UserId
+                """,
+                cmd =>
+                {
+                    cmd.AddParameter("SessionId", sessionId);
+                    cmd.AddParameter("EntryUuid", uuid);
+                    cmd.AddParameter("UserId", _userContext.UserId);
+                });
+        }
+    }
+
+    public async Task<IReadOnlySet<string>> GetClaimedTranscriptEntriesAsync(string sessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        var rows = await conn.QueryAsync(
+            """
+            SELECT c.entry_uuid
+            FROM transcript_claims c
+            INNER JOIN sessions s ON s.id = c.session_id
+            WHERE c.session_id = @SessionId AND s.user_id = @UserId
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            r => r.GetString(0));
+        return rows.ToHashSet(StringComparer.Ordinal);
+    }
+
     public async Task<PersistedMessage?> GetByIdAsync(string id, string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();

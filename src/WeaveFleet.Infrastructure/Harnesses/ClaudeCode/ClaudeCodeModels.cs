@@ -275,6 +275,9 @@ internal sealed record ClaudeCodeBackgroundTask
 /// </summary>
 internal sealed record ClaudeCodeAssistantMessage : ClaudeCodeStreamMessage
 {
+    /// <summary>The uuid of the line this is in the session's transcript.</summary>
+    [JsonPropertyName("uuid")] public string? Uuid { get; init; }
+
     [JsonPropertyName("message")] public ClaudeCodeApiMessage? Message { get; init; }
 
     /// <summary>The sub-agent call this message belongs to; null for the main conversation.</summary>
@@ -293,6 +296,9 @@ internal sealed record ClaudeCodeAssistantMessage : ClaudeCodeStreamMessage
 /// <summary>User turn — in a print-mode stream, this carries the results of the tools the assistant called.</summary>
 internal sealed record ClaudeCodeUserMessage : ClaudeCodeStreamMessage
 {
+    /// <summary>The uuid of the line this is in the session's transcript.</summary>
+    [JsonPropertyName("uuid")] public string? Uuid { get; init; }
+
     [JsonPropertyName("message")] public ClaudeCodeApiMessage? Message { get; init; }
 
     /// <summary>

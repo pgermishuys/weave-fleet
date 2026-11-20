@@ -808,6 +808,12 @@ export interface SessionBranchChanged extends EventCursorMetadata {
   payload: { workspaceId: string; branch: string };
 }
 
+/** A terminal opened a Claude Code session, or let go of it. Sent on the `sessions` topic. */
+export interface SessionTerminalChanged extends EventCursorMetadata {
+  type: "session_terminal";
+  payload: { sessionId: string; inTerminal: boolean };
+}
+
 /** A session's progress, with its todos and plan. Sent on the session's topic. */
 export interface ProgressUpdated extends EventCursorMetadata {
   type: "progress.updated";
@@ -996,6 +1002,7 @@ export type DomainEvent =
   | SessionProgressChanged
   | SessionCheckoutChanged
   | SessionBranchChanged
+  | SessionTerminalChanged
   | ProgressUpdated
   | SessionTokensCounted
   | SmartLinkUpdated

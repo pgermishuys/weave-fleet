@@ -82,10 +82,12 @@ internal static class ClaudeCodeInput
     /// <paramref name="notes"/> to the model (<see cref="PromptOptions.ModelNotes"/>) as text blocks of their own, so the
     /// question is read last; Fleet keeps the prompt without them. Other attachments are left out.
     /// </summary>
-    internal static string UserMessage(string text, IReadOnlyList<string>? notes = null, IReadOnlyList<HarnessAttachment>? images = null) => Line(json =>
+    internal static string UserMessage(string text, IReadOnlyList<string>? notes = null, IReadOnlyList<HarnessAttachment>? images = null, string? uuid = null) => Line(json =>
     {
         var pictures = images?.Where(image => ImageTypes.Contains(image.Mime) && image.Data.Length > 0).ToList() ?? [];
         json.WriteString("type", "user");
+        if (uuid is not null)
+            json.WriteString("uuid", uuid);
         json.WriteStartObject("message");
         json.WriteString("role", "user");
         if (notes is not { Count: > 0 } && pictures.Count == 0)

@@ -112,6 +112,31 @@ function mountSessionItem(session: SessionListItem, active = false) {
 }
 
 describe("SessionItem", () => {
+  describe("a session from a terminal", () => {
+    it("shows the quiet In terminal chip while a terminal has it open", () => {
+      const wrapper = mountSessionItem(createSession({ harnessType: "claude-code", spawnKind: "terminal", inTerminal: true }));
+
+      expect(wrapper.get("[data-testid='session-terminal-chip']").text()).toBe("In terminal");
+      expect(wrapper.find("[data-testid='session-from-terminal']").exists()).toBe(false);
+    });
+
+    it("keeps a muted From terminal marker once the terminal has closed", () => {
+      const wrapper = mountSessionItem(createSession({
+        harnessType: "claude-code", spawnKind: "terminal", inTerminal: false, activityStatus: "idle", sessionStatus: "stopped",
+      }));
+
+      expect(wrapper.find("[data-testid='session-terminal-chip']").exists()).toBe(false);
+      expect(wrapper.get("[data-testid='session-from-terminal']").text()).toBe("From terminal");
+    });
+
+    it("shows neither on a session started in Fleet", () => {
+      const wrapper = mountSessionItem(createSession({ harnessType: "claude-code" }));
+
+      expect(wrapper.find("[data-testid='session-terminal-chip']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='session-from-terminal']").exists()).toBe(false);
+    });
+  });
+
   it("shows a progress ring and count instead of the status word while working", () => {
     const wrapper = mountSessionItem(createSession({
       progress: { sessionId: "session-1", kind: "todos", done: 3, total: 7, current: "Drop the indexes" },

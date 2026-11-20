@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.TerminalSessions;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -7,11 +8,25 @@ namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 public sealed partial class ClaudeCodeTranscripts(ILogger<ClaudeCodeTranscripts> logger) : ITerminalTranscripts
 {
     /// <inheritdoc />
-    public async Task<TerminalTranscript?> ReadAsync(string sessionId, string folder, string? path, CancellationToken ct)
-    {
-        var file = ClaudeTranscriptLocator.IsTranscriptOf(path, sessionId) && File.Exists(path)
+    public string? FileOf(string sessionId, string folder, string? path)
+        => ClaudeTranscriptLocator.IsTranscriptOf(path, sessionId) && File.Exists(path)
             ? path
             : ClaudeTranscriptLocator.Find(sessionId, folder);
+
+    /// <inheritdoc />
+    public IReadOnlyList<TerminalEvent> EventsOf(string fleetSessionId, HarnessMessage message)
+    {
+        var events = new List<HarnessEvent?> { ClaudeCodeMapper.CreateMessageUpdatedEvent(message, fleetSessionId) };
+        for (var i = 0; i < message.Parts.Count; i++)
+            events.Add(ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, fleetSessionId, message.Parts[i], i));
+
+        return [.. events.Where(e => e?.Payload is not null).Select(e => new TerminalEvent(e!.Type, e.Payload!.Value.GetRawText()))];
+    }
+
+    /// <inheritdoc />
+    public async Task<TerminalTranscript?> ReadAsync(string sessionId, string folder, string? path, CancellationToken ct)
+    {
+        var file = FileOf(sessionId, folder, path);
         if (file is null)
             return null;
 

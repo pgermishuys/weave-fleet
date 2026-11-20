@@ -108,6 +108,18 @@ public sealed class InMemoryMessageRepository : IMessageRepository
     public Task<bool> HasMessagesAsync(string sessionId)
         => Task.FromResult(_store.Values.Any(m => m.SessionId == sessionId));
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string SessionId, string Uuid), byte> _claims = new();
+
+    public Task ClaimTranscriptEntriesAsync(string sessionId, IReadOnlyCollection<string> entryUuids)
+    {
+        foreach (var uuid in entryUuids)
+            _claims[(sessionId, uuid)] = 0;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlySet<string>> GetClaimedTranscriptEntriesAsync(string sessionId)
+        => Task.FromResult<IReadOnlySet<string>>(_claims.Keys.Where(k => k.SessionId == sessionId).Select(k => k.Uuid).ToHashSet(StringComparer.Ordinal));
+
     public Task<PersistedMessage?> GetByIdAsync(string id, string sessionId)
     {
         if (GetByIdBehavior is not null)

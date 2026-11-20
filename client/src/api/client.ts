@@ -948,6 +948,8 @@ export interface SessionListItem {
   spawnKind?: string | null;
   /** When the user moved it out of the session it came from; it stands on its own since. */
   lineageDetachedAt?: string | null;
+  /** A terminal has the session open now (Claude Code started there): the row's "In terminal" chip. */
+  inTerminal?: boolean;
   /** Where it sits in the Pinned group above the projects (ascending); null when it isn't pinned. */
   pinOrder?: number | null;
 }

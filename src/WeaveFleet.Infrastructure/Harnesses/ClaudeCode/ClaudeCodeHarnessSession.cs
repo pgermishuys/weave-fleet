@@ -327,7 +327,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 //    model ahead of it.
                 _memoryNotes ??= options?.MemoryNotes;
                 var (wireText, notes) = WithSkills(text, options);
-                var line = ClaudeCodeInput.UserMessage(wireText, notes, options?.Attachments);
+                var entryUuid = Guid.NewGuid().ToString();
+                var line = ClaudeCodeInput.UserMessage(wireText, notes, options?.Attachments, entryUuid);
+                await ClaimTranscriptEntriesAsync(entryUuid).ConfigureAwait(false);
                 var process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
                 if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
                 {
@@ -384,7 +386,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         LogSendPrompt(_logger, InstanceId, null);
         var (wireText, notes) = WithSkills(text, options);
-        var line = ClaudeCodeInput.UserMessage(wireText, notes, options.Attachments);
+        var entryUuid = Guid.NewGuid().ToString();
+        var line = ClaudeCodeInput.UserMessage(wireText, notes, options.Attachments, entryUuid);
+        await ClaimTranscriptEntriesAsync(entryUuid).ConfigureAwait(false);
         if (!await process.WriteLineAsync(line, ct).ConfigureAwait(false))
             return false;
 
@@ -1524,6 +1528,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
                     JoinTurn(processManager);
                     await EndRetryAsync().ConfigureAwait(false);
+                    await ClaimTranscriptEntriesAsync(assistantMsg.Uuid).ConfigureAwait(false);
                     await AddAssistantBlocksAsync(_root, assistantMsg).ConfigureAwait(false);
 
                     if (assistantMsg.Message?.Model is not null)
@@ -1546,10 +1551,12 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     }
                     else if (ClaudeCodeMapper.ReadCompactionSummary(userMsg) is { } summary)
                     {
+                        await ClaimTranscriptEntriesAsync(userMsg.Uuid).ConfigureAwait(false);
                         await AddCompactionSummaryAsync(summary).ConfigureAwait(false);
                     }
                     else
                     {
+                        await ClaimTranscriptEntriesAsync(userMsg.Uuid).ConfigureAwait(false);
                         await ApplyToolResultsAsync(_root, userMsg).ConfigureAwait(false);
                     }
                 }
@@ -2456,6 +2463,28 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             // Silent failure — persistence must never crash the instance
             LogPersistFailed(_logger, sessionId, ex);
+        }
+    }
+
+    /// <summary>
+    /// Notes the transcript entries this session's own turns wrote, so a read of the transcript for turns typed in a
+    /// terminal (a session started there, then continued here) doesn't import them again.
+    /// </summary>
+    private async Task ClaimTranscriptEntriesAsync(string? entryUuid)
+    {
+        if (string.IsNullOrEmpty(entryUuid))
+            return;
+
+        try
+        {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
+            await repo.ClaimTranscriptEntriesAsync(_fleetSessionId, [entryUuid]).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogPersistFailed(_logger, _fleetSessionId, ex);
         }
     }
 

@@ -224,7 +224,7 @@ const SESSIONS_CACHE_KEY = "weave:machine-sessions";
 export function trimForCache(item: SessionListItem): SessionListItem {
   const {
     session, instanceId, sessionStatus, activityStatus, retentionStatus, parentSessionId, retryAttempt, projectId,
-    projectName, pinOrder, forkedFromSessionId, spawnedBySessionId, spawnKind, lineageDetachedAt, runningWorkCount,
+    projectName, pinOrder, forkedFromSessionId, spawnedBySessionId, spawnKind, lineageDetachedAt, runningWorkCount, inTerminal,
     workflowRunId,
   } = item;
   return {
@@ -243,6 +243,7 @@ export function trimForCache(item: SessionListItem): SessionListItem {
     spawnKind,
     lineageDetachedAt,
     runningWorkCount,
+    inTerminal,
     workflowRunId,
   } as SessionListItem;
 }
