@@ -25,7 +25,10 @@ internal sealed class PortaPtyProcess : IPtyProcess
     {
         try
         {
-            return await _connection.ReaderStream.ReadAsync(buffer, ct).ConfigureAwait(false);
+            // Porta.Pty's reader is a blocking read that ignores the token, and it only ends when every holder of the
+            // terminal's slave side has closed it (a background child outlives the shell). WaitAsync lets the caller
+            // stop waiting; the abandoned read ends when the connection is disposed.
+            return await _connection.ReaderStream.ReadAsync(buffer, ct).AsTask().WaitAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {

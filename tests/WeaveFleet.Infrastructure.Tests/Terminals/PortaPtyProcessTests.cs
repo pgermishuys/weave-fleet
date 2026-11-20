@@ -112,13 +112,32 @@ public sealed class PortaPtyProcessTests : IDisposable
         await shell.Process.Exited.WaitAsync(Timeout);
 
         var buffer = new byte[4096];
-        var sw = Stopwatch.StartNew();
-        while (await shell.Process.ReadAsync(buffer) > 0)
-            sw.Elapsed.ShouldBeLessThan(Timeout);
+        using var cts = new CancellationTokenSource(Timeout);
+        while (await shell.Process.ReadAsync(buffer, cts.Token) > 0) { }
 
         await shell.Process.WriteAsync("echo late\r"u8.ToArray());
         shell.Process.Resize(80, 24);
         shell.Process.Kill();
+    }
+
+    [Fact]
+    public async Task ReadAsync_StopsWaitingWhenCancelled_EvenIfABackgroundChildKeepsTheTerminalOpen()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        await using var shell = await Shell.StartAsync(_workDir, collect: false);
+        await shell.SendAsync("sleep 30 &\rexit\r");
+        await shell.Process.Exited.WaitAsync(Timeout);
+
+        var buffer = new byte[4096];
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var read = Task.Run(async () =>
+        {
+            while (await shell.Process.ReadAsync(buffer, cts.Token) > 0) { }
+        });
+
+        // Before the fix this read never returned: the test host hung until it was killed.
+        await Should.ThrowAsync<OperationCanceledException>(() => read.WaitAsync(Timeout));
     }
 
     [Fact]
