@@ -120,7 +120,10 @@ internal static class ClaudeTranscriptReader
 
         var messages = builder.Messages;
         var firstPrompt = messages.FirstOrDefault(m => m.Role == "user")?.TextContent;
-        return new TerminalTranscript(messages, title, Named(firstPrompt), folder, [.. unknown]);
+        return new TerminalTranscript(messages, title, Named(firstPrompt), folder, [.. unknown])
+        {
+            Entries = builder.Entries.ToDictionary(e => e.Key, e => (IReadOnlyList<string>)e.Value, StringComparer.Ordinal),
+        };
     }
 
     private static string? Named(string? text)
@@ -143,11 +146,29 @@ internal static class ClaudeTranscriptReader
 
         public IReadOnlyList<HarnessMessage> Messages => _messages;
 
+        /// <summary>The uuids of the transcript entries each message was made from, by message id.</summary>
+        public Dictionary<string, List<string>> Entries { get; } = new(StringComparer.Ordinal);
+
         public void Add(JsonElement entry)
         {
             if (Bool(entry, "isSidechain"))
                 return;
 
+            var before = _messages.Count;
+            AddEntry(entry);
+
+            // An entry that made no message of its own (a tool result, a further block of one reply) belongs to the last one.
+            if (String(entry, "uuid") is { } uuid && _messages.Count > 0)
+            {
+                var owner = _messages[before < _messages.Count ? before : ^1].Id;
+                if (!Entries.TryGetValue(owner, out var list))
+                    Entries[owner] = list = [];
+                list.Add(uuid);
+            }
+        }
+
+        private void AddEntry(JsonElement entry)
+        {
             switch (String(entry, "type"))
             {
                 case "user":

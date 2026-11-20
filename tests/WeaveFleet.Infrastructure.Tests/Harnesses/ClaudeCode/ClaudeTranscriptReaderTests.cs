@@ -30,6 +30,28 @@ public sealed class ClaudeTranscriptReaderTests
     }
 
     [Fact]
+    public void Each_message_says_which_transcript_entries_it_was_made_from()
+    {
+        var transcript = Read("tools.jsonl");
+
+        // Every entry that is part of the conversation belongs to exactly one message: its reply's lines and tool results
+        // are with the message they continue.
+        Assert.All(transcript.Messages, m => Assert.NotEmpty(transcript.Entries[m.Id]));
+        var all = transcript.Entries.Values.SelectMany(u => u).ToList();
+        Assert.Equal(all.Count, all.Distinct().Count());
+        Assert.True(transcript.Entries[transcript.Messages.First(m => m.Role == "assistant").Id].Count >= 1);
+    }
+
+    [Fact]
+    public void A_prompt_Fleet_sends_carries_the_uuid_it_chose_so_the_transcript_entry_can_be_recognised()
+    {
+        var line = System.Text.Json.JsonDocument.Parse(ClaudeCodeInput.UserMessage("hello", uuid: "5b0e2b0e-0000-4000-8000-000000000001")).RootElement;
+
+        Assert.Equal("5b0e2b0e-0000-4000-8000-000000000001", line.GetProperty("uuid").GetString());
+        Assert.False(System.Text.Json.JsonDocument.Parse(ClaudeCodeInput.UserMessage("hello")).RootElement.TryGetProperty("uuid", out _));
+    }
+
+    [Fact]
     public void A_line_cut_off_in_the_middle_of_a_write_is_skipped()
     {
         // plain.jsonl ends with half a line, as a transcript does while Claude Code is writing it.

@@ -22,6 +22,7 @@ import {
   PinOff,
   Plus,
   Repeat,
+  SquareTerminal,
   Sparkles,
   Trash2,
 } from "lucide-vue-next";
@@ -161,6 +162,9 @@ const {
 const sessionId = computed(() => props.session.session.id);
 const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
+/** Started in a terminal (and no terminal has it open now: the chip says so then). */
+const fromTerminal = computed(() => props.session.spawnKind === "terminal");
+
 const displayTitle = computed(() => props.label || plainTerminalText(props.session.session.title ?? "").trim() || "Untitled session");
 const now = useRelativeTime();
 const rowStatus = computed(() => sessionRowStatus(props.session, now.value, !props.machineNotAnswering));
@@ -750,10 +754,25 @@ function removeSessionFromStore(): void {
               data-testid="session-step-note"
             >{{ stepNote }}</span>
             <span
+              v-else-if="session.inTerminal"
+              class="session-terminal-chip"
+              title="A terminal has this session open"
+              data-testid="session-terminal-chip"
+            >
+              <SquareTerminal aria-hidden="true" />
+              In terminal
+            </span>
+            <span
               v-else-if="kindLabel"
               class="session-kind"
               data-testid="session-kind"
             >{{ kindLabel }}</span>
+            <span
+              v-else-if="fromTerminal && (!rowStatus.label || rowStatus.tone === 'quiet')"
+              class="session-kind"
+              :title="rowStatus.title ? `Started in a terminal. Updated ${rowStatus.title}` : 'Started in a terminal'"
+              data-testid="session-from-terminal"
+            >From terminal</span>
             <span
               v-else-if="rowStatus.label && !showProgressCount"
               class="session-meta"
@@ -1231,11 +1250,13 @@ function removeSessionFromStore(): void {
 
 .session-item-shell:hover .session-item--has-action .session-meta,
 .session-item-shell:hover .session-item--has-action .session-kind,
+.session-item-shell:hover .session-item--has-action .session-terminal-chip,
 .session-item-shell:hover .session-item--has-action .session-progress,
 .session-item-shell:hover .session-item--has-two-actions .pr-badge,
 .session-item-shell:hover .session-item--has-two-actions .session-running-chip,
 .session-item-shell:has(.session-row-action:focus-visible) .session-meta,
 .session-item-shell:has(.session-row-action:focus-visible) .session-kind,
+.session-item-shell:has(.session-row-action:focus-visible) .session-terminal-chip,
 .session-item-shell:has(.session-row-action:focus-visible) .session-progress {
   visibility: hidden;
 }
@@ -1331,6 +1352,27 @@ function removeSessionFromStore(): void {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* A terminal has the session open: quiet, in the row's meta colour (the session is still the user's to read here). */
+.session-terminal-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: color-mix(in srgb, var(--text) var(--row-meta), transparent);
+  font-size: 0.78571rem;
+  font-weight: 600;
+}
+
+.session-terminal-chip svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.25;
 }
 
 /* What the session's agent has running: subagents, background shells, monitors. */

@@ -6,6 +6,7 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.TerminalSessions;
@@ -27,10 +28,14 @@ public sealed partial class TerminalSessionService(
     ITerminalTranscripts transcripts,
     TerminalSessionPresence presence,
     IEventBroadcaster broadcaster,
+    SessionActivityWriteService activity,
     IUserContext user,
     ILogger<TerminalSessionService> logger) : ITerminalSessions
 {
     private const string HarnessType = "claude-code";
+
+    /// <summary>Raised on the <c>sessions</c> topic when a terminal opens a session or lets go of it.</summary>
+    public const string SessionTerminalEventType = "session_terminal";
 
     // One report at a time: the start and the end of a short session can arrive together.
     private static readonly SemaphoreSlim Gate = new(1, 1);
@@ -38,7 +43,7 @@ public sealed partial class TerminalSessionService(
     /// <inheritdoc />
     public async Task<TerminalSessionAnswer> ReportAsync(TerminalSessionReport report, CancellationToken ct)
     {
-        if (report.Event is not (TerminalSessions.Started or TerminalSessions.Heartbeat or TerminalSessions.Ended)
+        if (report.Event is not (TerminalSessions.Started or TerminalSessions.Heartbeat or TerminalSessions.Ended or TerminalSessions.Changed)
             || string.IsNullOrWhiteSpace(report.SessionId)
             || string.IsNullOrWhiteSpace(report.Folder)
             || !Path.IsPathRooted(report.Folder))
@@ -59,12 +64,22 @@ public sealed partial class TerminalSessionService(
             if (existing is not null && existing.SpawnKind != SpawnKinds.Terminal)
                 return new TerminalSessionAnswer("fleet-session", existing.Id);
 
-            // Still there: nothing to read until it ends. (Fleet restarted since it started, or never heard of it: it's new.)
-            if (report.Event == TerminalSessions.Heartbeat && existing is not null)
+            // Still open: its new turns show as they are written. (Fleet restarted since it started, or never heard of it: it's new.)
+            if (report.Event is TerminalSessions.Heartbeat or TerminalSessions.Changed && existing is not null)
             {
-                presence.Touch(claudeSessionId, folder, report.TranscriptPath, user.UserId);
+                if (report.Event == TerminalSessions.Heartbeat)
+                    await TrackAsync(report, claudeSessionId, folder, existing, ct).ConfigureAwait(false);
+                if (presence.IsOpen(claudeSessionId) && !IsUnchanged(claudeSessionId, folder, report.TranscriptPath))
+                {
+                    var latest = await transcripts.ReadAsync(claudeSessionId, folder, report.TranscriptPath, ct).ConfigureAwait(false);
+                    await ImportAsync(existing, latest, live: true, ct).ConfigureAwait(false);
+                }
+
                 return new TerminalSessionAnswer("present", existing.Id);
             }
+
+            if (report.Event == TerminalSessions.Changed)
+                return new TerminalSessionAnswer("unknown-session", null);
 
             var transcript = await transcripts.ReadAsync(claudeSessionId, folder, report.TranscriptPath, ct).ConfigureAwait(false);
             if (transcript is { Unknown.Count: > 0 })
@@ -83,8 +98,8 @@ public sealed partial class TerminalSessionService(
                     return new TerminalSessionAnswer("removed", null);
                 }
 
-                await ImportAsync(existing, transcript, ct).ConfigureAwait(false);
-                Track(report, claudeSessionId, folder);
+                await ImportAsync(existing, transcript, live: true, ct).ConfigureAwait(false);
+                await TrackAsync(report, claudeSessionId, folder, existing, ct).ConfigureAwait(false);
                 return new TerminalSessionAnswer("updated", existing.Id);
             }
 
@@ -95,8 +110,8 @@ public sealed partial class TerminalSessionService(
             if (session is null)
                 return new TerminalSessionAnswer("invalid", null);
 
-            await ImportAsync(session, transcript, ct).ConfigureAwait(false);
-            Track(report, claudeSessionId, folder);
+            await ImportAsync(session, transcript, live: false, ct).ConfigureAwait(false);
+            await TrackAsync(report, claudeSessionId, folder, session, ct).ConfigureAwait(false);
             return new TerminalSessionAnswer("added", session.Id);
         }
         finally
@@ -106,13 +121,23 @@ public sealed partial class TerminalSessionService(
     }
 
     /// <summary>Counts the session as open while it's reporting in, and not once it has said it ended.</summary>
-    private void Track(TerminalSessionReport report, string claudeSessionId, string folder)
+    private async Task TrackAsync(TerminalSessionReport report, string claudeSessionId, string folder, Session session, CancellationToken ct)
     {
+        var was = presence.IsOpen(claudeSessionId);
         if (report.Event == TerminalSessions.Ended)
             presence.Remove(claudeSessionId);
         else
             presence.Touch(claudeSessionId, folder, report.TranscriptPath, user.UserId);
+
+        if (was != presence.IsOpen(claudeSessionId) || report.Event == TerminalSessions.Ended)
+            await AnnounceAsync(session, presence.IsOpen(claudeSessionId), ct).ConfigureAwait(false);
     }
+
+    /// <summary>Tells the session list that a terminal now has the session open, or has let go of it.</summary>
+    internal Task AnnounceAsync(Session session, bool inTerminal, CancellationToken ct)
+        => broadcaster.BroadcastAsync("sessions", SessionTerminalEventType,
+            JsonSerializer.SerializeToElement(new SessionTerminalOutboxPayload(session.Id, inTerminal), ApplicationJsonContext.Default.SessionTerminalOutboxPayload),
+            session.UserId, ct);
 
     private async Task<Session?> AddSessionAsync(string claudeSessionId, string folder, TerminalTranscript? transcript, CancellationToken ct)
     {
@@ -173,12 +198,31 @@ public sealed partial class TerminalSessionService(
         return session;
     }
 
+    /// <summary>Whether the transcript is as it was when it was last read (so there is nothing new to show).</summary>
+    private bool IsUnchanged(string claudeSessionId, string folder, string? path)
+    {
+        var file = transcripts.FileOf(claudeSessionId, folder, path);
+        if (file is null)
+            return false;
+
+        try
+        {
+            var info = new FileInfo(file);
+            return presence.IsUnchanged(claudeSessionId, $"{info.Length}:{info.LastWriteTimeUtc.Ticks}");
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
-    /// Saves the transcript's turns that the session doesn't have yet. A message keeps its id from one read to the next,
-    /// so a turn is never saved twice. Turns Fleet itself ran in the session since are in the transcript too, under ids of
-    /// their own: nothing from the first of them on is imported again.
+    /// Saves the transcript's turns that the session doesn't have yet or has changed (a reply being written grows). A
+    /// message keeps its id from one read to the next, so a turn is never saved twice. Entries Fleet's own turns wrote
+    /// (<see cref="IMessageRepository.GetClaimedTranscriptEntriesAsync"/>) are in the transcript too and are left out.
+    /// With <paramref name="live"/> the conversation open in Fleet is told, event by event, as for any turn.
     /// </summary>
-    private async Task ImportAsync(Session session, TerminalTranscript? transcript, CancellationToken ct)
+    private async Task ImportAsync(Session session, TerminalTranscript? transcript, bool live, CancellationToken ct)
     {
         if (transcript is null)
             return;
@@ -189,24 +233,49 @@ public sealed partial class TerminalSessionService(
             session.Title = title;
         }
 
-        var incoming = transcript.Messages;
-        var held = await messages.GetBySessionAsync(session.Id, int.MaxValue, null).ConfigureAwait(false);
-        if (held.Count > 0)
+        var claimed = await messages.GetClaimedTranscriptEntriesAsync(session.Id).ConfigureAwait(false);
+        var held = (await messages.GetBySessionAsync(session.Id, int.MaxValue, null).ConfigureAwait(false))
+            .GroupBy(m => m.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().PartsJson, StringComparer.Ordinal);
+
+        var changed = new List<(HarnessMessage Message, PersistedMessage Persisted)>();
+        foreach (var message in transcript.Messages)
         {
-            var ids = incoming.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
-            var ownTurns = held.Where(m => !ids.Contains(m.Id)).Select(m => m.Timestamp).Where(t => t.Length > 0).ToList();
-            if (ownTurns.Count > 0)
-            {
-                var firstOwn = ownTurns.Select(t => DateTimeOffset.Parse(t, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)).Min();
-                incoming = [.. incoming.Where(m => m.Timestamp < firstOwn)];
-            }
+            if (transcript.Entries.TryGetValue(message.Id, out var entries) && entries.Any(claimed.Contains))
+                continue;
+
+            var persisted = MessagePersistenceService.ToPersistedMessage(session.Id, message);
+            if (!held.TryGetValue(message.Id, out var before) || before != persisted.PartsJson)
+                changed.Add((message, persisted));
         }
 
-        if (incoming.Count == 0)
+        if (changed.Count == 0)
             return;
 
-        await messages.UpsertBatchAsync([.. incoming.Select(m => MessagePersistenceService.ToPersistedMessage(session.Id, m))]).ConfigureAwait(false);
-        LogImported(session.Id, incoming.Count);
+        if (!live)
+        {
+            await messages.UpsertBatchAsync([.. changed.Select(c => c.Persisted)]).ConfigureAwait(false);
+        }
+        else
+        {
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            var outbox = changed
+                .SelectMany(c => transcripts.EventsOf(session.Id, c.Message))
+                .Select(e => new OutboxMessage
+                {
+                    Topic = $"session:{session.Id}",
+                    Type = e.Type,
+                    Payload = e.Payload,
+                    UserId = session.UserId,
+                    CreatedAt = now,
+                    AvailableAt = now,
+                })
+                .ToList();
+            await activity.WriteAsync(new SessionActivityWriteRequest { MessageBatchToUpsert = [.. changed.Select(c => c.Persisted)], OutboxMessages = outbox }, ct)
+                .ConfigureAwait(false);
+        }
+
+        LogImported(session.Id, changed.Count);
     }
 
     private static string TitleOf(TerminalTranscript? transcript, string folder)

@@ -32,6 +32,7 @@ public sealed class TerminalSessionServiceTests : IDisposable
     private readonly InMemoryInstanceRepository _instances = new();
     private readonly InMemoryUserPreferenceRepository _preferences = new();
     private readonly FakeEventBroadcaster _broadcaster = new();
+    private readonly InMemoryOutboxRepository _outbox = new();
     private readonly StubTranscripts _transcripts = new();
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 20, 3, 0, 0, TimeSpan.Zero));
     private readonly TerminalSessionPresence _presence;
@@ -63,6 +64,8 @@ public sealed class TerminalSessionServiceTests : IDisposable
             _transcripts,
             _presence,
             _broadcaster,
+            new SessionActivityWriteService(
+                new FakeDbConnectionFactory(), _messages, new InMemoryDelegationRepository(), _sessions, new InMemorySmartLinkRepository(), _outbox, new FakeOutboxDispatcher()),
             user,
             NullLogger<TerminalSessionService>.Instance);
 
@@ -124,17 +127,56 @@ public sealed class TerminalSessionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task A_heartbeat_keeps_a_session_open_and_reads_nothing_again()
+    public async Task A_heartbeat_keeps_a_session_open_and_shows_the_turns_written_since()
     {
         TurnOn();
         await Report("started");
-        _transcripts.Current = Transcript(Turn("u9", "user", "Not read yet", 9));
+        _transcripts.Current = Transcript(
+            Turn("u1", "user", "Where do the crates go?", 1),
+            Turn("a1", "assistant", "To the shed.", 2),
+            Turn("u2", "user", "And the ladders?", 3));
 
         var answer = await Report("heartbeat");
 
         answer.Status.ShouldBe("present");
         _presence.IsOpen(ClaudeSessionId).ShouldBeTrue();
+        _messages.All.Count.ShouldBe(3);
+        // The open conversation is told, as for any turn: the message, then its part.
+        _outbox.All.Select(m => m.Type).ShouldBe(["message.updated", "message.part.updated"]);
+        _outbox.All.ShouldAllBe(m => m.Topic == $"session:{_sessions.All.Single().Id}");
+    }
+
+    [Fact]
+    public async Task A_change_in_the_transcript_shows_new_turns_without_waiting_for_a_heartbeat_and_a_closed_session_is_not_read()
+    {
+        TurnOn();
+        await Report("started");
+        _transcripts.Current = Transcript(Turn("u1", "user", "Where do the crates go?", 1), Turn("a1", "assistant", "To the shed.", 2), Turn("u2", "user", "And the ladders?", 3));
+
+        await Report("changed");
+        _messages.All.Count.ShouldBe(3);
+
+        await Report("ended");
+        _transcripts.Current = Transcript(Turn("u1", "user", "Where do the crates go?", 1), Turn("a1", "assistant", "To the shed.", 2), Turn("u2", "user", "And the ladders?", 3), Turn("a2", "assistant", "Beside them.", 4));
+        await Report("changed");
+        _messages.All.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task A_reply_that_grows_is_saved_again_in_place_and_shown_again()
+    {
+        TurnOn();
+        await Report("started");
+        _transcripts.Current = Transcript(Turn("u1", "user", "Where do the crates go?", 1), Turn("a1", "assistant", "To the shed. And", 2));
+        await Report("changed");
+        var before = _outbox.All.Count;
+
+        _transcripts.Current = Transcript(Turn("u1", "user", "Where do the crates go?", 1), Turn("a1", "assistant", "To the shed. And the ladders.", 2));
+        await Report("changed");
+
         _messages.All.Count.ShouldBe(2);
+        _messages.All.Single(m => m.Role == "assistant").PartsJson.ShouldContain("the ladders");
+        _outbox.All.Count.ShouldBe(before + 2);
     }
 
     [Fact]
@@ -264,31 +306,33 @@ public sealed class TerminalSessionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Turns_Fleet_ran_itself_since_are_not_imported_a_second_time()
+    public async Task Terminal_then_Fleet_then_terminal_again_imports_every_turn_once()
     {
         TurnOn();
         await Report("started");
         var session = _sessions.All.ShouldHaveSingleItem();
 
-        // A prompt sent from Fleet: saved under Fleet's own id, and in the transcript too, under the entry's.
-        _messages.Seed(new PersistedMessage
-        {
-            Id = "msg_fleet_own_turn",
-            SessionId = session.Id,
-            Role = "user",
-            PartsJson = """[{"kind":"text","text":"From Fleet"}]""",
-            Timestamp = Stamp(5).ToString("O"),
-            CreatedAt = Stamp(5).ToString("O"),
-        });
+        // A prompt and reply Fleet ran: saved under Fleet's own ids, claimed by their transcript uuids, and in the transcript too.
+        _messages.Seed(new PersistedMessage { Id = "msg_fleet_prompt", SessionId = session.Id, Role = "user", PartsJson = """[{"kind":"text","text":"From Fleet"}]""", Timestamp = Stamp(5).ToString("O"), CreatedAt = Stamp(5).ToString("O") });
+        _messages.Seed(new PersistedMessage { Id = "msg_fleet_reply", SessionId = session.Id, Role = "assistant", PartsJson = """[{"kind":"text","text":"Done."}]""", Timestamp = Stamp(6).ToString("O"), CreatedAt = Stamp(6).ToString("O") });
+        await _messages.ClaimTranscriptEntriesAsync(session.Id, ["u3", "a3"]);
+
+        // Then the terminal again: a turn typed after Fleet's.
         _transcripts.Current = Transcript(
             Turn("u1", "user", "Where do the crates go?", 1),
             Turn("a1", "assistant", "To the shed.", 2),
             Turn("u3", "user", "From Fleet", 5),
-            Turn("a3", "assistant", "Done.", 6));
-
+            Turn("a3", "assistant", "Done.", 6),
+            Turn("u4", "user", "Typed in the terminal", 7),
+            Turn("a4", "assistant", "Noted.", 8));
+        await Report("started");
+        await Report("heartbeat");
         await Report("ended");
 
-        _messages.All.Count.ShouldBe(3);
+        _messages.All.Count.ShouldBe(6);
+        _messages.All.Count(m => m.PartsJson.Contains("From Fleet")).ShouldBe(1);
+        _messages.All.Count(m => m.PartsJson.Contains("Typed in the terminal")).ShouldBe(1);
+        _messages.All.Count(m => m.PartsJson.Contains("Noted.")).ShouldBe(1);
     }
 
     [Theory]
@@ -307,7 +351,16 @@ public sealed class TerminalSessionServiceTests : IDisposable
 
     private static DateTimeOffset Stamp(int second) => new(2026, 11, 20, 3, 0, second, TimeSpan.Zero);
 
-    private static HarnessMessage Turn(string uuid, string role, string text, int second) => new()
+    private static readonly Dictionary<string, string> EntryOf = new(StringComparer.Ordinal);
+
+    private static HarnessMessage Turn(string uuid, string role, string text, int second)
+    {
+        var message = BuildTurn(uuid, role, text, second);
+        EntryOf[message.Id] = uuid;
+        return message;
+    }
+
+    private static HarnessMessage BuildTurn(string uuid, string role, string text, int second) => new()
     {
         // The id a reader gives: stable for the entry. Any fixed text will do for the test.
         Id = WeaveFleet.Domain.Identity.AscendingMessageId.Stable(Stamp(second).ToUnixTimeMilliseconds(), 0, uuid),
@@ -317,7 +370,10 @@ public sealed class TerminalSessionServiceTests : IDisposable
     };
 
     private static TerminalTranscript Transcript(params HarnessMessage[] turns)
-        => new(turns, Title: null, FirstPrompt: turns.FirstOrDefault(t => t.Role == "user")?.TextContent, Folder: null, Unknown: []);
+        => new(turns, Title: null, FirstPrompt: turns.FirstOrDefault(t => t.Role == "user")?.TextContent, Folder: null, Unknown: [])
+        {
+            Entries = turns.ToDictionary(t => t.Id, t => (IReadOnlyList<string>)[EntryOf[t.Id]], StringComparer.Ordinal),
+        };
 
     private sealed class StubTranscripts : ITerminalTranscripts
     {
@@ -325,5 +381,10 @@ public sealed class TerminalSessionServiceTests : IDisposable
 
         public Task<TerminalTranscript?> ReadAsync(string sessionId, string folder, string? path, CancellationToken ct)
             => Task.FromResult(Current);
+
+        public string? FileOf(string sessionId, string folder, string? path) => null;
+
+        public IReadOnlyList<TerminalEvent> EventsOf(string fleetSessionId, HarnessMessage message)
+            => [new TerminalEvent("message.updated", "{}"), new TerminalEvent("message.part.updated", "{}")];
     }
 }

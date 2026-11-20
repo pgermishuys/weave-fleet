@@ -55,6 +55,7 @@ public static class SessionEndpoints
             IScheduledRetryRepository scheduledRetries,
             SessionInterruptions restartInterruptions,
             ISessionInterruptionRepository interruptionRepository,
+            WeaveFleet.Application.TerminalSessions.TerminalSessionPresence terminalPresence,
             CancellationToken ct,
             int limit = 100,
             int offset = 0,
@@ -129,6 +130,7 @@ public static class SessionEndpoints
                         ScheduledRetry = retriesBySessionId.GetValueOrDefault(session.Id),
                         Interrupted = interruptedBySessionId.GetValueOrDefault(session.Id),
                         Failed = failedBySessionId.GetValueOrDefault(session.Id),
+                        InTerminal = session.SpawnKind == SpawnKinds.Terminal && session.HarnessResumeToken is { } resumeToken && terminalPresence.IsOpen(resumeToken),
                     }).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));

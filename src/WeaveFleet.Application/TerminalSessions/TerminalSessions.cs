@@ -24,6 +24,12 @@ public static class TerminalSessions
     /// <summary>The session is still open: sent every <see cref="HeartbeatEvery"/> while its MCP server runs.</summary>
     public const string Heartbeat = "heartbeat";
 
+    /// <summary>
+    /// The session's transcript was written to. Fleet's own watcher of the file says so (not <c>fleet mcp</c>), so the
+    /// session isn't counted as heard from.
+    /// </summary>
+    public const string Changed = "changed";
+
     /// <summary>How often a terminal session's MCP server says it is still there.</summary>
     public static readonly TimeSpan HeartbeatEvery = TimeSpan.FromSeconds(5);
 
@@ -70,7 +76,11 @@ public sealed record TerminalTranscript(
     string? Title,
     string? FirstPrompt,
     string? Folder,
-    IReadOnlyList<string> Unknown);
+    IReadOnlyList<string> Unknown)
+{
+    /// <summary>The uuids of the transcript entries each message was made from, by message id.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> Entries { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
+}
 
 /// <summary>Reads a terminal session's transcript.</summary>
 public interface ITerminalTranscripts
@@ -81,7 +91,19 @@ public interface ITerminalTranscripts
     /// when there is none (a session nobody has typed in yet writes none).
     /// </summary>
     Task<TerminalTranscript?> ReadAsync(string sessionId, string folder, string? path, CancellationToken ct);
+
+    /// <summary>
+    /// The events that show <paramref name="message"/> in the open session <paramref name="fleetSessionId"/>: the
+    /// message, then each of its parts (the same events the session's live stream sends).
+    /// </summary>
+    IReadOnlyList<TerminalEvent> EventsOf(string fleetSessionId, WeaveFleet.Domain.Harnesses.HarnessMessage message);
+
+    /// <summary>The file Claude Code writes the session's transcript to, when it exists.</summary>
+    string? FileOf(string sessionId, string folder, string? path);
 }
+
+/// <summary>An event for the session's live stream: its <paramref name="Type"/> and its JSON <paramref name="Payload"/>.</summary>
+public sealed record TerminalEvent(string Type, string Payload);
 
 /// <summary>
 /// The terminal sessions whose MCP servers are still reporting in. Claude Code usually kills the server when a session
@@ -91,15 +113,52 @@ public sealed class TerminalSessionPresence(TimeProvider time)
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Open> _open = new(StringComparer.Ordinal);
 
+    /// <summary>Raised when a session that wasn't open starts reporting in.</summary>
+    public event Action<Open>? Opened;
+
+    /// <summary>Raised when a session isn't open any more.</summary>
+    public event Action<string>? Closed;
+
     /// <summary>A session still open, and what is needed to read it again once it isn't.</summary>
     public sealed record Open(string ClaudeSessionId, string Folder, string? TranscriptPath, string UserId, DateTimeOffset LastSeen);
 
     /// <summary>Notes that the session is there now.</summary>
     public void Touch(string claudeSessionId, string folder, string? transcriptPath, string userId)
-        => _open[claudeSessionId] = new Open(claudeSessionId, folder, transcriptPath, userId, time.GetUtcNow());
+    {
+        var open = new Open(claudeSessionId, folder, transcriptPath, userId, time.GetUtcNow());
+        var isNew = !_open.ContainsKey(claudeSessionId);
+        _open[claudeSessionId] = open;
+        if (isNew)
+            Opened?.Invoke(open);
+    }
 
     /// <summary>The session is over.</summary>
-    public void Remove(string claudeSessionId) => _open.TryRemove(claudeSessionId, out _);
+    public void Remove(string claudeSessionId)
+    {
+        _stamps.TryRemove(claudeSessionId, out _);
+        if (_open.TryRemove(claudeSessionId, out _))
+            Closed?.Invoke(claudeSessionId);
+    }
+
+    /// <summary>The sessions open now.</summary>
+    public IReadOnlyList<Open> OpenSessions() => [.. _open.Values];
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _stamps = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Whether the transcript is as it was when it was last read. <paramref name="stamp"/> says how it is now (its size and
+    /// time); the first call after the session opens, or after <see cref="Forget"/>, is never "as it was".
+    /// </summary>
+    public bool IsUnchanged(string claudeSessionId, string stamp)
+    {
+        if (_stamps.TryGetValue(claudeSessionId, out var last) && last == stamp)
+            return true;
+        _stamps[claudeSessionId] = stamp;
+        return false;
+    }
+
+    /// <summary>Drops what was noted about the transcript, so the next look reads it.</summary>
+    public void Forget(string claudeSessionId) => _stamps.TryRemove(claudeSessionId, out _);
 
     /// <summary>Whether Fleet has heard from the session's MCP server lately.</summary>
     public bool IsOpen(string claudeSessionId) => _open.ContainsKey(claudeSessionId);
@@ -112,7 +171,11 @@ public sealed class TerminalSessionPresence(TimeProvider time)
         foreach (var (id, open) in _open)
         {
             if (open.LastSeen <= cutoff && _open.TryRemove(id, out _))
+            {
                 silent.Add(open);
+                _stamps.TryRemove(id, out _);
+                Closed?.Invoke(id);
+            }
         }
 
         return silent;

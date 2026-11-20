@@ -51,6 +51,15 @@ public interface IMessageRepository
     Task<bool> HasMessagesAsync(string sessionId);
 
     /// <summary>
+    /// Notes the Claude Code transcript entries (by uuid) that Fleet itself produced in the session, so reading the
+    /// transcript for turns typed in a terminal leaves them out. Entries already noted are left as they are.
+    /// </summary>
+    Task ClaimTranscriptEntriesAsync(string sessionId, IReadOnlyCollection<string> entryUuids);
+
+    /// <summary>The transcript entries Fleet produced in the session (<see cref="ClaimTranscriptEntriesAsync"/>).</summary>
+    Task<IReadOnlySet<string>> GetClaimedTranscriptEntriesAsync(string sessionId);
+
+    /// <summary>
     /// Retrieve a single message by its composite key (id, session_id).
     /// Returns null if no matching message exists.
     /// </summary>

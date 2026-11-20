@@ -74,6 +74,8 @@ internal sealed record SessionCreatedOutboxPayload
 internal sealed record SessionArchivedOutboxPayload(string SessionId, string ArchivedAt);
 internal sealed record SessionUnarchivedOutboxPayload(string SessionId);
 internal sealed record SessionDeletedOutboxPayload(string SessionId);
+
+internal sealed record SessionTerminalOutboxPayload(string SessionId, bool InTerminal);
 internal sealed record ActivityStatusBroadcastPayload(
     string SessionId,
     string ActivityStatus,
@@ -141,6 +143,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(WeaveFleet.Application.Sessions.SessionBranchPayload))]
 [JsonSerializable(typeof(SessionUnarchivedOutboxPayload))]
 [JsonSerializable(typeof(SessionDeletedOutboxPayload))]
+[JsonSerializable(typeof(SessionTerminalOutboxPayload))]
 [JsonSerializable(typeof(ActivityStatusBroadcastPayload))]
 [JsonSerializable(typeof(SessionStatusBroadcastPayload))]
 [JsonSerializable(typeof(SessionStatusBroadcastState))]
