@@ -50,6 +50,7 @@ var importLegacySessions = false;
 string? legacyImportSourcePath = null;
 string? cliArgumentError = null;
 var nodePair = false;
+var terminalMcp = false;
 var nodePairJson = false;
 string? nodeJoinTarget = null;
 var nodeJoinWaitSeconds = 0;
@@ -79,6 +80,8 @@ for (var i = 0; i < args.Length; i++)
         cliOverrides[$"{FleetOptions.SectionName}:EventBus:Transport"] = args[++i];
     else if (args[i] is NodePairCommand.Flag)
         nodePair = true;
+    else if (args[i] is TerminalMcpCommand.Flag)
+        terminalMcp = true;
     else if (args[i] is "--json")
         nodePairJson = true;
     else if (args[i] is "--import-legacy-sessions")
@@ -96,6 +99,32 @@ if (cliArgumentError is not null)
 {
     Console.Error.WriteLine(cliArgumentError);
     Environment.Exit(1);
+}
+
+if (terminalMcp)
+{
+    // `fleet mcp`: the MCP server Claude Code starts with a session in a terminal. It answers on stdin and stdout, tells the
+    // Fleet on this machine the session started and ended, and never starts a host. Nothing else may reach stdout.
+    var mcpOptions = new ConfigurationBuilder()
+        .AddEnvironmentVariables()
+        .AddInMemoryCollection(cliOverrides!)
+        .Build()
+        .GetSection(FleetOptions.SectionName)
+        .Get<FleetOptions>() ?? new FleetOptions();
+    using var mcpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+    await using var mcpOutput = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
+    using var mcpInput = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
+    Environment.Exit(await TerminalMcpCommand.RunAsync(
+        mcpOptions.Host,
+        mcpOptions.Port,
+        mcpOptions.DatabasePath,
+        Environment.GetEnvironmentVariable("WEAVE_FLEET_AUTH_TOKEN"),
+        FleetInstrumentation.ServiceVersion.Split('+')[0],
+        mcpClient,
+        mcpInput,
+        mcpOutput,
+        Environment.GetEnvironmentVariable,
+        Directory.GetCurrentDirectory()));
 }
 
 if (nodePair)

@@ -153,6 +153,13 @@ $output = Invoke-Fleet 'node --json'
 if ($script:fleetExitCode -eq 0) { Fail "fleet node --json should fail" }
 if (Test-Path $out) { Fail "fleet node --json started the app" }
 
+# `fleet mcp` is the MCP server Claude Code starts with a terminal session: it starts the app in its own mode.
+$output = Invoke-Fleet 'mcp --port 5513'
+if (Test-Started 'mcp --port 5513' $output) {
+    $argsLine = ((Get-Content $out | Where-Object { $_ -like 'args=*' }) -replace '^args=', '') -split ' '
+    if ($argsLine -notcontains '--terminal-mcp') { Fail "fleet mcp didn't pass --terminal-mcp" }
+}
+
 # install-service --print shows the scheduled task it would register, and changes nothing.
 $taskName = 'Fleet node'
 $output = Invoke-Fleet "node install-service --port 5512 --host 0.0.0.0 --data-dir `"$(Join-Path $work 'node data')`" --print"

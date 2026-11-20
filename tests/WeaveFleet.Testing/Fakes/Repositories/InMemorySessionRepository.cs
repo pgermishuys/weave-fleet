@@ -69,6 +69,9 @@ public sealed class InMemorySessionRepository : ISessionRepository
     public Task<Session?> GetByIdAsync(string id)
         => Task.FromResult(_store.GetValueOrDefault(id));
 
+    public Task<Session?> GetByResumeTokenAsync(string resumeToken)
+        => Task.FromResult(_store.Values.FirstOrDefault(s => s.HarnessResumeToken == resumeToken));
+
     public Task<Session?> GetByHarnessIdAsync(string harnessSessionId)
     {
         if (GetByHarnessIdBehavior is not null)

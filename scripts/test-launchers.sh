@@ -157,6 +157,14 @@ elif [ -f "$WORK/out" ]; then
   fail "fleet node --json started the app"
 fi
 
+# `fleet mcp` is the MCP server Claude Code starts with a terminal session: it starts the app in its own mode, with the server
+# options given, and prints nothing of its own (stdout is the MCP channel).
+run_fleet mcp --port 5513 || true
+if expect_started mcp --port 5513; then
+  grep '^args=' "$WORK/out" | grep -q -- '--terminal-mcp' || fail "fleet mcp didn't pass --terminal-mcp: $(tr '\n' ' ' < "$WORK/out")"
+  expect_record "port=5513" "mcp --port 5513"
+fi
+
 # `fleet node join '<address>#CODE'` asks the running node to join the Fleet that made the line, and starts nothing.
 run_fleet node join 'http://100.64.0.5:6262#J8RT-4WXN' --port 5512 || true
 if expect_started node join 'http://100.64.0.5:6262#J8RT-4WXN' --port 5512; then

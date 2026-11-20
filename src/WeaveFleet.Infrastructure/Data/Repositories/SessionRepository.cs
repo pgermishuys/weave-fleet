@@ -241,6 +241,19 @@ public sealed class SessionRepository(
             });
     }
 
+    public async Task<Session?> GetByResumeTokenAsync(string resumeToken)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            "SELECT * FROM sessions WHERE harness_resume_token = @ResumeToken AND user_id = @UserId LIMIT 1",
+            cmd =>
+            {
+                cmd.AddParameter("ResumeToken", resumeToken);
+                cmd.AddParameter("UserId", userContext.UserId);
+            },
+            ReadSession);
+    }
+
     public async Task<Session?> GetByHarnessIdAsync(string harnessSessionId)
     {
         using var conn = connectionFactory.CreateConnection();

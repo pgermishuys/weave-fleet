@@ -224,12 +224,20 @@ set "PRIVATE_NETWORKS="
 set "NODE="
 set "SERVICE_ACTION="
 set "NODE_PAIR="
+set "MCP="
 set "NODE_UP="
 set "NODE_JOIN="
 set "NODE_JOIN_TARGET="
 set "UP_CHOICE="
 set "ASSUME_YES="
 set "PRINT_ONLY="
+
+rem "fleet mcp" is the MCP server Claude Code starts with each terminal session (TerminalMcpCommand). It takes the same
+rem server options as "fleet node pair" and must print nothing but MCP messages.
+if /i "%~1"=="mcp" (
+    set "MCP=1"
+    shift
+)
 
 rem "fleet node ..." takes the same server options; it only has to come first.
 if /i "%~1"=="node" (
@@ -491,6 +499,11 @@ if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
 if defined PRIVATE_NETWORKS set "Fleet__PrivateNetworksOnly=true"
 
 if defined NODE_UP goto :do_node_up
+
+if defined MCP (
+    "%APP_BIN%" --terminal-mcp --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
+    exit /b !ERRORLEVEL!
+)
 
 if defined NODE_PAIR (
     rem Asks the node already running with these settings for a code, prints it and stops.
