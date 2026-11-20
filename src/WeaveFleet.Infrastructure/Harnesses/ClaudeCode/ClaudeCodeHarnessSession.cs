@@ -337,7 +337,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     await StopProcessAsync(process, "it stopped reading its input").ConfigureAwait(false);
                     process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
                     if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
-                        throw new InvalidOperationException("Claude Code exited before it read the prompt.");
+                        throw new InvalidOperationException(await DescribeExitBeforePromptAsync(process).ConfigureAwait(false));
                 }
 
                 // The account's usage limits, once per process, so they show before the turn reports them. Claude Code
@@ -2393,6 +2393,18 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     private bool TurnEndsWithText(string text)
         => _root.Messages.Values.LastOrDefault()?.Parts.OfType<TextPart>().LastOrDefault()?.Text.Trim() == text;
+
+    /// <summary>
+    /// Why a claude that never read the prompt is gone. Claude Code says so itself on stderr (a refused flag under an
+    /// organisation's managed settings, a login it needs), so its last lines go with it.
+    /// </summary>
+    private static async Task<string> DescribeExitBeforePromptAsync(ClaudeCodeProcessManager process)
+    {
+        await process.WaitForExitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        const string text = "Claude Code exited before it read the prompt.";
+        var stderr = process.StderrTail;
+        return stderr.Count > 0 ? $"{text}\n\n```\n{string.Join("\n", stderr.TakeLast(3))}\n```" : text;
+    }
 
     private string DescribeEarlyExit(ClaudeCodeProcessManager processManager, int? exitCode)
     {

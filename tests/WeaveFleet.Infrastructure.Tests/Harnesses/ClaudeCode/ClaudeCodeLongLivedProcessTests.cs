@@ -402,6 +402,28 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_claude_that_refuses_Fleets_flags_under_managed_settings_says_so_in_the_conversation()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        // An organisation's managed settings (disableSideloadFlags) make Claude Code refuse --mcp-config and exit at once.
+        var refusing = Path.Combine(_directory, "claude-refusing");
+        await File.WriteAllTextAsync(refusing, """
+            #!/bin/sh
+            echo "Error: --mcp-config is disabled by your organization's managed settings (disableSideloadFlags)." >&2
+            exit 1
+            """.Replace("\r", ""));
+        File.SetUnixFileMode(refusing, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Start(binary: refusing);
+
+        var failure = await Should.ThrowAsync<InvalidOperationException>(
+            () => _session!.SendPromptAsync("hello", null, CancellationToken.None));
+
+        failure.Message.ShouldContain("--mcp-config is disabled by your organization's managed settings (disableSideloadFlags)");
+    }
+
+    [Fact]
     public async Task A_process_that_dies_between_turns_is_replaced_by_the_next_prompt()
     {
         if (OperatingSystem.IsWindows())
@@ -916,7 +938,8 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
             .ToList();
 
     private ClaudeCodeHarnessSession Start(
-        bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null, ClaudeCodeBridgeTokenRegistry? bridgeTokens = null)
+        bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null, ClaudeCodeBridgeTokenRegistry? bridgeTokens = null,
+        string? binary = null)
     {
         var delegations = new InMemoryDelegationRepository();
         var sessions = _sessions;
@@ -947,7 +970,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
             instanceId: "cc-instance",
             fleetSessionId: "fleet-cc",
             workingDirectory: _directory,
-            config: new ClaudeCodeOptions { BinaryPath = FakeClaude(honoursInterrupt, switchesModel), IdleShutdownSeconds = IdleSeconds },
+            config: new ClaudeCodeOptions { BinaryPath = binary ?? FakeClaude(honoursInterrupt, switchesModel), IdleShutdownSeconds = IdleSeconds },
             environmentVariables: new Dictionary<string, string>(),
             shutdownTimeout: TimeSpan.FromSeconds(2),
             scopeFactory: services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
