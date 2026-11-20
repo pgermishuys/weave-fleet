@@ -182,6 +182,7 @@ show_help() {
   echo "Commands:"
   echo "  (none)       Start the Fleet server"
   echo "  node         Start a node: the API without the web app (see 'fleet node help')"
+  echo "  mcp          The MCP server Claude Code runs with each terminal session, so Fleet shows it (Settings → Labs)"
   echo "  version      Print the installed version"
   echo "  update       Update to the latest version"
   echo "  uninstall    Remove Fleet"
@@ -688,6 +689,14 @@ service_log_hint() {
   fi
 }
 
+# `fleet mcp`: the MCP server Claude Code starts with each terminal session (see TerminalMcpCommand). It takes the same
+# server options as `fleet node pair`, so it finds the Fleet that was started with them.
+MCP=0
+if [ "${1:-}" = "mcp" ]; then
+  MCP=1
+  shift
+fi
+
 # `fleet node …` takes the same server options; it only has to come first.
 NODE=0
 NODE_PAIR=0
@@ -978,6 +987,10 @@ fi
 if [ "$NODE_UP" -eq 1 ]; then
   node_up
   exit 0
+fi
+if [ "$MCP" -eq 1 ]; then
+  # The MCP server Claude Code starts with each terminal session: it talks on stdin and stdout, so nothing is printed here.
+  exec "$APP_BIN" --terminal-mcp --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
 fi
 if [ "$NODE_PAIR" -eq 1 ]; then
   # Asks the node already running with these settings for a code, prints it and stops.

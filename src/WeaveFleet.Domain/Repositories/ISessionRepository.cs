@@ -10,6 +10,9 @@ public interface ISessionRepository
     Task<Session?> GetByIdAsync(string id);
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
 
+    /// <summary>The current user's session whose harness resume token is <paramref name="resumeToken"/> (for Claude Code, its session id), if there is one.</summary>
+    Task<Session?> GetByResumeTokenAsync(string resumeToken);
+
     /// <summary>The side conversation open on session <paramref name="sessionId"/> (<c>/btw</c>), if there is one.</summary>
     Task<Session?> GetSideConversationAsync(string sessionId);
 

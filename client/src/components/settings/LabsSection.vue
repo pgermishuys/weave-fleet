@@ -11,6 +11,7 @@ import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { MEMORY_PREFERENCE_KEY, MEMORY_SEARCH_PREFERENCE_KEY } from "@/lib/agent-memory";
 import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
+import { TERMINAL_SESSIONS_PREFERENCE_KEY } from "@/lib/terminal-sessions";
 import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -24,6 +25,7 @@ preferencesStore.ensureLoaded();
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const yourFleet = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
+const terminalSessions = usePreferenceSwitch(TERMINAL_SESSIONS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
 const memorySearch = usePreferenceSwitch(MEMORY_SEARCH_PREFERENCE_KEY);
 const memoryOn = computed(() => preferencesStore.get(MEMORY_PREFERENCE_KEY, "false") === "true");
@@ -99,6 +101,28 @@ function openRoute(path: string): void {
             aria-label="Enable Your Fleet"
             data-testid="your-fleet-switch"
             @click="yourFleet.toggle"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        id="terminal-sessions"
+        title="Claude Code sessions from a terminal"
+        summary="A session you start with claude in a terminal shows here, with its turns."
+        :adds="addsWhenOn(terminalSessions.enabled.value, 'Terminal sessions in the session list')"
+        @open="openRoute('/')"
+      >
+        <template #more>
+          Claude Code starts Fleet's MCP server, fleet mcp, with each session. It tells Fleet the session's ID and folder, and Fleet reads the turns from the session's transcript. Only a folder in a repository Fleet knows shows. Add the server by hand for now: claude mcp add --scope user fleet -- fleet mcp.
+        </template>
+        <template #control>
+          <SettingSwitch
+            :checked="terminalSessions.enabled.value"
+            :saving="terminalSessions.saving.value"
+            :disabled="preferencesStore.isLoading || terminalSessions.saving.value"
+            aria-label="Show Claude Code sessions from a terminal"
+            data-testid="terminal-sessions-switch"
+            @click="terminalSessions.toggle"
           />
         </template>
       </SettingRow>

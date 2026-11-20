@@ -457,6 +457,11 @@ public static class DependencyInjection
         // Safe mode ("Start without mods") lives in memory, shared by every request and by the mod host.
         services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
         services.AddScoped<WeaveFleet.Application.Mods.ModsFeature>();
+        services.AddScoped<WeaveFleet.Application.TerminalSessions.TerminalSessionsFeature>();
+        services.AddScoped<WeaveFleet.Application.TerminalSessions.ITerminalSessions, WeaveFleet.Application.TerminalSessions.TerminalSessionService>();
+        services.AddSingleton<WeaveFleet.Application.TerminalSessions.ITerminalTranscripts, WeaveFleet.Infrastructure.Harnesses.ClaudeCode.ClaudeCodeTranscripts>();
+        services.AddSingleton<WeaveFleet.Application.TerminalSessions.TerminalSessionPresence>(sp => new WeaveFleet.Application.TerminalSessions.TerminalSessionPresence(TimeProvider.System));
+        services.AddHostedService<WeaveFleet.Infrastructure.Harnesses.ClaudeCode.TerminalSessionWatcher>();
         services.AddScoped<WeaveFleet.Application.Mods.ModService>();
         // The mod runtime (Bun): installs it in the background and tells clients how it's going.
         services.AddSingleton<WeaveFleet.Application.Mods.IModsRuntime, WeaveFleet.Application.Mods.ModsRuntime>();

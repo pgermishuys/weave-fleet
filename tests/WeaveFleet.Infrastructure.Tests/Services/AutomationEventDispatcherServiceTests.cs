@@ -405,6 +405,7 @@ internal sealed class FakeSessionRepository : ISessionRepository
     // Not implemented - not needed for these tests
     public Task InsertAsync(Domain.Entities.Session session) => throw new NotImplementedException();
     public Task InsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, Domain.Entities.Session session) => throw new NotImplementedException();
+    public Task<Domain.Entities.Session?> GetByResumeTokenAsync(string resumeToken) => throw new NotImplementedException();
     public Task<Domain.Entities.Session?> GetByHarnessIdAsync(string harnessSessionId) => throw new NotImplementedException();
     public Task<Domain.Entities.Session?> GetSideConversationAsync(string sessionId) => throw new NotImplementedException();
     public Task<Domain.Entities.Session?> GetDiscardedSideConversationAsync(string sessionId) => throw new NotImplementedException();

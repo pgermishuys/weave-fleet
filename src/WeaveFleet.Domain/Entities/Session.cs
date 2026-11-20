@@ -141,4 +141,7 @@ public static class SpawnKinds
 
     /// <summary>A workflow run started it as one of its steps.</summary>
     public const string Workflow = "workflow";
+
+    /// <summary>The user started it in a terminal (Claude Code); Fleet found out through its MCP server and reads its turns from the transcript.</summary>
+    public const string Terminal = "terminal";
 }
