@@ -26,7 +26,7 @@ internal static class ClaudeTranscriptReader
     {
         "attachment", "system", "file-history-snapshot", "mode", "permission-mode", "atis-latch", "ai-title", "custom-title",
         "agent-name", "last-prompt", "summary", "cost-state", "queue-operation", "progress", "pr-link", "tag",
-        "api-request", "api-request-shape", "api-request-blob", "content-replacement", "worktree-state",
+        "api-request", "api-request-shape", "api-request-blob", "content-replacement", "worktree-state", "tools-used",
     };
 
     /// <summary>Reads <paramref name="lines"/>, the transcript's lines. A line that isn't JSON (a write cut off) is skipped.</summary>

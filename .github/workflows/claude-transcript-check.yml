@@ -1,0 +1,116 @@
+# Nightly check that Fleet's Claude Code transcript reader still reads what the newest Claude Code writes (issue #1034).
+#
+# Installs the newest Claude Code, runs real `claude` sessions against a fake Anthropic Messages API
+# (scripts/claude-transcript-check: no model, no secrets), and reads the transcripts they leave with
+# ClaudeTranscriptReader (tests/…/ClaudeTranscriptFormatCheckTests). Red when the reader meets an entry type it has no
+# rule for or reads a turn wrong; the failure names the transcript and what it didn't understand.
+# A red night opens (or comments on) the issue "Nightly Claude Code transcript check failed"; a green night closes it.
+name: Claude Code transcript check
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/claude-transcript-check/**'
+      - '.github/workflows/claude-transcript-check.yml'
+      - 'tests/WeaveFleet.Infrastructure.Tests/Harnesses/ClaudeCode/ClaudeTranscriptFormatCheckTests.cs'
+  # 02:07 UTC: off the busy top of the hour, after the UI crawl (01:17).
+  schedule:
+    - cron: '7 2 * * *'
+  workflow_dispatch:
+    inputs:
+      nightly:
+        description: Run as the nightly (a red check opens or comments on its issue, a green one closes it)
+        type: boolean
+        default: false
+      claude_version:
+        description: Claude Code version to install (empty for the newest)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-transcript-check-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || '' }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Claude Code
+        env:
+          VERSION: ${{ inputs.claude_version }}
+        run: |
+          npm install -g "@anthropic-ai/claude-code@${VERSION:-latest}"
+          claude --version
+      - name: Real sessions against the fake API
+        run: scripts/claude-transcript-check/run.sh "$RUNNER_TEMP/transcript-check"
+      - name: Read them with Fleet's reader
+        env:
+          FLEET_CLAUDE_TRANSCRIPTS: ${{ runner.temp }}/transcript-check/transcripts
+        run: dotnet test tests/WeaveFleet.Infrastructure.Tests -c Release --filter "FullyQualifiedName~ClaudeTranscriptFormatCheckTests" --logger "console;verbosity=normal"
+      - name: Transcripts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-transcripts
+          path: |
+            ${{ runner.temp }}/transcript-check/transcripts
+            ${{ runner.temp }}/transcript-check/version.txt
+            ${{ runner.temp }}/transcript-check/fake.log
+
+  # One open issue while the night is red, a comment on it each night it stays red, closed on the first green.
+  report:
+    name: Issue
+    needs: check
+    if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.nightly)) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open, comment on or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.check.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          title="Nightly Claude Code transcript check failed"
+          open=$(gh issue list --state open --limit 500 --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ "$RESULT" = success ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --comment "Green again on \`$REF\` at ${SHA::7}: $RUN_URL"
+              echo "green, closed #$open"
+            else
+              echo "green"
+            fi
+            exit 0
+          fi
+          text="The nightly check of Fleet's Claude Code transcript reader on \`$REF\` at ${SHA::7} is red: it ended \`$RESULT\`.
+
+          Run: $RUN_URL
+          The failing test names the transcript and the entry type or turn the reader didn't understand; the transcripts are in the run's \`claude-transcripts\` artifact (the Claude Code version is in version.txt).
+
+          This issue closes itself after the next green night."
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$text"
+            echo "red ($RESULT), commented on #$open"
+          else
+            gh issue create --title "$title" --body "$text"
+            echo "red ($RESULT), opened an issue"
+          fi
