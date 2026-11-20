@@ -48,16 +48,11 @@ describe("LabsSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
-  it("offers Your Fleet, off, and saves the choice", async () => {
+  it("has no Your Fleet switch: it is always on", async () => {
     const wrapper = await mountSection();
-    const toggle = wrapper.get("[data-testid='your-fleet-switch']");
-    expect(toggle.attributes("aria-checked")).toBe("false");
 
-    await toggle.trigger("click");
-    await flushPromises();
-
-    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "YourFleet" } }, body: { value: "true" } });
-    expect(toggle.attributes("aria-checked")).toBe("true");
+    expect(wrapper.find("[data-testid='your-fleet-switch']").exists()).toBe(false);
+    expect(wrapper.find("[data-setting-row='your-fleet']").exists()).toBe(false);
   });
 
   it("offers Claude Code sessions from a terminal, off, and saves the choice", async () => {

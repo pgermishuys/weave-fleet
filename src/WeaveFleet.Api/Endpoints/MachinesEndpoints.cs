@@ -174,14 +174,10 @@ public static class MachinesEndpoints
         .WithName("CheckRemoteMachine");
 
         // Phones' tokens on the machine go first, while there's still a token to remove them with.
-        group.MapDelete("/{id}", async (string id, RemoteMachineService machines, DeviceGrantService grants, FleetRemovals removals, CancellationToken cancellationToken) =>
+        group.MapDelete("/{id}", async (string id, FleetRemovals removals, CancellationToken cancellationToken) =>
         {
-            // Your Fleet (Labs): forgetting a machine forgets it on every machine.
-            if (await removals.IsEnabledAsync())
-                return await removals.ForgetMachineAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine."));
-
-            await grants.RemoveGrantsOnAsync(id, cancellationToken);
-            return await machines.DeleteAsync(id) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine."));
+            // Forgetting a machine forgets it on every machine.
+            return await removals.ForgetMachineAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine."));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("RemoveRemoteMachine");
@@ -192,11 +188,10 @@ public static class MachinesEndpoints
             string id,
             DeviceGrantRequest? body,
             WeaveFleet.Application.Devices.DeviceTokenService devices,
-            YourFleetFeature yourFleet,
             DeviceGrantService grants,
             CancellationToken cancellationToken) =>
         {
-            // With Your Fleet on (Labs), a screen signed in as the owner (a browser, the desktop app's window) asks the
+            // A screen signed in as the owner (a browser, the desktop app's window) asks the
             // same way a phone does, naming itself.
             string grantee, name;
             string? platform;
@@ -210,7 +205,7 @@ public static class MachinesEndpoints
                 name = device.Name;
                 platform = (await devices.ListAsync()).FirstOrDefault(d => d.Id == deviceId)?.Platform;
             }
-            else if (FleetClaims.IsOwner(http.User) && await yourFleet.IsEnabledAsync())
+            else if (FleetClaims.IsOwner(http.User))
             {
                 // Its key is a device token on the other machine like a phone's, kept under the screen's id here so
                 // removing the machine (and, in a later PR, the screen) removes it.

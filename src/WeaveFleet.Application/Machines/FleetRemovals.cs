@@ -18,7 +18,7 @@ public sealed record RemovalBatch(string? From, IReadOnlyList<FleetRemoval> Remo
 public sealed record RemovalList(IReadOnlyList<FleetRemoval> Removals);
 
 /// <summary>
-/// Your Fleet (Labs): forgetting a machine, or removing a phone or browser, on one machine reaches every machine.
+/// Your Fleet: forgetting a machine, or removing a phone or browser, on one machine reaches every machine.
 /// <list type="bullet">
 /// <item>The machine the user did it on keeps a <b>removal</b> (what, and when), applies it here, and tells every other
 /// machine in its list. Each of those keeps the removal, applies it and tells its own list, so it spreads even where
@@ -54,12 +54,6 @@ public sealed partial class FleetRemovals(
     public Task<FleetRemoval?> GetAsync(string id) => repository.GetRemovalAsync(id);
 
     public Task<IReadOnlyList<FleetRemoval>> ListAsync() => repository.ListRemovalsAsync();
-
-    public async Task<bool> IsEnabledAsync()
-    {
-        using var scope = scopes.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<YourFleetFeature>().IsEnabledAsync();
-    }
 
     /// <summary>
     /// The user forgets a machine on this one: it is gone from every machine. False when it isn't in the list. A machine

@@ -125,7 +125,7 @@ While `fleet node pair` (or `fleet node up`, which runs it) has a live code, the
 - **Tailscale.** Fleet asks `tailscale status --json` (the reader `MachineCandidates` uses too) and asks each online peer, on Fleet's port, `GET /api/pairing/waiting`.
 - **Home network.** A one-second UDP broadcast on port 6263 while the code is live (`FLEET_FOUND_PORT` changes it). It is a plain datagram, not mDNS: nothing to install and no admin rights on Windows, macOS or Linux, and no clash with the system's own mDNS responder on port 5353. Fleet listens only while Found is open, and asks only the address that sent it (this computer, the home network or Tailscale) and only believes it when that address answers with the same machine id.
 - **Stops.** When the code is used or runs out.
-- **"atlas wants to join your Fleet".** With Your Fleet on (Settings → Labs), every connected screen looks every 20 seconds (`GET /api/machines/found`, which a paired phone or signed-in screen may read; only the owner adds). The desktop app and browsers show a notice with an Add button that opens Add a machine → Found, where the code is checked. The native phone app shows the same line as a banner on the Sessions screen, asked for from the machine it is paired with. Nothing is pushed: Fleet has no native push sender, so a screen that isn't open doesn't hear.
+- **"atlas wants to join your Fleet".** Every connected screen looks every 20 seconds (`GET /api/machines/found`, which a paired phone or signed-in screen may read; only the owner adds). The desktop app and browsers show a notice with an Add button that opens Add a machine → Found, where the code is checked. The native phone app shows the same line as a banner on the Sessions screen, asked for from the machine it is paired with. Nothing is pushed: Fleet has no native push sender, so a screen that isn't open doesn't hear.
 - **The desktop app's first run.** The window looks once for a machine that is waiting. If it finds one it shows "Found your Fleet" with the same code check, and after joining asks "Where should new sessions run?". If nothing is waiting it shows nothing and doesn't look again; Add a machine → Found is always there.
 
 ### On a new server: `install.sh --join`
@@ -138,7 +138,7 @@ curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/i
 
 - **The line.** The machine you're on makes a join code (`POST /api/machines/join-code`, owner only) and the line carries every address that machine can be reached at, like a pairing code does. The code works once and for 30 minutes, lives in memory only and is stored hashed. The tab counts down, offers a new code when it runs out, and closes with "Added atlas" when a machine joins.
 - **On the server.** `install.sh` installs Fleet, runs `fleet node up --yes` (a machine with no screen, kept running as a service) and then `fleet node join '<line>'`, printing each step. `--yes` picks Tailscale when it is on, else "only over SSH", which no other machine can reach: join then says so and to run `fleet node up --lan` first.
-- **Joining.** `fleet node join` asks the machine running here (`POST /api/machine/join`, with its own token over loopback). That machine makes a pairing code of its own and sends it with the join code to the Fleet (`POST /api/pairing/join`, rate limited like pairing). The Fleet uses the join code up first, then adds the machine the way Add a machine does, with a key the new machine made for it. The master tokens never cross the network. With Your Fleet on, the Fleet then introduces the new machine to every other machine (see above), and `fleet node join` turns Your Fleet on on the new machine for the introduction back. A Fleet with it off lists the new machine only itself, and `join` says so.
+- **Joining.** `fleet node join` asks the machine running here (`POST /api/machine/join`, with its own token over loopback). That machine makes a pairing code of its own and sends it with the join code to the Fleet (`POST /api/pairing/join`, rate limited like pairing). The Fleet uses the join code up first, then adds the machine the way Add a machine does, with a key the new machine made for it. The master tokens never cross the network. The Fleet then introduces the new machine to every other machine (see above). A Fleet on an older build keeps no list, so it lists the new machine only itself, and `join` says so.
 - **Errors.** A code that expired, was used, or never existed gives "This join code has expired or was already used. Make a new one in Add a machine → On a new server." A new machine the Fleet can't reach back says so, and the code is used up.
 - **Windows.** `fleet node join` is in `launcher.cmd` too; `install.sh` is Linux and macOS only.
 
@@ -853,9 +853,9 @@ nothing about the id says so.
 - The machine token has no scopes. Paired devices get their own tokens with one limit (no managing access); there
   are no finer scopes.
 
-## Your Fleet (Labs, in progress)
+## Your Fleet
 
-Settings → Labs → Your Fleet, off by default. The plan is in `.weave/plans/machines-setup-journeys.md`. This first slice
+Always on: there is no switch (it left Labs on 20 November 2026). An older install's stored `YourFleet` preference is ignored. The plan is in `.weave/plans/machines-setup-journeys.md`. This first slice
 changes one thing: a screen signed in as the owner on a machine (a browser, the desktop app's window) can ask that
 machine for its own key on any machine in its list, the way a paired phone does.
 
@@ -871,7 +871,7 @@ machine for its own key on any machine in its list, the way a paired phone does.
 
 ### Every machine keeps the list (Your Fleet, second slice)
 
-With Your Fleet on, add atlas through hangar and then workbench through atlas: hangar, atlas and workbench each list the
+Add atlas through hangar and then workbench through atlas: hangar, atlas and workbench each list the
 other two. A screen connected to any one of them gets a key for each, now and for machines added later. No machine is the
 home.
 
@@ -888,24 +888,22 @@ home.
   then compare lists with it. The machine row records who introduced it (`machines.introduced_by`), and the keys an
   introduction made on another machine sit in `device_grants` under `machine:{id}`.
 - **What a machine-kind token may do.** Make device tokens (including machine-kind ones), take introductions, and remove
-  only the devices it made itself (`devices.created_by`). Everything else is the owner's. With Your Fleet off on the
-  receiving machine, introductions are refused.
+  only the devices it made itself (`devices.created_by`). Everything else is the owner's.
 - **Screens.** An open `/phone` page looks at the list every 30 seconds and when the page comes back, and asks for a key
   for any machine it doesn't show yet.
 - **Removal.** See the next section.
 
 ### Forgetting and removing reach every machine (Your Fleet, third slice)
 
-With Your Fleet on, forget atlas on any machine (or screen) and it is gone from every machine; remove a phone or a browser
+Forget atlas on any machine (or screen) and it is gone from every machine; remove a phone or a browser
 on any machine and it loses its keys on every machine. A machine that was off hears when it is back.
 
 - **Removals.** A machine keeps what was forgotten or removed in `fleet_removals` (`id`, `kind`, `removed_at`,
   `removed_by`): kind `machine` for a forgotten machine, `grantee` for a phone or a browser (a phone's device id, or
   `screen:{id}`). The machine the user did it on keeps one, applies it, and tells every machine in its list
-  (`POST /api/machine/removals`, `{ from, removals }`, a machine's key or the owner's token only; refused with Your
-  Fleet off). Each machine that takes in a removal it didn't have applies it and tells its own list, so it spreads where
+  (`POST /api/machine/removals`, `{ from, removals }`, a machine's key or the owner's token only). Each machine that takes in a removal it didn't have applies it and tells its own list, so it spreads where
   the first machine can't reach. `GET /api/machine/removals` lists them.
-- **Forgetting a machine.** `DELETE /api/machines/{id}` on a machine with Your Fleet on: the phones' and browsers' keys
+- **Forgetting a machine.** `DELETE /api/machines/{id}` : the phones' and browsers' keys
   on atlas are removed (as before), the keys this machine asked other machines to make for atlas are removed there
   (`device_grants` under `machine:{id}`), the keys this machine made for atlas are revoked (`devices.made_for`),
   atlas is told, and the row is deleted. Atlas, told by a machine that forgot it, drops that machine from its list and
@@ -939,7 +937,7 @@ on any machine and it loses its keys on every machine. A machine that was off he
 
 A phone or browser has one identity across the Fleet: its device on the machine it paired with (none for a browser) and
 the keys the other machines made for it (`devices.made_for` is its phone id or `screen:{id}`, `paired_via` the machine it
-connected through). With Your Fleet on, Settings → Machines lists each once.
+connected through). Settings → Machines lists each once.
 
 - `GET /api/machine/screens` (owner): this machine asks every machine in its list for `GET /api/machine/screens/local`
   (the machine token or a machine-kind key; what that machine holds, other machines' keys left out), then groups by identity.
@@ -950,7 +948,6 @@ connected through). With Your Fleet on, Settings → Machines lists each once.
 - **Why ask rather than copy.** The list changes whenever a phone is used, so a copy would be stale or would need a sync
   of its own, and removals already cover the part that has to be exact. Asking costs one small request per machine each
   time the page opens, and nothing new is stored.
-- With Your Fleet off the endpoints answer 403 and the page lists this machine's own devices as before.
 
 ### The Machines page
 
@@ -959,22 +956,19 @@ Settings → Machines is two lists and, behind each machine's **Manage** button,
 - **Your machines.** Every machine this client knows, each with one line on how a phone reaches it (`lib/machine-reach-line.ts`,
   with the rules of `lib/phone-reach.ts`): "Reaches your phone over Tailscale and the home network", "Only on Tailscale",
   "Only this machine" (the desktop app before it lets others reach it), "Off since 08:40" or "Not reachable".
-- **Phones and browsers.** The phones and browsers that have keys on this machine, with Add your phone and Remove. With
-  Your Fleet on, the list is the whole Fleet's: each phone or browser shows once, with its own name, its platform, the
+- **Phones and browsers.** The phones and browsers that have keys on this machine, with Add your phone and Remove. The list is the whole Fleet's: each phone or browser shows once, with its own name, its platform, the
   machine it connected through and when it was last seen on any machine. Remove reaches every machine, and any machine's
   list shows it. See "One list of screens" below.
 - **A machine's page** (`MachinePage.vue`, titled with the machine and a "‹ Machines" trail): rename, Work here, Forget,
   agents sending work, jobs, the key this browser holds for it (New token) and its addresses in order. The machine this
   client is signed in to also holds the access token, its addresses and who may reach it (the old "Let other devices reach
   This machine" block).
-- With Your Fleet off the page is the same, and only the Fleet-wide wording goes (Forget and Remove say they affect this
-  machine's list only).
 
 ### The native phone app
 
-With Your Fleet on at a machine the app is paired with (its home), the app asks home for its own key on every other
+At a machine the app is paired with (its home), the app asks home for its own key on every other
 machine in home's list, so it never pairs them one by one. Nothing new on the server: the app reads
-`GET /api/preferences` (is `YourFleet` `"true"`?), `GET /api/machines` (no tokens for a phone) and calls
+`GET /api/machines` (no tokens for a phone) and calls
 `POST /api/machines/{id}/device-grant` with its own device token, exactly as the web phone does.
 
 - Each key is stored like a paired machine's (Keychain / Keystore), marked `via` the home that made it. Machines the app
@@ -990,3 +984,27 @@ machine in home's list, so it never pairs them one by one. Nothing new on the se
   treats as removed, so it isn't given a fresh key.
 - Not yet: the notification is in the app, not a system push. The native app has no push channel (Fleet's only sender is
   web push; the `apns` / `fcm` senders the dispatcher leaves room for don't exist).
+
+### Upgrading from before Your Fleet was always on
+
+An install that had Your Fleet off (the Labs default) and added machines the old way (pairing code or machine token,
+no roster) keeps every one of them: the rows and their tokens are not touched. On start, and again whenever its list
+changes or a machine answers, the machine compares lists with each machine (`FleetRosterSync` → `FleetRoster.SyncAllAsync`),
+so the machines it already holds get introduced to each other and each machine hears about this one. Every key is made
+by the machine it is for (a machine-kind device token) and the owner token is never sent on. A stored `YourFleet`
+preference from before is ignored and not cleaned up: nothing reads it.
+
+### A machine nobody can reach (the desktop app with reach off)
+
+Introductions need an address to deliver a key to, and the desktop app has none until "Add your phone" turns reach on.
+So it **pulls** instead. When it compares lists with a machine it can reach and that machine lists machines it lacks, it
+asks `POST /api/machine/pull` (machine token or machine-kind key; body `{ machineId, name, have }`). That machine asks each
+of the others, through the key it holds there, to mint a machine-kind key for the caller (the same mint call an
+introduction uses, `device_grants` under `machine:{caller}`, `devices.made_for`), and hands the keys back as introductions,
+which the caller takes in like any other (`FleetRoster.AcceptAsync`, so each machine is checked to answer as itself and a
+forgotten one isn't taken back). No owner token is sent on, and a machine that is already in `have` is not asked for again.
+The desktop app then reaches every machine outbound. Nothing can reach it, so the others don't list it.
+
+It looks for what the others gained once a minute (`FleetRosterSync`), since nothing tells it. Changing who can reach it
+(`PUT /api/machine/reach`) compares lists at once (`FleetRoster.RequestSync`), so what waited on an address goes without a
+restart.

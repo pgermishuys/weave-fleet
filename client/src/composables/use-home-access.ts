@@ -1,4 +1,4 @@
-import { computed, shallowRef, type Ref } from "vue";
+import { computed, shallowRef } from "vue";
 import { useMachinesStore, type MachineAccess } from "@/stores/machines";
 import { useMachineReach } from "@/composables/use-machine-reach";
 import { listDevices, listFleetScreens, type NotAnsweringMachine, type PairedDevice } from "@/lib/devices-api";
@@ -7,7 +7,7 @@ import { listDevices, listFleetScreens, type NotAnsweringMachine, type PairedDev
  * How other devices reach the machine this client is signed in to (its token, addresses, who may reach it) and the
  * phones and browsers that have keys on it. Owner only: a paired device sees none of it.
  */
-export function useHomeAccess(yourFleetOn?: Readonly<Ref<boolean>>) {
+export function useHomeAccess() {
   const machines = useMachinesStore();
   const reach = useMachineReach();
   const access = shallowRef<MachineAccess | null>(null);
@@ -23,17 +23,15 @@ export function useHomeAccess(yourFleetOn?: Readonly<Ref<boolean>>) {
   const notAnswering = shallowRef<NotAnsweringMachine[]>([]);
 
   async function refreshDevices(): Promise<void> {
-    // With Your Fleet on, every machine is asked and each phone or browser shows once. If that can't be had (an older Fleet,
-    // or it was switched off meanwhile), this machine's own list stands in.
-    if (yourFleetOn?.value) {
-      try {
-        const fleet = await listFleetScreens();
-        devices.value = fleet.screens;
-        notAnswering.value = fleet.notAnswering;
-        return;
-      } catch {
-        // fall through
-      }
+    // Every machine is asked and each phone or browser shows once. If that can't be had (an older Fleet), this machine's
+    // own list stands in.
+    try {
+      const fleet = await listFleetScreens();
+      devices.value = fleet.screens;
+      notAnswering.value = fleet.notAnswering;
+      return;
+    } catch {
+      // fall through
     }
     notAnswering.value = [];
     try {

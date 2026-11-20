@@ -43,9 +43,9 @@ public sealed class PhonePairingTests(PhoneFleetWebApplicationFactory factory, P
         // The desktop sees it, and removes it.
         await desktop.GetByTestId("device-row").Filter(new LocatorFilterOptions { HasText = "Test Pixel" }).WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
         await desktop.GetByTestId("device-row").Filter(new LocatorFilterOptions { HasText = "Test Pixel" }).GetByText("Remove").ClickAsync();
-        // Fleet asks first, in its own dialog (confirmAction), and the button says the action.
+        // Fleet asks first, in its own dialog (confirmAction), and the button says the action. Your Fleet is always on, so it says it reaches every machine.
         var confirm = desktop.GetByTestId("confirm-dialog");
-        await Assertions.Expect(confirm).ToContainTextAsync("Remove Test Pixel?");
+        await Assertions.Expect(confirm).ToContainTextAsync("Remove Test Pixel on every machine in your Fleet?");
         await confirm.GetByTestId("confirm-action").ClickAsync();
         await desktop.GetByTestId("device-row").Filter(new LocatorFilterOptions { HasText = "Test Pixel" }).WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
 

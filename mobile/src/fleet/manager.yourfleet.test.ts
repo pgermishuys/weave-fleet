@@ -9,7 +9,6 @@ const ATLAS = "https://atlas.tail4f2a.ts.net";
 
 /** What hangar says its list is, whether Your Fleet is on there, and what each machine was asked. */
 let listed: { id: string; name: string; baseUrl: string; addresses?: { url: string }[] }[];
-let yourFleet: boolean;
 let atlasAway: boolean;
 let waiting: { machineId: string; name: string }[];
 let requests: { url: string; method: string; auth: string | null }[];
@@ -61,7 +60,6 @@ async function start() {
 
 beforeEach(() => {
   listed = [{ id: "hangar", name: "hangar", baseUrl: HANGAR }];
-  yourFleet = true;
   atlasAway = false;
   waiting = [];
   requests = [];
@@ -75,7 +73,6 @@ beforeEach(() => {
     const path = url.slice(HANGAR.length);
     if (path.startsWith("/api/sessions")) return json([]);
     if (path === "/api/machine") return json({ id: "hangar", addresses: [{ url: HANGAR, kind: "tailnet" }] });
-    if (path === "/api/preferences") return json(yourFleet ? { YourFleet: "true" } : {});
     if (path === "/api/machines") return json({ machines: listed });
     if (path === "/api/machines/found") return json({ machines: waiting });
     if (path === "/api/machines/atlas/device-grant" && init?.method === "POST") {
@@ -152,16 +149,6 @@ describe("Your Fleet on the phone", () => {
     atlasAway = false;
     await manager.joinFleet(home());
     expect(manager.snapshot().joined.map((j) => j.machineName)).toEqual(["atlas"]);
-  });
-
-  test("with Your Fleet off, the phone asks for nothing", async () => {
-    yourFleet = false;
-    listed = [...listed, atlas];
-    const { store, manager } = await start();
-    await settled(manager);
-
-    expect(store.get("atlas")).toBeUndefined();
-    expect(requests.some((r) => r.url.endsWith("/device-grant"))).toBe(false);
   });
 
   test("forgetting atlas on the phone keeps it forgotten", async () => {

@@ -8,17 +8,8 @@ const navigate = vi.hoisted(() => vi.fn());
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }) }));
 
 const state = vi.hoisted(() => ({
-  prefs: {} as Record<string, string>,
-  fetched: true,
   found: null as unknown,
   loadFound: vi.fn(),
-}));
-vi.mock("@/stores/preferences", () => ({
-  usePreferencesStore: () => ({
-    ensureLoaded: vi.fn(),
-    get hasFetched() { return state.fetched; },
-    get: (key: string, fallback: string) => state.prefs[key] ?? fallback,
-  }),
 }));
 vi.mock("@/stores/machines", async () => {
   const { shallowRef: ref } = await import("vue");
@@ -45,8 +36,6 @@ describe("useJoinPrompt", () => {
     localStorage.clear();
     setActivePinia(createPinia());
     navigate.mockClear();
-    state.prefs = { YourFleet: "true" };
-    state.fetched = true;
     foundRef().value = [];
     state.loadFound.mockReset().mockResolvedValue(undefined);
   });
@@ -82,13 +71,5 @@ describe("useJoinPrompt", () => {
 
     expect(state.loadFound).toHaveBeenCalledTimes(2);
     expect(notices.has(joinNoticeId("m-atlas"))).toBe(false);
-  });
-
-  it("looks for nobody with Your Fleet off", async () => {
-    state.prefs = {};
-    mountIt();
-    await vi.advanceTimersByTimeAsync(JOIN_LOOK_EVERY_MS * 2);
-
-    expect(state.loadFound).not.toHaveBeenCalled();
   });
 });

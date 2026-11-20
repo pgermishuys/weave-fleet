@@ -16,9 +16,7 @@ import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.v
 import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
 import MachineAddressList from "@/components/settings/MachineAddressList.vue";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
-import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { usePreferencesStore } from "@/stores/preferences";
-import { YOUR_FLEET_PREFERENCE_KEY } from "@/lib/your-fleet";
 import { useHomeAccess } from "@/composables/use-home-access";
 import { useMachineLines } from "@/composables/use-machine-lines";
 import { useMachinePage } from "@/composables/use-machine-page";
@@ -38,7 +36,6 @@ const machines = useMachinesStore();
 const { entries } = storeToRefs(machines);
 const { isJobsEnabled: jobsOn } = useJobsFeature();
 usePreferencesStore().ensureLoaded();
-const { enabled: yourFleetOn } = usePreferenceSwitch(YOUR_FLEET_PREFERENCE_KEY);
 const page = useMachinePage();
 const router = useRouter();
 const lines = useMachineLines();
@@ -122,7 +119,7 @@ async function setAgentWork(entry: MachineEntry, value: MachineAgentWork): Promi
 
 async function forget(): Promise<void> {
   const entry = props.entry;
-  const confirmed = await confirmAction(yourFleetOn.value
+  const confirmed = await confirmAction(!entry.sshDestination
     ? {
         title: `Forget ${entry.name} on every machine in your Fleet?`,
         body: `Every machine drops it from its list and its keys stop working, even on machines that are off now: they hear when they're back. Its sessions stay on ${entry.name}. To use it again, add it again with its pairing code.`,

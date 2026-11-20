@@ -1,7 +1,7 @@
 {
   "rules": {
     "RAW_BUTTON": {
-      "total": 686,
+      "total": 679,
       "files": {
         "src/components/analytics/AnalyticsFilters.vue": 1,
         "src/components/analytics/AnalyticsNavPanel.vue": 1,
@@ -159,10 +159,11 @@
         "src/components/settings/HarnessesSection.vue": 3,
         "src/components/settings/MachineAddressList.vue": 1,
         "src/components/settings/MachineDiagnosisPanel.vue": 2,
+        "src/components/settings/MachinePage.vue": 4,
         "src/components/settings/MachineSetupCard.vue": 5,
         "src/components/settings/MachineUpdatesGroup.vue": 1,
         "src/components/settings/MachineUpdatesStrip.vue": 4,
-        "src/components/settings/MachinesSection.vue": 18,
+        "src/components/settings/MachinesSection.vue": 7,
         "src/components/settings/MemorySection.vue": 20,
         "src/components/settings/ModsSection.vue": 3,
         "src/components/settings/PermissionsSection.vue": 2,
@@ -346,7 +347,7 @@
       }
     },
     "HARDCODED_TIMING": {
-      "total": 54,
+      "total": 53,
       "files": {
         "src/components/analytics/charts/HorizontalCostBars.vue": 1,
         "src/components/analytics/tabs/ProjectsTab.vue": 1,
@@ -379,7 +380,6 @@
         "src/components/sessions/SessionsPanel.vue": 2,
         "src/components/sessions/SessionsV2RightPanel.vue": 1,
         "src/components/sessions/StatusGlyph.vue": 2,
-        "src/components/settings/MachinesSection.vue": 1,
         "src/components/settings/SettingSegments.vue": 1,
         "src/components/settings/SettingsPage.vue": 1,
         "src/components/settings/WhatsNewSection.vue": 2,

@@ -26,7 +26,7 @@ public static class ReachEndpoints
             .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
             .WithName("GetMachineReach");
 
-        group.MapPut("", async (SetReachRequest request, IServiceProvider services, MachineIdentityStore identities, TailnetName tailnet, ITailscale tailscale, CancellationToken ct) =>
+        group.MapPut("", async (SetReachRequest request, IServiceProvider services, MachineIdentityStore identities, WeaveFleet.Application.Machines.FleetRoster roster, TailnetName tailnet, ITailscale tailscale, CancellationToken ct) =>
         {
             var reach = services.GetService<ReachListeners>();
             if (reach is null)
@@ -50,6 +50,9 @@ public static class ReachEndpoints
             // Pairing codes point phones at the address the person gave.
             if (request.Mode == ReachModes.Own)
                 identities.Update(current => current with { PublicUrl = ownAddress });
+
+            // Who can reach this machine changed: the machines compare lists again, so what was waiting on an address goes now.
+            roster.RequestSync();
 
             return Results.Ok(await ToResponseAsync(reach, fleetOptions, tailnet, tailscale, ct));
         })

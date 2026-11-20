@@ -177,7 +177,7 @@ public sealed partial class DeviceGrantService(
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Delete, $"{machine.BaseUrl}/api/machine/devices/{Uri.EscapeDataString(remoteDeviceId)}");
+            using var request = new HttpRequestMessage(HttpMethod.Delete, $"{machine.BaseUrl}/api/machine/devices/{Uri.EscapeDataString(remoteDeviceId)}?keyOnly=true");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", machines.TokenOf(machine));
             using var response = await httpClients.CreateClient(RemoteMachineService.HttpClientName).SendAsync(request, cancellationToken);
             return response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound;
