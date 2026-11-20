@@ -24,6 +24,7 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
     private readonly SessionOrchestrator _orchestrator;
     private readonly InMemoryQueuedPromptRepository _queued = new();
     private readonly SessionMessageDelivery _sut;
+    private readonly PromptQueueService _queue;
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"fleet-message-delivery-{Guid.NewGuid():N}");
 
     public SessionMessageDeliveryTests()
@@ -42,7 +43,7 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
         });
         _builder.RegisterHarness("opencode", "OpenCode").DefaultSession = _harnessSession;
         _orchestrator = _builder.Build();
-        var queue = new PromptQueueService(
+        _queue = new PromptQueueService(
             _builder.Prompting,
             _builder.ShellCommands,
             _builder.SessionRepository,
@@ -53,7 +54,7 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
             new TestUserContext(UserId),
             new TurnRetryScheduler(TestServiceScopeFactory.CreateEmpty(), TimeProvider.System, NullLogger<TurnRetryScheduler>.Instance),
             NullLogger<PromptQueueService>.Instance);
-        _sut = new SessionMessageDelivery(_builder.Prompting, _builder.EventBroadcaster, queue);
+        _sut = new SessionMessageDelivery(_builder.Prompting, _builder.EventBroadcaster, _queue);
     }
 
     public ValueTask DisposeAsync() => _harnessSession.DisposeAsync();
@@ -123,6 +124,39 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
         sent.IsSuccess.ShouldBeTrue(sent.IsFailure ? sent.Error.Description : null);
         (await _queued.ListAsync(to)).ShouldHaveSingleItem().Text.ShouldContain("Check the installer.");
         Messaged(to).FromSessionId.ShouldBe("s-sender");
+    }
+
+    /// <summary>
+    /// While a turn runs (a compaction is one), what the user queued and what other sessions send go out in the order
+    /// they came, each once. A harness that takes a prompt mid-turn must not let a message jump the user's queue.
+    /// </summary>
+    [Fact]
+    public async Task messages_and_queued_prompts_sent_during_a_turn_keep_their_order()
+    {
+        var to = await CreateSessionAsync();
+        _builder.ActivityTracker.Update(to, ActivityStatuses.Busy, UserId);
+        var sentInOrder = new List<string>();
+        _harnessSession.SendPromptBehavior = (text, _, _) =>
+        {
+            sentInOrder.Add(text);
+            return Task.CompletedTask;
+        };
+
+        await _queue.EnqueueAsync(to, new QueuePromptRequest("user one", Kind: null));
+        await _sut.DeliverAsync("s-a", "A", fromMachine: null, to, "message one", UserId, CancellationToken.None);
+        await _sut.DeliverAsync("s-b", "B", fromMachine: null, to, "message two", UserId, CancellationToken.None);
+        await _queue.EnqueueAsync(to, new QueuePromptRequest("user two", Kind: null));
+
+        _builder.ActivityTracker.Update(to, ActivityStatuses.Idle, UserId);
+        while ((await _queued.ListAsync(to)).Count > 0)
+        {
+            await _queue.SendNextAsync(to);
+            _builder.ActivityTracker.Update(to, ActivityStatuses.Busy, UserId);
+            _builder.ActivityTracker.Update(to, ActivityStatuses.Idle, UserId);
+        }
+
+        sentInOrder.Select(t => t.Contains("message one") ? "m1" : t.Contains("message two") ? "m2" : t)
+            .ShouldBe(["user one", "m1", "m2", "user two"]);
     }
 
     [Fact]
