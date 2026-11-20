@@ -46,6 +46,8 @@ public sealed class TerminalSessionWatcherTests : IDisposable
         Assert.Equal(Terminal.Changed, report.Event);
         Assert.Equal(ClaudeSessionId, report.SessionId);
 
+        // Writing a file raises more than one event; let the reads they queue finish before the session closes.
+        await Task.Delay(800);
         _presence.Remove(ClaudeSessionId);
         _recorder.Reset();
         await File.AppendAllTextAsync(transcript, "{}\n");

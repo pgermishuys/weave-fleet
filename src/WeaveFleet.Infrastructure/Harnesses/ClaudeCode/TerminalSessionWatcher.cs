@@ -125,6 +125,11 @@ public sealed partial class TerminalSessionWatcher(
                 await Task.Delay(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
                 following.Done();
                 var open = following.Open;
+
+                // The session closed while it waited.
+                if (!_following.TryGetValue(open.ClaudeSessionId, out var current) || !ReferenceEquals(current, following))
+                    return;
+
                 using var asUser = BackgroundUserContext.BeginScope(open.UserId);
                 using var scope = scopes.CreateScope();
                 var sessions = scope.ServiceProvider.GetRequiredService<ITerminalSessions>();
