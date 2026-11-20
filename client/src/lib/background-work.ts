@@ -20,6 +20,9 @@ import { asRecord } from "@/lib/tools";
  *   …what it said…
  *   </subagent>
  *
+ * Newer V2 writes the same two as `<background-result kind="shell" id="sh_…" …>` and
+ * `<background-result kind="subagent" sessionID="ses_…" …>`, closed by `</background-result>`; both shapes are read.
+ *
  * V2 never updates the call itself, so a card is finished by its notice: the conversation carries both, live and when
  * it's read back from the harness.
  */
@@ -41,6 +44,16 @@ export interface BackgroundNotice {
 
 const SHELL_NOTICE = /^<shell id="([^"]*)" state="([^"]*)" command="([\s\S]*?)">\n([\s\S]*)\n<\/shell>\s*$/;
 const SUBAGENT_NOTICE = /^<subagent sessionID="([^"]*)" state="([^"]*)" description="([\s\S]*?)">\n([\s\S]*)\n<\/subagent>\s*$/;
+// Newer OpenCode 2 wraps every kind in one tag. Only shell and subagent are folded; image, video and codemode stay text.
+const WRAPPED_SHELL_NOTICE =
+  /^<background-result kind="shell" id="([^"]*)" state="([^"]*)" command="([\s\S]*?)">\n([\s\S]*)\n<\/background-result>\s*$/;
+const WRAPPED_SUBAGENT_NOTICE =
+  /^<background-result kind="subagent" sessionID="([^"]*)" state="([^"]*)" description="([\s\S]*?)">\n([\s\S]*)\n<\/background-result>\s*$/;
+
+/** Whether a message body may be a background notice, cheaply, before parsing it. */
+export function looksLikeBackgroundNotice(body: string): boolean {
+  return body.startsWith("<shell ") || body.startsWith("<subagent ") || body.startsWith("<background-result ");
+}
 
 function state(value: string): BackgroundState {
   return value === "error" || value === "cancelled" ? value : "completed";
@@ -48,12 +61,12 @@ function state(value: string): BackgroundState {
 
 /** The background work a message says finished, or null for anything else. */
 export function parseBackgroundNotice(body: string): BackgroundNotice | null {
-  const shell = SHELL_NOTICE.exec(body);
+  const shell = SHELL_NOTICE.exec(body) ?? WRAPPED_SHELL_NOTICE.exec(body);
   if (shell) {
     return { kind: "shell", id: shell[1], state: state(shell[2]), label: shell[3], text: shell[4] };
   }
 
-  const subagent = SUBAGENT_NOTICE.exec(body);
+  const subagent = SUBAGENT_NOTICE.exec(body) ?? WRAPPED_SUBAGENT_NOTICE.exec(body);
   if (subagent) {
     return { kind: "subagent", id: subagent[1], state: state(subagent[2]), label: subagent[3], text: subagent[4] };
   }
