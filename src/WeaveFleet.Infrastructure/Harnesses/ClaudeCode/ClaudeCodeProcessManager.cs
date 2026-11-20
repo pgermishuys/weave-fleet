@@ -421,8 +421,17 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
     /// </summary>
     public async Task StopAsync(TimeSpan timeout)
     {
-        if (_process is null || _process.HasExited)
+        if (_process is null)
+            return;
+
+        try
         {
+            if (_process.HasExited)
+                return;
+        }
+        catch (InvalidOperationException)
+        {
+            // Already disposed, by the session's reader when the process ended on its own: nothing left to stop.
             return;
         }
 
