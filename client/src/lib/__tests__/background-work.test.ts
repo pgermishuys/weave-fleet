@@ -49,6 +49,37 @@ describe("parseBackgroundNotice", () => {
     expect(parseBackgroundNotice(subagent_notice.replace('state="completed"', 'state="cancelled"'))?.state).toBe("cancelled");
   });
 
+  it("reads the <background-result> shape newer OpenCode 2 writes, for a shell and a subagent", () => {
+    const shell = `<background-result kind="shell" id="sh_1" state="completed" command="sleep 6; echo done">
+done
+
+Command exited with code 0.
+</background-result>`;
+    expect(parseBackgroundNotice(shell)).toEqual({
+      kind: "shell",
+      id: "sh_1",
+      state: "completed",
+      label: "sleep 6; echo done",
+      text: "done\n\nCommand exited with code 0.",
+    });
+
+    const subagent = `<background-result kind="subagent" sessionID="ses_child" state="error" description="Slow helper">
+The child failed.
+</background-result>`;
+    expect(parseBackgroundNotice(subagent)).toEqual({
+      kind: "subagent",
+      id: "ses_child",
+      state: "error",
+      label: "Slow helper",
+      text: "The child failed.",
+    });
+  });
+
+  it("leaves image, video and codemode notices as text", () => {
+    const image = `<background-result kind="image" id="img_1" state="completed">\nDone\n</background-result>`;
+    expect(parseBackgroundNotice(image)).toBeNull();
+  });
+
   it("leaves an ordinary prompt alone", () => {
     expect(parseBackgroundNotice("Please run the tests")).toBeNull();
     expect(parseBackgroundNotice("<shell> what does this tag do?")).toBeNull();
