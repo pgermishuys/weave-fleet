@@ -197,6 +197,10 @@ public sealed partial class PromptQueueService(
         return sent;
     }
 
+    /// <summary>True when anything is waiting in the session's queue, so a newer message has to wait behind it.</summary>
+    public async Task<bool> HasWaitingAsync(string sessionId)
+        => (await queue.ListAsync(sessionId).ConfigureAwait(false)).Count > 0;
+
     /// <summary>
     /// True when a message that starts a turn is queued and Fleet would send it if the session idled now.
     /// </summary>

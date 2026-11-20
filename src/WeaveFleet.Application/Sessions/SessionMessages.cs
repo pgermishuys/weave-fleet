@@ -106,8 +106,12 @@ public sealed class SessionMessageDelivery(SessionPrompting prompting, IEventBro
         CancellationToken ct)
     {
         var wrapped = SessionMessages.Wrap(fromSessionId, fromTitle, text.Trim(), fromMachine);
-        var sent = await prompting.PromptSessionWithReceiptAsync(toSessionId, wrapped, new PromptOptions { FailIfBusy = true }, userMessageId: null, correlationId: null, ct)
-            .ConfigureAwait(false);
+        // Something already waits in the receiver's queue: this goes behind it, so a message never jumps what came
+        // before it, whether the harness would take a prompt mid-turn (a compaction included) or not.
+        var sent = await queue.HasWaitingAsync(toSessionId).ConfigureAwait(false)
+            ? new FleetError(SessionPrompting.BusyErrorCode, "Messages are already waiting.")
+            : await prompting.PromptSessionWithReceiptAsync(toSessionId, wrapped, new PromptOptions { FailIfBusy = true }, userMessageId: null, correlationId: null, ct)
+                .ConfigureAwait(false);
         // A harness that can't take a prompt mid-turn (GitHub Copilot, also while it waits on a permission ask) or
         // would make the sender wait for it (Claude Code) refuses it: the message waits in the receiver's queue and
         // goes when its turn ends. It then has no message
