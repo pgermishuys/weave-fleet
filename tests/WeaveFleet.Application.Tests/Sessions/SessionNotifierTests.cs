@@ -267,6 +267,48 @@ public sealed class SessionNotifierTests
         Payload(Single()).Reason.ShouldBe(SessionNotificationReasons.Finished);
     }
 
+    [Fact]
+    public async Task turns_the_agent_starts_on_its_own_tell_you_once_until_you_look()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            await ChangeAsync(ActivityStatuses.Busy);
+            await ChangeAsync(ActivityStatuses.Idle);
+            await WaitForAsync(1);
+            _time.Advance(TimeSpan.FromMinutes(1));
+        }
+
+        _broadcaster.Broadcasts.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task a_turn_after_you_prompted_the_session_tells_you_again()
+    {
+        await ChangeAsync(ActivityStatuses.Busy);
+        await ChangeAsync(ActivityStatuses.Idle);
+        _time.Advance(TimeSpan.FromMinutes(1));
+        _focus.Touch(SessionId);
+
+        await ChangeAsync(ActivityStatuses.Busy);
+        _sut.OnActivityChanged(SessionId, ActivityStatuses.Idle);
+        await WaitForAsync(2);
+
+        _broadcaster.Broadcasts.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task a_failure_after_a_finished_turn_still_tells_you()
+    {
+        await ChangeAsync(ActivityStatuses.Busy);
+        await ChangeAsync(ActivityStatuses.Idle);
+        _time.Advance(TimeSpan.FromMinutes(1));
+
+        _sut.OnSessionFailed(SessionId, "boom");
+        await WaitForAsync(2);
+
+        _broadcaster.Broadcasts.Count.ShouldBe(2);
+    }
+
     private async Task ChangeAsync(string activityStatus, string sessionId = SessionId)
     {
         _sut.OnActivityChanged(sessionId, activityStatus);
