@@ -1,0 +1,90 @@
+<fleet-session-message from="cabf4586-66e8-49c8-a684-b160062e1731" title="Review (#4776): SCIM: support externalId on groups" machine="0ca5f2288a1b4b14a43c995a85232184" machine-name="aurora">
+Bug report for Fleet (found by Pieter on 20 November 2026, Windows machine, Fleet at 127.0.0.1:6262, harness opencode2). Please find the root cause and propose a fix with a test that fails first; don't change anything outside weave-fleet.
+
+Symptom: in the sidebar, under the session "Review (#4776): SCIM: support externalId on groups" (Fleet id cabf4586-66e8-49c8-a684-b160062e1731), a finished subagent row "Reviewer A: re-review r2" kept a green "busy" dot long after it finished. A browser reload cleared the dot. So the server state was right and the client's live state was stale.
+
+Evidence:
+- OpenCode DB (session_v2): Reviewer A (harness ses_e07cd490cffei7P1IC684dmBM5) started 2026-11-20 09:03:56 UTC, went idle 09:05:12 UTC, idle_outcome succeeded. Its sibling Reviewer B (ses_e07cd31d8ffez3FJn6ir4VnPjY) started 09:04:02 UTC and went idle 09:06:59 UTC, also succeeded. Both were started in parallel by the parent in one assistant message (two background subagent tool calls).
+- Fleet GET /api/sessions/cabf4586.../delegations: both children completed (Fleet ids aa4b1845-afc5-4c5a-8220-d65e90c57bf6 for A, dcf4908c-20f2-4bc7-9e64-05f0879ffaf0 for B).
+- Fleet GET /api/sessions/{child}/status for both: activityStatus idle, lifecycleStatus running. Identical server state for A and B, yet only A showed as busy; B's row was not shown at all.
+- The parent session stayed busy throughout (it kept working while the children ran).
+
+Leads (not proven): A finished first, while its sibling B and the parent were still busy. The client may drop or misorder A's idle event (for example a per-parent update that is replaced by a later event for B or the parent, or an event that arrives before the child row is registered in the client store). Separately: completed child sessions stay lifecycleStatus "running" while an older shuttle child from 18 November (e4b56fff-49a1-4367-8f98-d0006e053f30) reads "stopped"; check whether the sidebar dot reads lifecycleStatus or activityStatus, and whether the live event path and the reload path compute it the same way.
+
+Repro idea: from one parent session, start two background subagents in one message where the first finishes well before the second; watch the sidebar without reloading.
+
+Started by the session "Review (#4776): SCIM: support externalId on groups" on aurora. Answer it with fleet_message, sessionId cabf4586-66e8-49c8-a684-b160062e1731, machine aurora; that works once aurora is in this machine's list under Settings › Machines.
+</fleet-session-message>
+
+---
+
+<fleet-session-message from="cabf4586-66e8-49c8-a684-b160062e1731" title="Review (#4776): SCIM: support externalId on groups" machine="0ca5f2288a1b4b14a43c995a85232184" machine-name="aurora">
+Results of the two read-only checks (Windows machine, nothing changed). They don't support the "committed, then threw before broadcast" theory.
+
+1. fleet.db delegations (sqlite3 -readonly; no Python on this machine):
+id|child_session_id|work_id|status|ended_reason|created_at|updated_at|completed_at
+e37770ef-519a-4e74-842c-0279397f99a2|aa4b1845-afc5-4c5a-8220-d65e90c57bf6|toolu_017MGa9RtmB8tyVoe7ecs2zJ|completed|completed|2026-11-20T09:03:55.6370132Z|2026-11-20T09:05:12.6092834Z|2026-11-20T09:05:12.6092834Z
+cd161234-3e4b-482f-9438-4c9aa8e47426|dcf4908c-20f2-4bc7-9e64-05f0879ffaf0|toolu_013FkHr4uht3vdWfKVyTfikK|completed|completed|2026-11-20T09:04:01.5793635Z|2026-11-20T09:06:59.9067799Z|2026-11-20T09:06:59.9067799Z
+ended_reason is set for both A and B. A ended at 09:05:12.609Z, B at 09:06:59.907Z.
+
+2. Logs: %LOCALAPPDATA%\WeaveFleet\logs\fleet-2026-11-20.log (timestamps are UTC; they match the DB). In 09:03 to 09:08 there are 1208 lines and not one WRN, ERR or FTL. No match anywhere in the day's log for "Couldn't record running work", "database is locked", "SQLITE_BUSY", "Delegation", "RunningWork" or "work.ended". Nothing at all is logged in 09:05:11 to 09:05:14 except HttpClient request lines. The only lines naming the children are session creation (09:03:56.062 aa4b1845, 09:04:02.072 dcf4908c) and "OpenCode 2 session ... resumed ses_e07cd490... / ses_e07cd31d..." at 09:03:56.051 and 09:04:02.066.
+
+Versions: Fleet 0.74.0 (the process started 06:47:31 UTC after updating from 0.73.0). The opencode session_v2.version for both children is 2.0.21, not 2.3.2 as in your repro.
+
+Context: the parent session was busy the whole time (it started both subagents in one assistant message, then kept working). Telemetry shows the user prompting other sessions at 09:04:16 and 09:06:38 ("UI action: session.prompt"), so the parent was probably not the open conversation when A ended, but I can't confirm which session was on screen. Pieter can say if he remembers. Sibling B's row was not stuck: it disappeared normally.
+
+So the server recorded A's end cleanly and logged no failure. The remaining suspects are the broadcast (sent but not delivered, for example the client was subscribed to another session's stream when A ended) or the client dropping or overwriting it.
+</fleet-session-message>
+
+---
+
+<task-notification>
+<task-id>bhcyrcfl0</task-id>
+<tool-use-id>toolu_01GwMxPvaw3RtrgN7VajUX4B</tool-use-id>
+<output-file>/tmp/claude-1000/-home-pgermishuys-source-weave-fleet/30ad2f78-64b8-46a3-aa44-17f1781c3050/tasks/bhcyrcfl0.output</output-file>
+<status>failed</status>
+<summary>Background command "cd /home/pgermishuys/source/weave-fleet-worktrees/fix-child-busy-dot-stale/client &amp;&amp; PATH=$HOME/.bun/bin:$PATH TMPDIR=$HOME/.cache/fleet-child-busy-dot/tmp NODE_OPTIONS=--no-experimental-webstorage bunx vite --port 5199 --strictPort &gt; $HOME/.cache/fleet-child-busy-dot/vite.log 2&gt;&amp;1" failed with exit code 143</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b1vmhieww</task-id>
+<tool-use-id>toolu_017fm9MJ4zXBFVbQhWv4gPZX</tool-use-id>
+<output-file>/tmp/claude-1000/-home-pgermishuys-source-weave-fleet/30ad2f78-64b8-46a3-aa44-17f1781c3050/tasks/b1vmhieww.output</output-file>
+<status>completed</status>
+<summary>Background command "cd /home/pgermishuys/source/weave-fleet-worktrees/fix-child-busy-dot-stale &amp;&amp; K=$HOME/.cache/fleet-child-busy-dot; rm -f $K/url.txt; ENV=(HOME=$K/home TMPDIR=$K/tmp PATH=$HOME/.dotnet:/usr/local/bin:/usr/bin:/bin DOTNET_CLI_TELEMETRY_OPTOUT=1 DIAG_OUT=$K FLEET_REQUIRE_OPENCODE2=1 DOTNET_ROOT=$HOME/.dotnet); systemd-run --user --scope -q -p MemoryMax=3000M -p MemorySwapMax=0 -- env -i "${ENV[@]}" dotnet test tests/WeaveFleet.IntegrationTests -c Debug --no-build --filter "FullyQualifiedName~DIAG_ui_two" &gt; $K/uitest.log 2&gt;&amp;1" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b2hl0n5rv</task-id>
+<tool-use-id>toolu_01B3shpGLkfrKj3DieEfYUmM</tool-use-id>
+<output-file>/tmp/claude-1000/-home-pgermishuys-source-weave-fleet/30ad2f78-64b8-46a3-aa44-17f1781c3050/tasks/b2hl0n5rv.output</output-file>
+<status>failed</status>
+<summary>Background command "K=$HOME/.cache/fleet-child-busy-dot; U=$(cat $K/url.txt); P=${U##*:}; python3 -I $K/kit/fwd.py 127.0.0.1 $P &gt; $K/fwd.log 2&gt;&amp;1" failed with exit code 143</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bex0hm6n6</task-id>
+<tool-use-id>toolu_01TcPHavroViAsj1mEZLVZSt</tool-use-id>
+<output-file>/tmp/claude-1000/-home-pgermishuys-source-weave-fleet/30ad2f78-64b8-46a3-aa44-17f1781c3050/tasks/bex0hm6n6.output</output-file>
+<status>failed</status>
+<summary>Background command "cd /home/pgermishuys/source/weave-fleet-worktrees/fix-child-busy-dot-stale/client &amp;&amp; PATH=$HOME/.bun/bin:$PATH TMPDIR=$HOME/.cache/fleet-child-busy-dot/tmp NODE_OPTIONS=--no-experimental-webstorage bunx vite --config vite.diag.config.ts --port 5199 --strictPort &gt; $HOME/.cache/fleet-child-busy-dot/vite.log 2&gt;&amp;1" failed with exit code 143</summary>
+</task-notification>
+
+---
+
+<fleet-session-update session="cabf4586-66e8-49c8-a684-b160062e1731" title="Review (#4776): SCIM: support externalId on groups" outcome="finished" machine="0ca5f2288a1b4b14a43c995a85232184" machine-name="aurora">
+I ran both checks and sent the results to andromeda. They rule out andromeda's first theory.
+
+- **Fleet's database:** both reviewers' delegation rows ended cleanly with `ended_reason = completed`, A at 09:05:12 UTC and B at 09:06:59 UTC. So Fleet didn't stop partway through recording A's end.
+- **Fleet's log for that window:** no warnings or errors, nothing about "database is locked", and nothing logged around 09:05:12 except HTTP request lines.
+- **Versions:** Fleet 0.74.0 and OpenCode 2.0.21. Andromeda reproduced on OpenCode 2.3.2, which may matter.
+
+The likely cause is now that the…
+(Cut short. Read the rest with fleet_session_read, sessionId cabf4586-66e8-49c8-a684-b160062e1731, machine aurora.)
+</fleet-session-update>
