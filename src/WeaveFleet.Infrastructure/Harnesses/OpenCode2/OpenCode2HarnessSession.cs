@@ -856,7 +856,14 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
             // A child is known by its session: the call that started it may be one this session object never saw.
             var active = await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false);
-            foreach (var id in active.Where(id => id != ResumeToken))
+            // A child idle while its own shell runs is still working: the shell keeps its delegation open.
+            var childrenWithShells = shells
+                .Where(shell => shell is { Id: not null, Status: "running" }
+                    && shell.Metadata.ValueKind == JsonValueKind.Object
+                    && shell.Metadata.TryGetProperty("sessionID", out var owner)
+                    && owner.ValueKind == JsonValueKind.String)
+                .Select(shell => shell.Metadata.GetProperty("sessionID").GetString()!);
+            foreach (var id in active.Concat(childrenWithShells).Where(id => id != ResumeToken).Distinct(StringComparer.Ordinal))
             {
                 if ((await server.Client.GetSessionAsync(id, ct).ConfigureAwait(false))?.ParentID != ResumeToken)
                     continue;
