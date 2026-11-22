@@ -195,6 +195,17 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     }
 
     [Fact]
+    public void The_plugin_tells_every_shell_and_every_session_its_own_server_pid()
+    {
+        var plugin = Plugin();
+
+        plugin.ShouldContain("const serverPid = process.pid");
+        plugin.ShouldContain("event.env.FLEET_HARNESS_SERVER_PID = String(serverPid)");
+        plugin.ShouldContain("input.system.push({ type: \"text\", text: serverNotice })");
+        plugin.ShouldContain("Never kill it; exclude it from any kill-by-name or kill-by-pattern cleanup.");
+    }
+
+    [Fact]
     public void The_plugin_has_the_same_tools_as_the_OpenCode_plugin()
     {
         var v1 = Encoding.UTF8.GetString(OpenCode2FleetFiles.Read("opencode/fleet-canvas.ts"));

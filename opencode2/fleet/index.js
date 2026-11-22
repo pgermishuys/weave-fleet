@@ -746,6 +746,13 @@ async function holdAgentDenies(ctx) {
   }
 }
 
+// This plugin runs inside the OpenCode 2 server that hosts every session, so its pid is the one whose death stops them
+// all. An agent's own kill-by-name cleanup (`pkill -f "opencode serve"`) has taken it down before: say which it is.
+const serverPid = process.pid
+const serverNotice =
+  `Fleet's OpenCode 2 server, the process hosting this session, is pid ${serverPid} (\`opencode2 serve\`, also in $FLEET_HARNESS_SERVER_PID). ` +
+  "Never kill it; exclude it from any kill-by-name or kill-by-pattern cleanup."
+
 export default {
   id: "fleet",
   async setup(ctx) {
@@ -760,15 +767,19 @@ export default {
     // tells a running session about a later change with its next prompt. V2 runs setup once per folder and doesn't wait
     // for an async hook, so the first read is synchronous. A system part is {type: "text", text}; V2 drops a string.
     const folder = ctx.location?.directory
-    if (process.env.FLEET_MEMORY_DIR && folder && ctx.session?.hook) {
+    const memory = Boolean(process.env.FLEET_MEMORY_DIR && folder)
+    if (ctx.session?.hook) {
       const snapshots = new Map()
       await ctx.session.hook("context", (input) => {
-        let notes = snapshots.get(input.sessionID)
-        if (notes === undefined) {
-          notes = readMemoryNotes(folder)
-          if (input.sessionID) snapshots.set(input.sessionID, notes)
+        if (memory) {
+          let notes = snapshots.get(input.sessionID)
+          if (notes === undefined) {
+            notes = readMemoryNotes(folder)
+            if (input.sessionID) snapshots.set(input.sessionID, notes)
+          }
+          if (notes) input.system.push({ type: "text", text: notes })
         }
-        if (notes) input.system.push({ type: "text", text: notes })
+        input.system.push({ type: "text", text: serverNotice })
       })
     }
 
@@ -794,6 +805,7 @@ export default {
           if (value === null) delete event.env[name]
           else event.env[name] = String(value)
         }
+        event.env.FLEET_HARNESS_SERVER_PID = String(serverPid)
         const sessionID = shellSessions.get(event.command)
         if (sessionID) {
           shellSessions.delete(event.command)
