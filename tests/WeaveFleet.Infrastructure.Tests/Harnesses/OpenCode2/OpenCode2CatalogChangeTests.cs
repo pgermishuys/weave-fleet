@@ -218,7 +218,7 @@ public sealed class OpenCode2CatalogChangeTests
 
         public Task ResyncAsync(IReadOnlySet<string> activeSessions, CancellationToken ct) => Task.CompletedTask;
 
-        public void OnServerStopped()
+        public void OnServerStopped(OpenCode2ServerStop stop)
         {
         }
     }

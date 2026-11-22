@@ -43,6 +43,27 @@ public sealed class SessionOrchestratorLostWorkTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Work_lost_to_a_server_stopped_from_outside_says_so_and_groups_apart_from_the_rest()
+    {
+        Seed(takesModelNotes: true);
+        var cause = WorkLostCause.StoppedFromOutside("Fleet's OpenCode 2 server", 4242, new DateTimeOffset(2026, 11, 22, 14, 3, 0, TimeSpan.Zero), 137);
+        SeedWork("w1", WorkKinds.Shell, "bun run dev", WorkEndedReasons.Lost, cause);
+        SeedWork("w2", WorkKinds.Subagent, "Explore the API", WorkEndedReasons.Lost);
+
+        await _builder.Build().PromptSessionAsync("s1", "first", null);
+
+        var note = Calls("first").Options!.ModelNotes.ShouldNotBeNull().ShouldHaveSingleItem();
+        var paragraphs = note.Split("\n\n");
+        paragraphs.Length.ShouldBe(2);
+        paragraphs[0].ShouldStartWith("Note from Fleet: Fleet's OpenCode 2 server (pid 4242) was stopped from outside Fleet at 14:03 UTC (exit code 137), and this background work stopped with it.");
+        paragraphs[0].ShouldContain("exclude $FLEET_HARNESS_SERVER_PIDS");
+        paragraphs[0].ShouldContain("- shell: bun run dev");
+        paragraphs[0].ShouldNotContain("Explore the API");
+        paragraphs[1].ShouldContain("because Fleet or the agent's process restarted");
+        paragraphs[1].ShouldContain("- subagent: Explore the API");
+    }
+
+    [Fact]
     public async Task A_session_with_no_lost_work_gets_no_note()
     {
         Seed(takesModelNotes: true);
@@ -145,7 +166,7 @@ public sealed class SessionOrchestratorLostWorkTests : IAsyncDisposable
         _builder.InstanceTracker.Register("inst-1", _session);
     }
 
-    private void SeedWork(string workId, string kind, string label, string endedReason)
+    private void SeedWork(string workId, string kind, string label, string endedReason, string? detail = null)
         => _builder.DelegationRepository.Seed(new Delegation
         {
             Id = $"work-{workId}",
@@ -159,5 +180,6 @@ public sealed class SessionOrchestratorLostWorkTests : IAsyncDisposable
             Kind = kind,
             WorkId = workId,
             EndedReason = endedReason,
+            Detail = detail,
         });
 }

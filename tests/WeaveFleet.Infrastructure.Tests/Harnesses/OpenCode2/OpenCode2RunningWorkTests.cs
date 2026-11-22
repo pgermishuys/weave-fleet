@@ -88,12 +88,34 @@ public sealed class OpenCode2RunningWorkTests
         // Both calls in the background, and neither notice came.
         foreach (var evt in await WithoutNoticesAsync())
             server.Route(evt);
-        session.OnServerStopped();
+        session.OnServerStopped(new OpenCode2ServerStop(true));
 
         var ended = (await ReadAvailableAsync(session)).Where(e => e.Type == EventTypes.WorkEnded).Select(e => WorkEvents.Read(e)!).ToList();
         ended.Select(r => (r.WorkId, r.EndedReason)).ShouldBe(
             [(Shell, WorkEndedReasons.Lost), (SubagentCall, WorkEndedReasons.Lost)], ignoreOrder: true);
         (await session.StopWorkAsync(SubagentCall, CancellationToken.None)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Work_lost_when_the_server_process_exits_on_its_own_names_the_cause_and_Fleets_own_stop_doesnt()
+    {
+        await using var server = Server(Accepting());
+        await using var session = NewSession(server, Session);
+        foreach (var evt in await WithoutNoticesAsync())
+            server.Route(evt);
+
+        session.OnServerStopped(new OpenCode2ServerStop(true, 4242, 137, new DateTimeOffset(2026, 11, 22, 14, 3, 9, TimeSpan.Zero)));
+
+        var ended = (await ReadAvailableAsync(session)).Where(e => e.Type == EventTypes.WorkEnded).Select(e => WorkEvents.Read(e)!).ToList();
+        ended.Count.ShouldBe(2);
+        ended.ShouldAllBe(r => r.Detail == "Fleet's OpenCode 2 server (pid 4242) was stopped from outside Fleet at 14:03 UTC (exit code 137)");
+
+        await using var other = NewSession(Server(Accepting()), Session);
+        foreach (var evt in await WithoutNoticesAsync())
+            other.OnEvent(evt);
+        other.OnServerStopped(new OpenCode2ServerStop(false));
+        (await ReadAvailableAsync(other)).Where(e => e.Type == EventTypes.WorkEnded).Select(e => WorkEvents.Read(e)!)
+            .ShouldAllBe(r => r.EndedReason == WorkEndedReasons.Lost && r.Detail == null);
     }
 
     [Fact]

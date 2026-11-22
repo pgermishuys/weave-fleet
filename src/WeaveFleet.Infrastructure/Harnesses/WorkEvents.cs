@@ -19,8 +19,8 @@ internal static class WorkEvents
         => Event(EventTypes.WorkUpdated, report, harnessSessionId, fleetSessionId);
 
     /// <summary>The work ended, with one of <see cref="WorkEndedReasons"/>.</summary>
-    internal static HarnessEvent Ended(WorkReport report, string reason, string harnessSessionId, string? fleetSessionId = null)
-        => Event(EventTypes.WorkEnded, report with { EndedReason = reason }, harnessSessionId, fleetSessionId);
+    internal static HarnessEvent Ended(WorkReport report, string reason, string harnessSessionId, string? fleetSessionId = null, string? detail = null)
+        => Event(EventTypes.WorkEnded, detail is null ? report with { EndedReason = reason } : report with { EndedReason = reason, Detail = detail }, harnessSessionId, fleetSessionId);
 
     /// <summary>The report in a work event's payload, or <see langword="null"/>.</summary>
     internal static WorkReport? Read(HarnessEvent evt)

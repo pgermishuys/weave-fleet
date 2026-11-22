@@ -376,7 +376,7 @@ public sealed class OpenCode2SessionTests
         await using var session = NewSession(server);
         session.OnEvent(Event("session.execution.started", $$"""{"sessionID":"{{Session}}"}"""));
 
-        session.OnServerStopped();
+        session.OnServerStopped(new OpenCode2ServerStop(true));
 
         var events = await ReadAvailableAsync(session);
         events.Select(StatusOf).ShouldBe([ActivityStatuses.Busy, EventTypes.SessionError, EventTypes.SessionIdle]);
@@ -393,7 +393,7 @@ public sealed class OpenCode2SessionTests
         session.OnEvent(Event("session.tool.input.started", $$"""{"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","name":"read"}"""));
         session.OnEvent(Event("session.tool.called", $$$"""{"sessionID":"{{{Session}}}","assistantMessageID":"msg_1","id":"call_1","input":{"path":"a.txt"}}"""));
 
-        session.OnServerStopped();
+        session.OnServerStopped(new OpenCode2ServerStop(true));
 
         var events = await ReadAvailableAsync(session);
         var last = events.Where(e => e.Type == EventTypes.MessagePartUpdated).Last();
@@ -407,7 +407,7 @@ public sealed class OpenCode2SessionTests
         await using var server = Server(new StubHandler(_ => Json("{}")));
         await using var session = NewSession(server);
 
-        session.OnServerStopped();
+        session.OnServerStopped(new OpenCode2ServerStop(true));
 
         (await ReadAvailableAsync(session)).ShouldBeEmpty();
         session.Status.ShouldBe(HarnessSessionStatus.Idle);
@@ -483,7 +483,7 @@ public sealed class OpenCode2SessionTests
             return Task.CompletedTask;
         }
 
-        public void OnServerStopped()
+        public void OnServerStopped(OpenCode2ServerStop stop)
         {
         }
     }

@@ -179,7 +179,7 @@ async function stop(): Promise<void> {
       <span class="work-row__kind">{{ kindLabel }}</span>
       <span
         class="work-row__what"
-        :title="what"
+        :title="result ? `${what} · ${result}` : what"
       >
         <code v-if="isCommand">{{ what }}</code>
         <template v-else>{{ what }}</template>
