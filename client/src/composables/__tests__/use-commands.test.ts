@@ -244,10 +244,10 @@ describe("useCommands", () => {
       const event = press("=", { ctrlKey: true });
 
       expect(event.defaultPrevented).toBe(true);
-      expect(document.documentElement.style.fontSize).toBe("110%");
+      expect(document.documentElement.style.fontSize).toBe("15.4px"); // 110% of the 14px Appearance default
       press("-", { ctrlKey: true });
       press("-", { ctrlKey: true });
-      expect(document.documentElement.style.fontSize).toBe("90%");
+      expect(document.documentElement.style.fontSize).toBe("12.6px");
     });
 
     it("needs the exact modifiers", async () => {
@@ -304,7 +304,7 @@ describe("useCommands", () => {
       expect(document.documentElement.style.fontSize).toBe("");
 
       press("y", { ctrlKey: true });
-      expect(document.documentElement.style.fontSize).toBe("110%");
+      expect(document.documentElement.style.fontSize).toBe("15.4px"); // 110% of the 14px Appearance default
     });
 
     it("Escape interrupts the open session, but not from inside a dialog", async () => {
@@ -449,6 +449,49 @@ describe("useCommands", () => {
       heard.stop();
     });
   });
+  describe("zoom", () => {
+    const rootPx = (): number => Number.parseFloat(document.documentElement.style.fontSize);
+
+    it("grows the page on the first Zoom in after load, from the Appearance font size", async () => {
+      useThemeStore().setFontSize("m"); // what the app does on load: the root is 14px
+      await start();
+
+      byId("zoom-in").action();
+
+      expect(rootPx()).toBeCloseTo(15.4); // 110% of 14px
+    });
+
+    it("shrinks the page on the first Zoom out after load", async () => {
+      useThemeStore().setFontSize("m");
+      await start();
+
+      byId("zoom-out").action();
+
+      expect(rootPx()).toBeCloseTo(12.6); // 90% of 14px
+    });
+
+    it("stays between 70% and 150% of the Appearance font size", async () => {
+      useThemeStore().setFontSize("xl");
+      await start();
+
+      for (let i = 0; i < 10; i++) byId("zoom-in").action();
+      expect(rootPx()).toBeCloseTo(24); // 150% of 16px
+      for (let i = 0; i < 20; i++) byId("zoom-out").action();
+      expect(rootPx()).toBeCloseTo(11.2); // 70% of 16px
+    });
+
+    it("keeps the zoom when the Appearance font size changes", async () => {
+      useThemeStore().setFontSize("m");
+      await start();
+
+      byId("zoom-in").action();
+      byId("zoom-in").action();
+      useThemeStore().setFontSize("xl");
+
+      expect(rootPx()).toBeCloseTo(19.2); // 120% of 16px
+    });
+  });
+
   describe("start without mods", () => {
     const withMods = (state: { on: boolean; safeMode: boolean } | null) => {
       useModsStore().modsSwitch = state;

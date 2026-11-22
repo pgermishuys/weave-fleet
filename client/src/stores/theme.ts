@@ -58,6 +58,9 @@ export const themes: readonly ThemeDefinition[] = [
   { id: "github-dark", label: "GitHub Dark", colorScheme: "dark", swatches: ["#0D1117", "#161B22", "#58A6FF", "#E6EDF3"] },
 ] as const;
 
+/** Zoom in and Zoom out scale the Appearance font size, within these percentages. */
+export const zoomRange = { min: 70, max: 150, step: 10 } as const;
+
 const themeStorageKey = "weave:theme";
 const fontFamilyStorageKey = "weave:font-family";
 const fontSizeStorageKey = "weave:font-size";
@@ -231,6 +234,8 @@ export const useThemeStore = defineStore("theme", () => {
   const fontSize = shallowRef<FontSize>(readStoredFontSize());
   const thinking = shallowRef<ThinkingDisplay>(readStoredThinking());
   const codeTheme = shallowRef<CodeThemeSelection>(readStoredCodeTheme());
+  /** Percent of the Appearance font size the page is zoomed to; lasts until the page reloads. */
+  const zoomPercent = shallowRef(100);
 
   const resolvedThemeId = computed<ThemeId>(() => {
     return currentTheme.value === "system" ? getSystemThemeId() : currentTheme.value;
@@ -281,7 +286,9 @@ export const useThemeStore = defineStore("theme", () => {
     }
 
     const size = fontSizes.find((s) => s.id === fontSize.value) ?? fontSizes[1];
-    document.documentElement.style.fontSize = `${size.px}px`;
+    // Rounded so the style holds no float dust (14 × 110% would be 15.400000000000002px).
+    const px = Math.round(size.px * zoomPercent.value) / 100;
+    document.documentElement.style.fontSize = `${px}px`;
   }
 
   function initializeTheme(): void {
@@ -322,6 +329,12 @@ export const useThemeStore = defineStore("theme", () => {
     applyFontSize();
   }
 
+  /** Zooms by `delta` percentage points of the Appearance font size, kept within `zoomRange`. */
+  function zoomBy(delta: number): void {
+    zoomPercent.value = Math.min(zoomRange.max, Math.max(zoomRange.min, zoomPercent.value + delta));
+    applyFontSize();
+  }
+
   function setCodeTheme(selection: CodeThemeSelection): void {
     codeTheme.value = selection;
     persistCodeTheme(selection);
@@ -344,12 +357,14 @@ export const useThemeStore = defineStore("theme", () => {
     fontSize,
     thinking,
     codeTheme,
+    zoomPercent,
     resolvedThemeId,
     resolvedTheme,
     initializeTheme,
     setFontFamily,
     setFontSize,
     setCodeTheme,
+    zoomBy,
     setThinking,
     setTheme,
     toggleTheme,
