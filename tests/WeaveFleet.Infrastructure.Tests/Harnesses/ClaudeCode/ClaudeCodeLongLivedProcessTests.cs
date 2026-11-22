@@ -401,26 +401,40 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         session.ProcessId.ShouldBeNull();
     }
 
-    [Fact]
-    public async Task A_claude_that_refuses_Fleets_flags_under_managed_settings_says_so_in_the_conversation()
+    // How long the refusing claude takes to exit: at once, Fleet's write to its stdin can find the pipe closed and the
+    // prompt fails; a moment later the write lands first and the refusal comes back as a note in the conversation.
+    [Theory]
+    [InlineData("0")]
+    [InlineData("0.3")]
+    public async Task A_claude_that_refuses_Fleets_flags_under_managed_settings_says_so_in_the_conversation(string exitsAfterSeconds)
     {
         if (OperatingSystem.IsWindows())
             return;
 
-        // An organisation's managed settings (disableSideloadFlags) make Claude Code refuse --mcp-config and exit at once.
+        // An organisation's managed settings (disableSideloadFlags) make Claude Code refuse --mcp-config and exit.
         var refusing = Path.Combine(_directory, "claude-refusing");
-        await File.WriteAllTextAsync(refusing, """
+        await File.WriteAllTextAsync(refusing, $"""
             #!/bin/sh
+            sleep {exitsAfterSeconds}
             echo "Error: --mcp-config is disabled by your organization's managed settings (disableSideloadFlags)." >&2
             exit 1
             """.Replace("\r", ""));
         File.SetUnixFileMode(refusing, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         Start(binary: refusing);
 
-        var failure = await Should.ThrowAsync<InvalidOperationException>(
-            () => _session!.SendPromptAsync("hello", null, CancellationToken.None));
+        const string refusal = "--mcp-config is disabled by your organization's managed settings (disableSideloadFlags)";
+        try
+        {
+            await _session!.SendPromptAsync("hello", null, CancellationToken.None);
+        }
+        catch (InvalidOperationException failure)
+        {
+            failure.Message.ShouldContain(refusal);
+            return;
+        }
 
-        failure.Message.ShouldContain("--mcp-config is disabled by your organization's managed settings (disableSideloadFlags)");
+        // The prompt was accepted before claude exited: the refusal is the conversation's last note.
+        await WaitForAsync(() => AssistantText().Any(text => text.Contains(refusal, StringComparison.Ordinal)));
     }
 
     [Fact]
