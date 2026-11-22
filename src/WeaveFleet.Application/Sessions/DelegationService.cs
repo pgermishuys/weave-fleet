@@ -713,8 +713,18 @@ public sealed class DelegationService(
             CancellationToken.None);
     }
 
-    private bool? IsInBackground(Delegation delegation)
-        => delegation.ChildSessionId is { } childSessionId && activityTracker?.IsChildInBackground(childSessionId) == true ? true : null;
+    private bool? IsInBackground(Delegation delegation) => BackgroundOf(delegation, activityTracker);
+
+    /// <summary>
+    /// Whether a subagent's call returned while its child works on (true), as clients read it; null when it didn't.
+    /// The work's own record says so for good. The tracker's mark is in memory only and goes when the parent's event
+    /// pump ends (a dropped stream): read alone, a reopened parent would show its background subagent as its own work.
+    /// </summary>
+    public static bool? BackgroundOf(Delegation delegation, SessionActivityTracker? activityTracker)
+        => delegation.Background
+            || (delegation.ChildSessionId is { } childSessionId && activityTracker?.IsChildInBackground(childSessionId) == true)
+            ? true
+            : null;
 
     private static DelegationDto ToDto(Delegation delegation) => new(
         delegation.Id,
