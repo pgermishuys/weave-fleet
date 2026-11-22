@@ -954,17 +954,18 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     /// <inheritdoc />
     /// <remarks>A turn that was running is over: say so rather than leave the session looking busy.</remarks>
-    public void OnServerStopped()
+    public void OnServerStopped(OpenCode2ServerStop stop)
     {
+        var detail = stop.LostDetail;
         // V2 keeps background work in the server process: it stopped too, and no notice will say so.
         foreach (var delegation in _mapper.BackgroundDelegationsLost())
-            Write(WorkEvents.Ended(OpenCode2Mapper.SubagentWork(delegation), WorkEndedReasons.Lost, _context.FleetSessionId));
-        foreach (var harnessEvent in _mapper.BackgroundWorkEnded())
+            Write(WorkEvents.Ended(OpenCode2Mapper.SubagentWork(delegation), WorkEndedReasons.Lost, _context.FleetSessionId, detail: detail));
+        foreach (var harnessEvent in _mapper.BackgroundWorkEnded(detail))
             Write(harnessEvent);
 
         // And whatever else was running: a subagent still working in the turn that just failed.
         foreach (var work in _work.Values.ToList())
-            Write(WorkEvents.Ended(work, WorkEndedReasons.Lost, _context.FleetSessionId));
+            Write(WorkEvents.Ended(work, WorkEndedReasons.Lost, _context.FleetSessionId, detail: detail));
 
         foreach (var harnessEvent in _mapper.OpenToolsEnded())
             Write(harnessEvent);

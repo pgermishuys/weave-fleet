@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Harnesses;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
@@ -17,8 +18,21 @@ internal interface IOpenCode2EventSink
     /// </summary>
     Task ResyncAsync(IReadOnlySet<string> activeSessions, CancellationToken ct);
 
-    /// <summary>The server stopped; nothing more will arrive from it.</summary>
-    void OnServerStopped();
+    /// <summary>The server stopped; nothing more will arrive from it. <paramref name="stop"/> says how.</summary>
+    void OnServerStopped(OpenCode2ServerStop stop);
+}
+
+/// <summary>
+/// How an OpenCode 2 server stopped: <see cref="FromOutside"/> when its process exited without Fleet stopping it (an
+/// agent's cleanup command, a crash, the user), against Fleet's own dispose or replace. A real Fleet restart never
+/// gets here: nothing is left to tell.
+/// </summary>
+internal sealed record OpenCode2ServerStop(bool FromOutside, int? ProcessId = null, int? ExitCode = null, DateTimeOffset? At = null)
+{
+    /// <summary>What a piece of work that ended with the server records as its detail; null when Fleet stopped it.</summary>
+    public string? LostDetail => FromOutside
+        ? WorkLostCause.StoppedFromOutside("Fleet's OpenCode 2 server", ProcessId, At ?? DateTimeOffset.UtcNow, ExitCode)
+        : null;
 }
 
 /// <summary>
@@ -131,7 +145,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
         if (_process is not null)
         {
-            _process.Exited += (_, _) => _ = StopRoutingAsync();
+            _process.Exited += (_, exitCode) => _ = StopRoutingAsync(new OpenCode2ServerStop(true, _process.ProcessId, exitCode, DateTimeOffset.UtcNow));
             _keepLoaded = new Timer(_ => _ = KeepBusyFoldersLoadedAsync(_stopping.Token), null, KeepLoadedInterval, KeepLoadedInterval);
         }
 
@@ -764,7 +778,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     }
 
     /// <summary>Stops routing and tells every attached session the server is gone.</summary>
-    private async Task StopRoutingAsync()
+    private async Task StopRoutingAsync(OpenCode2ServerStop stop)
     {
         if (Interlocked.Exchange(ref _stopped, 1) == 1)
             return;
@@ -775,7 +789,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         {
             try
             {
-                sink.OnServerStopped();
+                sink.OnServerStopped(stop);
             }
             catch (Exception ex)
             {
@@ -793,7 +807,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     {
         if (_keepLoaded is not null)
             await _keepLoaded.DisposeAsync().ConfigureAwait(false);
-        await StopRoutingAsync().ConfigureAwait(false);
+        await StopRoutingAsync(new OpenCode2ServerStop(false)).ConfigureAwait(false);
         try
         {
             await _pump.ConfigureAwait(false);

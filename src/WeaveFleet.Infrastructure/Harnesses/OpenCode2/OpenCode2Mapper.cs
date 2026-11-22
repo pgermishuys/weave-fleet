@@ -492,7 +492,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// each call's card ends failed (<see cref="BackgroundWorkLost"/>), as history reads it from then on, and each
     /// command the user ran that was still going ends killed.
     /// </summary>
-    public IReadOnlyList<HarnessEvent> BackgroundWorkEnded()
+    public IReadOnlyList<HarnessEvent> BackgroundWorkEnded(string? lostDetail = null)
     {
         var events = _backgroundCalls.Values
             .Select(call => ToolPart(call.MessageId, call.CallId, call.Name, new OpenCode2ToolPartState
@@ -507,7 +507,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         // The shells went with the server; the subagents end with their delegations (BackgroundDelegationsLost).
         events.AddRange(_backgroundCalls
             .Where(entry => entry.Value.Name == ShellTool)
-            .Select(entry => WorkEvents.Ended(ShellWork(entry.Key, entry.Value.CallId, entry.Value.Input), WorkEndedReasons.Lost, fleetSessionId)));
+            .Select(entry => WorkEvents.Ended(ShellWork(entry.Key, entry.Value.CallId, entry.Value.Input), WorkEndedReasons.Lost, fleetSessionId, detail: lostDetail)));
         _backgroundCalls.Clear();
 
         // A command the user ran with `!` that was still going lived in the server too, and V2 never sends its end.

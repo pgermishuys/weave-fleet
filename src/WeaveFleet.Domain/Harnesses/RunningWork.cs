@@ -81,3 +81,25 @@ public sealed record WorkReport
 /// </summary>
 /// <param name="Truncated">The harness kept only part of the output; what's before it is gone.</param>
 public sealed record WorkOutput(string Text, long NextOffset, long Size, bool Truncated);
+
+/// <summary>
+/// Why work ended <see cref="WorkEndedReasons.Lost"/>, when the harness knows: its detail names the cause in a
+/// sentence the running-work card shows as it is, and <see cref="LostWorkNote"/> reads back to tell the agent.
+/// Lost work with no such detail was lost to a Fleet restart, or for a cause nobody recorded.
+/// </summary>
+public static class WorkLostCause
+{
+    private const string Marker = " was stopped from outside Fleet at ";
+
+    /// <summary>"Fleet's OpenCode 2 server (pid 4242) was stopped from outside Fleet at 14:03 UTC (exit code 137)".</summary>
+    public static string StoppedFromOutside(string process, int? pid, DateTimeOffset at, int? exitCode)
+    {
+        var who = pid is { } id ? $"{process} (pid {id})" : process;
+        var code = exitCode is { } c ? $" (exit code {c})" : "";
+        return $"{who}{Marker}{at.UtcDateTime:HH:mm} UTC{code}";
+    }
+
+    /// <summary>The detail was made by <see cref="StoppedFromOutside"/>.</summary>
+    public static bool IsStoppedFromOutside(string? detail)
+        => detail is not null && detail.Contains(Marker, StringComparison.Ordinal);
+}

@@ -388,6 +388,6 @@ public sealed class OpenCode2RuntimeTests
 
         public Task ResyncAsync(IReadOnlySet<string> activeSessions, CancellationToken ct) => Task.CompletedTask;
 
-        public void OnServerStopped() => _stopped.TrySetResult();
+        public void OnServerStopped(OpenCode2ServerStop stop) => _stopped.TrySetResult();
     }
 }

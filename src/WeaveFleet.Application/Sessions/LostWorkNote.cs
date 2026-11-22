@@ -24,16 +24,35 @@ public static class LostWorkNote
         if (lost.Count == 0)
             return null;
 
-        var lines = new List<string>
+        // One paragraph per cause, in the order the work was lost; work with no recorded cause shares the generic one.
+        var groups = lost
+            .GroupBy(work => WorkLostCause.IsStoppedFromOutside(work.Detail) ? work.Detail!.Trim() : null)
+            .ToList();
+
+        var shown = 0;
+        var paragraphs = new List<string>();
+        foreach (var group in groups)
         {
-            "Note from Fleet: this background work stopped before it finished, because Fleet or the agent's process restarted. "
-            + "It was cancelled and won't report back; start it again if it's still needed:",
-        };
-        lines.AddRange(lost.Take(MaxEntries).Select(work => $"- {work.Kind}: {Describe(work)}"));
-        if (lost.Count > MaxEntries)
-            lines.Add($"- and {lost.Count - MaxEntries} more");
-        return string.Join('\n', lines);
+            var lines = new List<string> { Heading(group.Key) };
+            foreach (var work in group.Take(Math.Max(MaxEntries - shown, 0)))
+            {
+                lines.Add($"- {work.Kind}: {Describe(work)}");
+                shown++;
+            }
+            if (lines.Count > 1)
+                paragraphs.Add(string.Join('\n', lines));
+        }
+        if (lost.Count > shown)
+            paragraphs[^1] += $"\n- and {lost.Count - shown} more";
+        return string.Join("\n\n", paragraphs);
     }
+
+    private static string Heading(string? cause) => cause is null
+        ? "Note from Fleet: this background work stopped before it finished, because Fleet or the agent's process restarted. "
+            + "It was cancelled and won't report back; start it again if it's still needed:"
+        : $"Note from Fleet: {cause}, and this background work stopped with it. "
+            + "If your commands kill `opencode … serve` processes, exclude $FLEET_HARNESS_SERVER_PIDS. "
+            + "It was cancelled and won't report back; start it again if it's still needed:";
 
     private static string Describe(Delegation work)
     {

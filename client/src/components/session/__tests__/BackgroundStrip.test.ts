@@ -152,6 +152,8 @@ describe("BackgroundStrip", () => {
     const finished = rows(wrapper).find((row) => row.attributes("data-status") === "ended")!;
     expect(finished.get("[data-testid='background-work-result']").text()).toContain("exit 0");
     expect(finished.text()).toContain("just now");
+    // The row cuts a long command short, so the tooltip carries how it ended as well.
+    expect(finished.get(".work-row__what").attributes("title")).toContain("exit 0");
     expect(finished.find("[data-testid='background-work-stop']").exists()).toBe(false);
     expect(finished.find("[data-testid='background-work-output']").exists()).toBe(true);
 
