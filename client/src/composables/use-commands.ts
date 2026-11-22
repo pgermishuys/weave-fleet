@@ -53,7 +53,7 @@ import { useGoToFileStore } from "@/stores/go-to-file";
 import { useFindInFilesStore } from "@/stores/find-in-files";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useTerminalsStore } from "@/stores/terminals";
-import { useThemeStore, type ThemeSelection } from "@/stores/theme";
+import { useThemeStore, zoomRange, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useProblemReportStore } from "@/stores/problem-report";
 import { useStartWithoutMods } from "@/composables/use-start-without-mods";
@@ -314,16 +314,6 @@ export function useCommands() {
     }
 
     void document.documentElement.requestFullscreen();
-  }
-
-  function zoomDocument(delta: number): void {
-    if (typeof document === "undefined") {
-      return;
-    }
-
-    const currentPercent = Number.parseFloat(document.documentElement.style.fontSize || "100") || 100;
-    const nextPercent = Math.min(150, Math.max(70, currentPercent + delta));
-    document.documentElement.style.fontSize = `${nextPercent}%`;
   }
 
   const currentSessionIndex = computed(() => {
@@ -749,7 +739,7 @@ export function useCommands() {
         category: "View",
         globalShortcut: bindingFor("zoom-in")?.globalShortcut ?? undefined,
         keywords: ["bigger", "larger", "increase", "font"],
-        action: () => zoomDocument(10),
+        action: () => themeStore.zoomBy(zoomRange.step),
       },
       {
         id: "zoom-out",
@@ -759,7 +749,7 @@ export function useCommands() {
         category: "View",
         globalShortcut: bindingFor("zoom-out")?.globalShortcut ?? undefined,
         keywords: ["smaller", "decrease", "font"],
-        action: () => zoomDocument(-10),
+        action: () => themeStore.zoomBy(-zoomRange.step),
       },
       {
         id: "open-marketplace-panel",
