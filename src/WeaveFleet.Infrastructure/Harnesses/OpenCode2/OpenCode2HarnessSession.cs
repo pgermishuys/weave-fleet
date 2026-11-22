@@ -642,6 +642,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // records with its child session.
         if (_mapper.TryReadDelegation(evt) is { } delegation)
             Write(_mapper.WorkEvent(delegation, called: evt.Type == "session.tool.called"));
+        else if (_mapper.TryReadUntrackedCompletion(evt) is { } completion)
+            Write(completion);
 
         if (OpenCode2Mapper.ReadUserMessageTakenIn(evt) is { } userMessageId && !_promptsNotTakenIn.TryRemove(userMessageId, out _))
             _commandMessage?.TrySetResult(userMessageId);
@@ -858,6 +860,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                     ?? new WorkReport { WorkId = id, Kind = WorkKinds.Subagent, ChildHarnessSessionId = id });
             }
 
+            // A child whose completion notice V2 holds finished: say how, so Fleet doesn't settle it as lost.
+            running.AddRange(await FinishedChildrenAsync(server, running, ct).ConfigureAwait(false));
             return running;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
@@ -866,6 +870,29 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             LogBackgroundCheckFailed(_logger, InstanceId, ex);
             return null;
         }
+    }
+
+    /// <summary>
+    /// The subagents whose completion notice is in V2's recent messages or still in its inbox, each as work that ended
+    /// (<see cref="WorkReport.EndedReason"/>), except the ones <paramref name="running"/> has again: a child reports
+    /// every time it goes idle, so a notice older than its latest run says nothing.
+    /// </summary>
+    private async Task<IEnumerable<WorkReport>> FinishedChildrenAsync(OpenCode2Server server, List<WorkReport> running, CancellationToken ct)
+    {
+        var page = await server.Client.GetMessagesAsync(ResumeToken, NoticeSearchPage, cursor: null, ct).ConfigureAwait(false);
+        var inbox = await server.Client.GetInboxAsync(ResumeToken, ct).ConfigureAwait(false);
+        var finished = new Dictionary<string, WorkReport>(StringComparer.Ordinal);
+        var notices = (page.Data ?? []).Reverse()
+            .Select(m => (Type: m.Type ?? string.Empty, m.Metadata, m.Text))
+            .Concat(inbox.Where(i => i is { Type: "synthetic", Payload: not null }).Select(i => (Type: "synthetic", i.Payload!.Metadata, i.Payload.Text)));
+        foreach (var (type, metadata, text) in notices)
+        {
+            if (type != "synthetic" || OpenCode2Mapper.FinishedChildReport(metadata, text) is not { } report)
+                continue;
+            finished[report.ChildHarnessSessionId!] = report;
+        }
+
+        return finished.Values.Where(r => !running.Any(w => w.ChildHarnessSessionId == r.ChildHarnessSessionId));
     }
 
     /// <summary>The start of V2's shell ids (<c>sh_…</c>).</summary>
@@ -884,16 +911,25 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         var wasRunning = _status is HarnessSessionStatus.Running;
         var running = activeSessions.Contains(ResumeToken);
-        if (!wasRunning && !running)
+        // A background subagent may have reported back in the gap, whatever the parent was doing.
+        var watching = _mapper.HasBackgroundSubagents;
+        if (!wasRunning && !running && !watching)
             return;
 
         LogResync(_logger, InstanceId, wasRunning, running);
         var page = await server.Client.GetMessagesAsync(ResumeToken, ResyncMessages, cursor: null, ct).ConfigureAwait(false);
-        foreach (var message in (page.Data ?? []).Reverse())
+        var messages = (page.Data ?? []).Reverse().ToList();
+        if (wasRunning || running)
         {
-            foreach (var harnessEvent in _mapper.MapMessage(message))
-                _events.Writer.TryWrite(harnessEvent);
+            foreach (var message in messages)
+            {
+                foreach (var harnessEvent in _mapper.MapMessage(message))
+                    _events.Writer.TryWrite(harnessEvent);
+            }
         }
+
+        foreach (var harnessEvent in _mapper.SubagentCompletions(messages))
+            _events.Writer.TryWrite(harnessEvent);
 
         if (running)
         {
@@ -908,7 +944,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 _events.Writer.TryWrite(harnessEvent);
             SetStatus(HarnessSessionStatus.Running);
         }
-        else
+        else if (wasRunning)
         {
             _questions.Clear();
             _events.Writer.TryWrite(_mapper.Idle());

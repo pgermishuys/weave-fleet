@@ -266,6 +266,23 @@ public sealed class RunningWorkTests
     }
 
     [Fact]
+    public async Task A_child_the_harness_says_finished_ends_as_it_ended_and_is_not_lost()
+    {
+        _sessions.Seed(new Session { Id = "fleet-child", OpencodeSessionId = "ses_child", UserId = "user-1" });
+        await _sut.HandleWorkReportedAsync(Parent, Subagent(background: true), childSessionId: "fleet-child");
+
+        // The harness's history holds the child's completion notice: it finished, whatever the harness runs now.
+        var lost = await _sut.SettleLostWorkAsync(Parent,
+        [
+            new WorkReport { WorkId = "ses_child", ChildHarnessSessionId = "ses_child", EndedReason = WorkEndedReasons.Completed },
+        ]);
+
+        lost.ShouldBe(0);
+        var work = _work.All.Single(w => w.WorkId == "call_sub");
+        (work.Status, work.EndedReason).ShouldBe(("completed", WorkEndedReasons.Completed));
+    }
+
+    [Fact]
     public async Task The_sessions_work_is_what_runs_and_what_ended_lately_unless_all_is_asked_for()
     {
         var old = DateTime.UtcNow.AddHours(-1).ToString("O");

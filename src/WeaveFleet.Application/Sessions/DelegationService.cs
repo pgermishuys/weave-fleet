@@ -475,13 +475,31 @@ public sealed class DelegationService(
     /// (<see cref="WorkEndedReasons"/>; completed when the harness doesn't say). Work that ended already stays as it
     /// ended: a stop Fleet recorded at once isn't undone by the harness's own report coming after.
     /// </summary>
+    /// <remarks>
+    /// A harness that no longer knows the call that started a subagent (a recreated session) names the child session
+    /// it ran in as <paramref name="childHarnessSessionId"/>: the work running in that child ends.
+    /// </remarks>
     /// <returns>The work as Fleet shows it now, or <c>null</c> when Fleet has no such work.</returns>
-    public async Task<RunningWorkItem?> HandleWorkEndedAsync(string parentSessionId, string workId, string? endedReason, string? detail = null)
+    public async Task<RunningWorkItem?> HandleWorkEndedAsync(
+        string parentSessionId, string workId, string? endedReason, string? detail = null, string? childHarnessSessionId = null)
     {
         ValidateRequired(parentSessionId, nameof(parentSessionId));
         ValidateRequired(workId, nameof(workId));
 
         var work = await delegationRepository.GetByWorkIdAsync(parentSessionId, workId).ConfigureAwait(false);
+        if (work is null && childHarnessSessionId is not null)
+        {
+            var children = new HashSet<string>(StringComparer.Ordinal) { childHarnessSessionId };
+            foreach (var candidate in await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false))
+            {
+                if (candidate.IsRunning && await RunsInAsync(candidate, children).ConfigureAwait(false))
+                {
+                    work = candidate;
+                    break;
+                }
+            }
+        }
+
         if (work is null)
             return null;
         if (!work.IsRunning)
@@ -511,13 +529,18 @@ public sealed class DelegationService(
     /// work Fleet still has running that isn't in <paramref name="running"/> ended with the harness, so it ends lost
     /// (<see cref="WorkEndedReasons.Lost"/>). A report matches by <see cref="WorkReport.WorkId"/>, or by the child
     /// session the work runs in (<see cref="WorkReport.ChildHarnessSessionId"/>), for a harness that can say which
-    /// children run but no longer knows which call started them.
+    /// children run but no longer knows which call started them. A report with <see cref="WorkReport.EndedReason"/>
+    /// is work the harness knows finished: it ends that way, not lost.
     /// </summary>
     /// <returns>How much work ended as lost.</returns>
     public async Task<int> SettleLostWorkAsync(string parentSessionId, IReadOnlyList<WorkReport> running)
     {
         ValidateRequired(parentSessionId, nameof(parentSessionId));
         ArgumentNullException.ThrowIfNull(running);
+
+        // A report that says how its work ended is a notice the harness holds, not something still running.
+        foreach (var finished in running.Where(r => r.EndedReason is not null))
+            await HandleWorkEndedAsync(parentSessionId, finished.WorkId, finished.EndedReason, finished.Detail, finished.ChildHarnessSessionId).ConfigureAwait(false);
 
         var workIds = running.Select(r => r.WorkId).ToHashSet(StringComparer.Ordinal);
         var children = running.Select(r => r.ChildHarnessSessionId).OfType<string>().ToHashSet(StringComparer.Ordinal);

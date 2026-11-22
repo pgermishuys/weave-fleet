@@ -180,6 +180,7 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>
     /// The work the harness itself says is running for this session now, so Fleet can catch up after it or the harness
     /// restarted: work Fleet still has running that isn't here ended with it (<see cref="WorkEndedReasons.Lost"/>).
+    /// A report with <see cref="WorkReport.EndedReason"/> is work the harness knows finished (and how): it ends that way.
     /// Null when the harness can't say.
     /// </summary>
     Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct)

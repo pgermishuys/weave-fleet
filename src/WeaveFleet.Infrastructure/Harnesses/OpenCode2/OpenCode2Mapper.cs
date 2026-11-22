@@ -362,9 +362,13 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// <c>cancelled</c>), not the tool call, so the call is found by its child.
     /// </summary>
     private OpenCode2Delegation? FinishedBackgroundDelegation(JsonElement data)
+        => ReadNoticeMetadata(data) is { } metadata
+            ? FinishedBackgroundDelegation(metadata, ReadNoticeItem(data) is { } item ? ReadString(item, "text") : null)
+            : null;
+
+    private OpenCode2Delegation? FinishedBackgroundDelegation(JsonElement metadata, string? text)
     {
-        if (ReadNoticeMetadata(data) is not { } metadata
-            || ReadString(metadata, "source") != SubagentTool
+        if (ReadString(metadata, "source") != SubagentTool
             || ReadString(metadata, "childID") is not { } childSessionId
             || !(_backgroundSubagents.TryGetValue(childSessionId, out var started) || _reportedSubagents.TryGetValue(childSessionId, out started)))
         {
@@ -373,27 +377,103 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 
         // 2.3.0 keeps state "completed" in the metadata when the child went idle with work still running; only the
         // text, which lists that work, says it isn't over. The delegation stays open for the child's next report.
-        if (ReadString(metadata, "state") is null or "completed"
-            && ReadNoticeItem(data) is { } item && ReadString(item, "text") is { } text
-            && text.Contains("Background work still running:", StringComparison.Ordinal))
-        {
+        if (StillRunning(metadata, text))
             return started with { Status = "running" };
-        }
 
         _backgroundSubagents.Remove(childSessionId);
 
         // The child may report again after a later round of work (OpenCode reports every time it goes idle): keep it.
         _reportedSubagents[childSessionId] = started;
 
-        return started with
+        return started with { Status = NoticeStatus(metadata) };
+    }
+
+    private static bool StillRunning(JsonElement metadata, string? text)
+        => ReadString(metadata, "state") is null or "completed"
+            && text is not null
+            && text.Contains("Background work still running:", StringComparison.Ordinal);
+
+    private static string NoticeStatus(JsonElement metadata) => ReadString(metadata, "state") switch
+    {
+        "error" => "error",
+        "cancelled" => "cancelled",
+        _ => "completed",
+    };
+
+    /// <summary>
+    /// The end of a subagent's work that a completion notice reports for a child this mapper never saw the call of
+    /// (it was made before this mapper or session existed, or while Fleet wasn't attached): the work is known by its
+    /// child session alone, which Fleet matches to the delegation running in it. Null for any other notice, or one
+    /// from a child that still has work running.
+    /// </summary>
+    public HarnessEvent? TryReadUntrackedCompletion(OpenCode2Event evt)
+        => evt.Type == "session.inbox.enqueued" && evt.Data.ValueKind == JsonValueKind.Object && ReadNoticeMetadata(evt.Data) is { } metadata
+            ? UntrackedCompletion(metadata, ReadNoticeItem(evt.Data) is { } item ? ReadString(item, "text") : null)
+            : null;
+
+    private HarnessEvent? UntrackedCompletion(JsonElement metadata, string? text)
+    {
+        if (ReadString(metadata, "source") != SubagentTool
+            || ReadString(metadata, "childID") is not { } childSessionId
+            || _backgroundSubagents.ContainsKey(childSessionId)
+            || _reportedSubagents.ContainsKey(childSessionId)
+            || StillRunning(metadata, text))
         {
-            Status = ReadString(metadata, "state") switch
+            return null;
+        }
+
+        return FinishedChildReport(metadata, text) is { } report ? WorkEvents.Ended(report, report.EndedReason!, fleetSessionId) : null;
+    }
+
+    /// <summary>
+    /// What a subagent completion notice says about its child as ended work, or null for any other notice and for a
+    /// child that still has work running. Known by its child session alone.
+    /// </summary>
+    internal static WorkReport? FinishedChildReport(JsonElement metadata, string? text)
+    {
+        if (metadata.ValueKind != JsonValueKind.Object
+            || ReadString(metadata, "source") != SubagentTool
+            || ReadString(metadata, "childID") is not { } childSessionId
+            || StillRunning(metadata, text))
+        {
+            return null;
+        }
+
+        return new WorkReport
+        {
+            WorkId = childSessionId,
+            ChildHarnessSessionId = childSessionId,
+            EndedReason = NoticeStatus(metadata) switch
             {
-                "error" => "error",
-                "cancelled" => "cancelled",
-                _ => "completed",
+                "error" => WorkEndedReasons.Error,
+                "cancelled" => WorkEndedReasons.Cancelled,
+                _ => WorkEndedReasons.Completed,
             },
         };
+    }
+
+    /// <summary>Whether a background subagent is still waiting for its completion notice.</summary>
+    public bool HasBackgroundSubagents => _backgroundSubagents.Count > 0;
+
+    /// <summary>
+    /// The work-ended events for the subagent completion notices among <paramref name="oldestFirst"/>, messages V2
+    /// holds that Fleet may not have heard live (the stream was down, or the session was only just attached).
+    /// </summary>
+    public IReadOnlyList<HarnessEvent> SubagentCompletions(IEnumerable<OpenCode2Message> oldestFirst)
+    {
+        var events = new List<HarnessEvent>();
+        foreach (var message in oldestFirst)
+        {
+            if (message is not { Type: "synthetic" } || message.Metadata.ValueKind != JsonValueKind.Object)
+                continue;
+
+            if (FinishedBackgroundDelegation(message.Metadata, message.Text) is { } delegation)
+                events.Add(WorkEvent(delegation, called: false));
+            else if (UntrackedCompletion(message.Metadata, message.Text) is { } ended)
+                events.Add(ended);
+        }
+
+        return events;
     }
 
     /// <summary>
