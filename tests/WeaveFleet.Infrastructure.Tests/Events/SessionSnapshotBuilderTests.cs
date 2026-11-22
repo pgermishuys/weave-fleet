@@ -92,6 +92,33 @@ public sealed class SessionSnapshotBuilderTests
         (await builder.BuildAsync(parent.Session.Id)).ActivityStatus.ShouldBe("busy");
     }
 
+    // The parent's event pump ended and started again (a dropped stream): the relay forgot which children were in the
+    // background, but the work row still says so, and the parent mustn't read as working on it from then on.
+    [Fact]
+    public async Task BuildAsync_keeps_a_background_subagent_in_the_background_after_its_parent_reattached()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var userId = TestUserContext.DefaultUserId;
+        var parent = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, userId);
+        var backgroundChild = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, userId);
+
+        var delegations = new DelegationRepository(factory, new TestUserContext());
+        var background = Delegation("background", parent.Session.Id, backgroundChild.Session.Id);
+        background.Kind = WorkKinds.Subagent;
+        background.Background = true;
+        await delegations.InsertAsync(background);
+
+        var tracker = new SessionActivityTracker();
+        tracker.Update(parent.Session.Id, "idle", userId);
+
+        var snapshot = await new SessionSnapshotBuilder(factory, new TestUserContext(), tracker).BuildAsync(parent.Session.Id);
+
+        snapshot.ActivityStatus.ShouldBe("idle");
+        snapshot.RunningWork.Single().Background.ShouldBeTrue();
+        snapshot.Delegations.Single().Background.ShouldBe(true);
+    }
+
     private static Delegation Delegation(string id, string parentSessionId, string? childSessionId) => new()
     {
         Id = id,

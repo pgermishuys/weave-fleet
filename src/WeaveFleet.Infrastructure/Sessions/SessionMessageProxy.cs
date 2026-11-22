@@ -296,9 +296,7 @@ public sealed class SessionMessageProxy(
                 ChildActivityStatus = d.ChildSessionId is { } childSessionId
                     ? activityTracker.GetEffectiveActivityStatus(childSessionId)
                     : null,
-                Background = d.ChildSessionId is { } backgroundChildId && activityTracker.IsChildInBackground(backgroundChildId)
-                    ? true
-                    : null,
+                Background = DelegationService.BackgroundOf(d, activityTracker),
             }).ToList(),
             RunningWork = DelegationService.RunningWorkOf(delegations),
             ActivityStatus = activityStatus,

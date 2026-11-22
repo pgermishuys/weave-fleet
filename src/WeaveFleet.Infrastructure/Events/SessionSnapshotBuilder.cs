@@ -165,9 +165,7 @@ public sealed class SessionSnapshotBuilder(
                 ChildActivityStatus = row.ChildSessionId is { } childSessionId
                     ? activityTracker.GetEffectiveActivityStatus(childSessionId)
                     : null,
-                Background = row.ChildSessionId is { } backgroundChildId && activityTracker.IsChildInBackground(backgroundChildId)
-                    ? true
-                    : null,
+                Background = DelegationService.BackgroundOf(row, activityTracker),
             }).ToArray(),
             RunningWork = DelegationService.RunningWorkOf(delegationRows),
             ActivityStatus = NormalizeActivityStatus(activityTracker.GetEffectiveActivityStatus(sessionId)),
