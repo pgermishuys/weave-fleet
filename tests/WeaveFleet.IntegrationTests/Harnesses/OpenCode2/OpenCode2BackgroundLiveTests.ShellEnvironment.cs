@@ -70,6 +70,32 @@ public sealed partial class OpenCode2BackgroundLiveTests
     }
 
     [OpenCode2Fact]
+    public async Task The_agents_shell_and_its_instructions_name_the_server_hosting_the_session()
+    {
+        const string prompt = "Which server hosts you? (server pid)";
+        fleet.Answer(request =>
+        {
+            if (LlmRequest.Starts(request, prompt))
+                return ToolCall("call_pid", "shell", new { command = "echo pid=$FLEET_HARNESS_SERVER_PID", description = "The server pid" });
+            if (LlmRequest.Continues(request, prompt))
+                return new ScriptedLlmResponse { Text = "Named." };
+            return null;
+        });
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("server-pid"), "Server pid", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "Named."), cts.Token);
+
+        var harness = (OpenCode2HarnessSession)await fleet.HarnessSessionAsync(id, cts.Token);
+        var server = harness.ProcessId.ShouldNotBeNull();
+        var continued = fleet.Llm.Queue.Requests.First(r => LlmRequest.Continues(r, prompt));
+        ToolOutput(continued).ShouldContain($"pid={server}");
+        continued.ShouldContain($"is pid {server} ");
+    }
+
+    [OpenCode2Fact]
     public async Task A_profile_session_back_on_a_new_server_after_an_idle_stop_still_does_not_get_it()
     {
         const string first = "List the environment. (env before idle)";
