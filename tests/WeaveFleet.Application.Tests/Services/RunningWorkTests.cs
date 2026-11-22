@@ -265,6 +265,38 @@ public sealed class RunningWorkTests
         _work.All.Single(w => w.WorkId == "call_sub").IsRunning.ShouldBeTrue();
     }
 
+    private static WorkReport Resumed(string call) => Subagent() with { WorkId = call, ToolCallId = call, Label = call };
+
+    [Fact]
+    public async Task A_run_resumed_in_the_same_child_does_not_keep_the_earlier_run_alive()
+    {
+        _sessions.Seed(new Session { Id = "fleet-child", OpencodeSessionId = "ses_child", UserId = "user-1" });
+        await _sut.HandleWorkReportedAsync(Parent, Resumed("call_a") with { Background = true }, childSessionId: "fleet-child");
+        await _sut.HandleWorkReportedAsync(Parent, Resumed("call_b") with { Background = true }, childSessionId: "fleet-child");
+
+        // The harness runs the child once: that is the newer run. The earlier one is over, and isn't lost.
+        var lost = await _sut.SettleLostWorkAsync(Parent, [new WorkReport { WorkId = "ses_child", ChildHarnessSessionId = "ses_child" }]);
+
+        lost.ShouldBe(0);
+        var earlier = _work.All.Single(w => w.WorkId == "call_a");
+        (earlier.IsRunning, earlier.EndedReason).ShouldBe((false, WorkEndedReasons.Cancelled));
+        _work.All.Single(w => w.WorkId == "call_b").IsRunning.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_child_that_finished_ends_its_newest_run_and_the_earlier_one_with_it()
+    {
+        _sessions.Seed(new Session { Id = "fleet-child", OpencodeSessionId = "ses_child", UserId = "user-1" });
+        await _sut.HandleWorkReportedAsync(Parent, Resumed("call_a") with { Background = true }, childSessionId: "fleet-child");
+        await _sut.HandleWorkReportedAsync(Parent, Resumed("call_b") with { Background = true }, childSessionId: "fleet-child");
+
+        await _sut.HandleWorkEndedAsync(Parent, "ses_child", WorkEndedReasons.Completed, childHarnessSessionId: "ses_child");
+
+        _work.All.Single(w => w.WorkId == "call_b").EndedReason.ShouldBe(WorkEndedReasons.Completed);
+        var earlier = _work.All.Single(w => w.WorkId == "call_a");
+        (earlier.IsRunning, earlier.EndedReason).ShouldBe((false, WorkEndedReasons.Cancelled));
+    }
+
     [Fact]
     public async Task A_child_the_harness_says_finished_ends_as_it_ended_and_is_not_lost()
     {

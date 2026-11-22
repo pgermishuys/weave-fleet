@@ -93,6 +93,31 @@ public sealed class DelegationRepositoryTests
     }
 
     [Fact]
+    public async Task CancelAllUnfinishedAsync_ends_a_run_a_newer_run_in_its_child_superseded_as_cancelled_not_lost()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+        var alice = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "alice");
+        var repo = new DelegationRepository(factory, new TestUserContext("alice"));
+        var child = alice.Session.Id;
+        var first = await InsertDelegationAsync(repo, alice.Session.Id, "running");
+        var second = await InsertDelegationAsync(repo, alice.Session.Id, "running");
+        foreach (var run in new[] { first, second })
+        {
+            run.Kind = WeaveFleet.Domain.Harnesses.WorkKinds.Subagent;
+            run.ChildSessionId = child;
+            await repo.UpdateWorkAsync(run);
+            await repo.UpdateChildSessionIdAsync(run.Id, child, DateTime.UtcNow.ToString("O"));
+        }
+
+        await new DelegationRepository(factory, new TestUserContext()).CancelAllUnfinishedAsync("2026-09-15T08:00:00.0000000Z");
+
+        (await repo.GetByIdAsync(first.Id))!.EndedReason.ShouldBe(WeaveFleet.Domain.Harnesses.WorkEndedReasons.Cancelled);
+        (await repo.GetByIdAsync(second.Id))!.EndedReason.ShouldBe(WeaveFleet.Domain.Harnesses.WorkEndedReasons.Lost);
+        (await repo.GetUnreportedLostAsync(alice.Session.Id)).Select(d => d.Id).ShouldBe([second.Id]);
+    }
+
+    [Fact]
     public async Task Running_work_round_trips_with_what_the_harness_said_about_it()
     {
         var (conn, _, factory) = await CreateAsync();

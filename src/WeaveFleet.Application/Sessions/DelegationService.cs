@@ -489,8 +489,10 @@ public sealed class DelegationService(
         var work = await delegationRepository.GetByWorkIdAsync(parentSessionId, workId).ConfigureAwait(false);
         if (work is null && childHarnessSessionId is not null)
         {
+            // A child runs one execution at a time, so when a resumed child has several runs open, its report is about
+            // the newest; the ones before it are over (EndSupersededAsync).
             var children = new HashSet<string>(StringComparer.Ordinal) { childHarnessSessionId };
-            foreach (var candidate in await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false))
+            foreach (var candidate in (await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false)).Reverse())
             {
                 if (candidate.IsRunning && await RunsInAsync(candidate, children).ConfigureAwait(false))
                 {
@@ -507,6 +509,9 @@ public sealed class DelegationService(
 
         var reason = WorkEndedReasons.IsKnown(endedReason) ? endedReason! : WorkEndedReasons.Completed;
         var status = reason == WorkEndedReasons.Lost ? WorkEndedReasons.Cancelled : reason;
+
+        if (work.Kind == WorkKinds.Subagent && work.ChildSessionId is not null)
+            await EndSupersededAsync(parentSessionId, work).ConfigureAwait(false);
 
         // A subagent's delegation ends the way it always has: its card, its child's activity and progress hear of it.
         if (work.Kind == WorkKinds.Subagent)
@@ -538,6 +543,11 @@ public sealed class DelegationService(
         ValidateRequired(parentSessionId, nameof(parentSessionId));
         ArgumentNullException.ThrowIfNull(running);
 
+        // A run resumed in a child it already ran in has ended the run before it, which no harness notice names.
+        var all = await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false);
+        foreach (var newest in all.Where(w => w.IsRunning && w.Kind == WorkKinds.Subagent && w.ChildSessionId is not null))
+            await EndSupersededAsync(parentSessionId, newest).ConfigureAwait(false);
+
         // A report that says how its work ended is a notice the harness holds, not something still running.
         foreach (var finished in running.Where(r => r.EndedReason is not null))
             await HandleWorkEndedAsync(parentSessionId, finished.WorkId, finished.EndedReason, finished.Detail, finished.ChildHarnessSessionId).ConfigureAwait(false);
@@ -555,6 +565,26 @@ public sealed class DelegationService(
         }
 
         return lost;
+    }
+
+    /// <summary>
+    /// Ends, cancelled, the subagent runs of the same child that came before <paramref name="work"/> and still show as
+    /// running. A child runs one execution at a time, so a newer run in it means the earlier ones are over: not lost
+    /// (nothing stopped under them), and not kept alive by the newer run's child.
+    /// </summary>
+    private async Task EndSupersededAsync(string parentSessionId, Delegation work)
+    {
+        foreach (var earlier in await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false))
+        {
+            if (earlier.Id != work.Id
+                && earlier.IsRunning
+                && earlier.Kind == WorkKinds.Subagent
+                && earlier.ChildSessionId == work.ChildSessionId
+                && string.CompareOrdinal(earlier.CreatedAt, work.CreatedAt) < 0)
+            {
+                await HandleWorkEndedAsync(parentSessionId, earlier.WorkId, WorkEndedReasons.Cancelled).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Whether <paramref name="work"/>'s child session is one of the harness's <paramref name="childHarnessSessionIds"/>.</summary>
