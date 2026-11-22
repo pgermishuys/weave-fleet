@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Sessions;
@@ -28,6 +29,7 @@ public sealed class HarnessEventRelayRunningWorkTests : IDisposable
     private readonly FakeEventBroadcaster _broadcaster = new();
     private readonly FakeEventPublisher _publisher = new();
     private readonly InstanceTracker _tracker = new();
+    private readonly CapturingLogger _recorderLog = new();
     private readonly RunningWorkRecorder _recorder;
     private readonly HarnessEventRelay _relay;
 
@@ -46,7 +48,7 @@ public sealed class HarnessEventRelayRunningWorkTests : IDisposable
                 sessionActivityWriteService: null, activityTracker: null, sp.GetRequiredService<ISessionRepository>(), capabilitiesResolver: null));
             services.AddTransient<DomainEventTranslator>();
         });
-        _recorder = new RunningWorkRecorder(scopeFactory, NullLogger<RunningWorkRecorder>.Instance);
+        _recorder = new RunningWorkRecorder(scopeFactory, _recorderLog);
         _relay = new HarnessEventRelay(
             _tracker, _broadcaster, _publisher, new SessionActivityTracker(), scopeFactory, NullLogger<HarnessEventRelay>.Instance,
             work: _recorder);
@@ -152,9 +154,80 @@ public sealed class HarnessEventRelayRunningWorkTests : IDisposable
         await _relay.StopAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task Work_left_running_after_its_end_was_missed_ends_when_the_session_goes_idle_with_the_reason_the_harness_reports()
+    {
+        var now = DateTime.UtcNow.ToString("O");
+        _work.Seed(new Delegation { Id = "w-sub", ParentSessionId = Session, WorkId = "sub_1", Kind = WorkKinds.Subagent, Title = "reviewer", Status = "running", CreatedAt = now, UpdatedAt = now });
+        var harness = new FakeHarnessSession("instance-1");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await _relay.StartAsync(cts.Token);
+        _tracker.Register(harness.InstanceId, harness);
+        await WaitUntilAsync(() => harness.RunningWorkCalls > 0, cts.Token);
+        await _recorder.Idle(Session).WaitAsync(cts.Token);
+
+        // The harness can say now; the end event never reached Fleet.
+        harness.RunningWork = [new WorkReport { WorkId = "sub_1", EndedReason = WorkEndedReasons.Error, Detail = "the child failed" }];
+        _work.All.Single().IsRunning.ShouldBeTrue();
+        harness.Emit(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "ses_1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = System.Text.Json.JsonDocument.Parse("""{"status":{"type":"busy"}}""").RootElement.Clone(),
+        });
+        harness.Emit(new HarnessEvent { Type = EventTypes.SessionIdle, SessionId = "ses_1", Timestamp = DateTimeOffset.UtcNow });
+
+        await WaitUntilAsync(() => !_work.All.Single().IsRunning, cts.Token);
+        _work.All.Single().EndedReason.ShouldBe(WorkEndedReasons.Error);
+
+        harness.Complete();
+        await _relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_handler_that_never_finishes_logs_a_warning_and_lets_the_next_event_through()
+    {
+        _recorder.HandlerTimeout = TimeSpan.FromMilliseconds(200);
+        // The harness never answers the catch-up when it attaches, so that handler hangs.
+        var harness = new FakeHarnessSession("instance-1") { RunningWorkGate = new TaskCompletionSource().Task };
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await _relay.StartAsync(cts.Token);
+        _tracker.Register(harness.InstanceId, harness);
+        await WaitUntilAsync(() => harness.RunningWorkCalls > 0, cts.Token);
+
+        harness.Emit(WorkEvents.Started(new WorkReport { WorkId = "sh_1", Kind = WorkKinds.Shell, Title = "shell", Label = "bun run dev", Background = true }, "ses_1"));
+
+        await WaitUntilAsync(() => _work.All.Any(w => w.WorkId == "sh_1"), cts.Token);
+        _recorderLog.Warnings.ShouldContain(m => m.Contains(Session) && m.Contains("reconcile"));
+
+        harness.Complete();
+        await _relay.StopAsync(CancellationToken.None);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct)
     {
         while (!condition())
             await Task.Delay(20, ct);
+    }
+
+    private sealed class CapturingLogger : ILogger<RunningWorkRecorder>
+    {
+        private readonly List<string> _warnings = [];
+
+        public IReadOnlyList<string> Warnings { get { lock (_warnings) return [.. _warnings]; } }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Warning)
+                lock (_warnings)
+                    _warnings.Add(formatter(state, exception));
+        }
     }
 }

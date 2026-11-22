@@ -284,7 +284,22 @@ public sealed class FakeHarnessSession : IHarnessSession
     /// <summary>What <see cref="GetRunningWorkAsync"/> answers; null (the default) means the harness can't say.</summary>
     public IReadOnlyList<WorkReport>? RunningWork { get; set; }
 
-    public Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct) => Task.FromResult(RunningWork);
+    /// <summary>When set, <see cref="GetRunningWorkAsync"/> waits for it first (a harness that never answers).</summary>
+    public Task? RunningWorkGate { get; set; }
+
+    /// <summary>How many times <see cref="GetRunningWorkAsync"/> has been asked.</summary>
+    public int RunningWorkCalls => Volatile.Read(ref _runningWorkCalls);
+
+    private int _runningWorkCalls;
+
+    public async Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct)
+    {
+        var answer = RunningWork;
+        Interlocked.Increment(ref _runningWorkCalls);
+        if (RunningWorkGate is { } gate)
+            await gate.ConfigureAwait(false);
+        return answer;
+    }
 
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => GetActivityStatusBehavior?.Invoke(ct) ?? Task.FromResult<string?>("idle");

@@ -482,6 +482,9 @@ public sealed class HarnessEventRelay : BackgroundService
                     _now.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _updates?.Observe(targetFleetSessionId, domainEvent);
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
+                // A turn's end is when work the harness reported may have ended without Fleet hearing: check Fleet's record against it.
+                if (domainEvent is SessionIdled && targetFleetSessionId == fleetSessionId)
+                    _work?.ReconcileWhenIdle(fleetSessionId, sessionUserId, instance, ct);
                 ObserveBrowserCall(targetFleetSessionId, domainEvent);
                 // Before the queue: a limit's failure holds the queue before the idle after it reaches the queue.
                 _retries?.Observe(targetFleetSessionId, sessionUserId, domainEvent);

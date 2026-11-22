@@ -34,7 +34,7 @@ public sealed partial class RunningWorkRecorder(IServiceScopeFactory scopeFactor
             return;
         }
 
-        Queue(fleetSessionId, () => RecordAsync(fleetSessionId, userId, evt.Type, report));
+        Queue(fleetSessionId, evt.Type, () => RecordAsync(fleetSessionId, userId, evt.Type, report));
     }
 
     /// <summary>
@@ -44,39 +44,69 @@ public sealed partial class RunningWorkRecorder(IServiceScopeFactory scopeFactor
     /// events say what it is.
     /// </summary>
     public void Reconcile(string fleetSessionId, string? userId, IHarnessSession instance, CancellationToken ct)
-        => Queue(fleetSessionId, async () =>
-        {
-            var running = await instance.GetRunningWorkAsync(ct).ConfigureAwait(false);
-            if (running is null)
-                return;
+        => Queue(fleetSessionId, "reconcile", () => ReconcileAsync(fleetSessionId, userId, instance, onlyWhenRunning: false, ct));
 
-            using var user = userId is null ? null : BackgroundUserContext.BeginScope(userId);
-            using var scope = scopeFactory.CreateScope();
-            var work = scope.ServiceProvider.GetRequiredService<DelegationService>();
-            var lost = await work.SettleLostWorkAsync(fleetSessionId, running).ConfigureAwait(false);
-            if (lost > 0)
-                LogSettledLost(logger, lost, fleetSessionId);
-        });
+    /// <summary>
+    /// <see cref="Reconcile"/> for a session whose turn just ended, when Fleet still has running work for it: an event the
+    /// harness sent about that work may have been missed, and the turn that follows each notice is the cheap moment to
+    /// ask. A session with nothing running costs one read of Fleet's own record, no call to the harness.
+    /// </summary>
+    public void ReconcileWhenIdle(string fleetSessionId, string? userId, IHarnessSession instance, CancellationToken ct)
+        => Queue(fleetSessionId, "reconcile-on-idle", () => ReconcileAsync(fleetSessionId, userId, instance, onlyWhenRunning: true, ct));
+
+    private async Task ReconcileAsync(string fleetSessionId, string? userId, IHarnessSession instance, bool onlyWhenRunning, CancellationToken ct)
+    {
+        using var user = userId is null ? null : BackgroundUserContext.BeginScope(userId);
+        using var scope = scopeFactory.CreateScope();
+        var work = scope.ServiceProvider.GetRequiredService<DelegationService>();
+        if (onlyWhenRunning && !await work.HasRunningWorkAsync(fleetSessionId).ConfigureAwait(false))
+            return;
+
+        var running = await instance.GetRunningWorkAsync(ct).ConfigureAwait(false);
+        if (running is null)
+            return;
+
+        var lost = await work.SettleLostWorkAsync(fleetSessionId, running).ConfigureAwait(false);
+        if (lost > 0)
+            LogSettledLost(logger, lost, fleetSessionId);
+    }
 
     /// <summary>Completes when every event queued for the session so far is handled.</summary>
     internal Task Idle(string fleetSessionId) => _tails.TryGetValue(fleetSessionId, out var tail) ? tail : Task.CompletedTask;
 
-    private void Queue(string fleetSessionId, Func<Task> handle)
+    /// <summary>
+    /// How long a handler may take before the queue carries on without it. A handler waiting on something that never
+    /// comes would hold every later event of its session for good.
+    /// </summary>
+    internal TimeSpan HandlerTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    private void Queue(string fleetSessionId, string what, Func<Task> handle)
     {
         lock (_sync)
         {
             var tail = _tails.GetValueOrDefault(fleetSessionId) ?? Task.CompletedTask;
             _tails[fleetSessionId] = tail
-                .ContinueWith(_ => RunAsync(fleetSessionId, handle), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
+                .ContinueWith(_ => RunAsync(fleetSessionId, what, handle), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
                 .Unwrap();
         }
     }
 
-    private async Task RunAsync(string fleetSessionId, Func<Task> handle)
+    private async Task RunAsync(string fleetSessionId, string what, Func<Task> handle)
     {
         try
         {
-            await handle().ConfigureAwait(false);
+            var handling = handle();
+            if (await Task.WhenAny(handling, Task.Delay(HandlerTimeout)).ConfigureAwait(false) != handling)
+            {
+                LogStuck(logger, what, fleetSessionId, HandlerTimeout.TotalSeconds);
+                // Left running; its failure is still logged, when it comes.
+                _ = handling.ContinueWith(
+                    t => LogFailed(logger, fleetSessionId, t.Exception!.GetBaseException()),
+                    CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                return;
+            }
+
+            await handling.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -130,6 +160,9 @@ public sealed partial class RunningWorkRecorder(IServiceScopeFactory scopeFactor
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't record running work for session {SessionId}")]
     private static partial void LogFailed(ILogger logger, string sessionId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Handling a {EventType} event of session {SessionId} took over {Seconds} s: later running-work events of the session go on without waiting for it")]
+    private static partial void LogStuck(ILogger logger, string eventType, string sessionId, double seconds);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Dropped a {EventType} event of session {SessionId} that names no work")]
     private static partial void LogUnreadable(ILogger logger, string eventType, string sessionId);

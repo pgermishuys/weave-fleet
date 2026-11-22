@@ -613,6 +613,13 @@ public sealed class DelegationService(
     public Task MarkLostWorkReportedAsync(IReadOnlyList<Delegation> lost)
         => delegationRepository.MarkLostReportedAsync([.. lost.Select(work => work.Id)], DateTime.UtcNow.ToString("O"));
 
+    /// <summary>Whether Fleet's record has any work of the session still running.</summary>
+    public async Task<bool> HasRunningWorkAsync(string parentSessionId)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+        return (await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false)).Any(w => w.IsRunning);
+    }
+
     /// <summary>
     /// The session's running work, and the work that ended in the last <see cref="RecentlyEndedFor"/> with its result;
     /// every piece it ever ran with <paramref name="all"/>. Oldest first.
