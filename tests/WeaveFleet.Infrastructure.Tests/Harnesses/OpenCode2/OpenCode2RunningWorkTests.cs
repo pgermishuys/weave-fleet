@@ -215,6 +215,8 @@ public sealed class OpenCode2RunningWorkTests
         {
             "/api/shell" => Json(shells.ToJsonString()),
             "/api/session/active" => Json("""{"data":{"ses_recorded":{},"ses_child":{},"ses_unrelated":{}}}"""),
+            "/api/session/ses_recorded/inbox" => Json("""{"data":[]}"""),
+            "/api/session/ses_recorded/message" => Json("""{"data":[],"cursor":{}}"""),
             "/api/session/ses_child" => Json("""{"data":{"id":"ses_child","parentID":"ses_recorded"}}"""),
             "/api/session/ses_unrelated" => Json("""{"data":{"id":"ses_unrelated"}}"""),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),

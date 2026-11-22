@@ -98,7 +98,7 @@ public sealed partial class RunningWorkRecorder(IServiceScopeFactory scopeFactor
         }
 
         if (type == EventTypes.WorkEnded)
-            await work.HandleWorkEndedAsync(fleetSessionId, report.WorkId, report.EndedReason, report.Detail).ConfigureAwait(false);
+            await work.HandleWorkEndedAsync(fleetSessionId, report.WorkId, report.EndedReason, report.Detail, report.ChildHarnessSessionId).ConfigureAwait(false);
     }
 
     /// <summary>The Fleet session for the work's child session, made when it's new; null when there's none or it failed.</summary>

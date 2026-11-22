@@ -42,7 +42,8 @@ public sealed class HarnessEventRelayRunningWorkTests : IDisposable
             services.AddSingleton<IEventBroadcaster>(_broadcaster);
             services.AddSingleton<IUserContext>(new TestUserContext("user-1"));
             services.AddScoped(sp => new DelegationService(
-                sp.GetRequiredService<IDelegationRepository>(), sp.GetRequiredService<IEventBroadcaster>(), sp.GetRequiredService<IUserContext>()));
+                sp.GetRequiredService<IDelegationRepository>(), sp.GetRequiredService<IEventBroadcaster>(), sp.GetRequiredService<IUserContext>(),
+                sessionActivityWriteService: null, activityTracker: null, sp.GetRequiredService<ISessionRepository>(), capabilitiesResolver: null));
             services.AddTransient<DomainEventTranslator>();
         });
         _recorder = new RunningWorkRecorder(scopeFactory, NullLogger<RunningWorkRecorder>.Instance);
@@ -98,6 +99,34 @@ public sealed class HarnessEventRelayRunningWorkTests : IDisposable
 
         _work.All.Single(w => w.Id == "w-gone").EndedReason.ShouldBe(WorkEndedReasons.Lost);
         _work.All.Single(w => w.Id == "w-still").IsRunning.ShouldBeTrue();
+
+        harness.Complete();
+        await _relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task An_end_that_names_only_the_child_ends_the_delegation_that_runs_in_it()
+    {
+        // A harness session that never saw the call (it was recreated) still knows which child session finished.
+        var now = DateTime.UtcNow.ToString("O");
+        _sessions.Seed(new Session { Id = "fleet-child", OpencodeSessionId = "ses_child", UserId = "user-1" });
+        _work.Seed(new Delegation
+        {
+            Id = "w-sub", ParentSessionId = Session, WorkId = "call_sub", Kind = WorkKinds.Subagent, Title = "general",
+            ChildSessionId = "fleet-child", Status = "running", CreatedAt = now, UpdatedAt = now,
+        });
+        var harness = new FakeHarnessSession("instance-1");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await _relay.StartAsync(cts.Token);
+        _tracker.Register(harness.InstanceId, harness);
+        harness.Emit(WorkEvents.Ended(new WorkReport { WorkId = "ses_child", ChildHarnessSessionId = "ses_child" }, WorkEndedReasons.Completed, "ses_1"));
+        harness.Emit(new HarnessEvent { Type = EventTypes.SessionIdle, SessionId = "ses_1", Timestamp = DateTimeOffset.UtcNow });
+        await WaitUntilAsync(() => _publisher.Calls.Any(c => c.Event.Type == EventTypes.SessionIdle), cts.Token);
+        await _recorder.Idle(Session).WaitAsync(cts.Token);
+
+        var work = _work.All.Single(w => w.Id == "w-sub");
+        (work.Status, work.EndedReason).ShouldBe(("completed", WorkEndedReasons.Completed));
 
         harness.Complete();
         await _relay.StopAsync(CancellationToken.None);
