@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using WeaveFleet.Application.Terminals;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
@@ -200,9 +201,83 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
         var plugin = Plugin();
 
         plugin.ShouldContain("const serverPid = process.pid");
-        plugin.ShouldContain("event.env.FLEET_HARNESS_SERVER_PID = String(serverPid)");
+        plugin.ShouldContain("event.env.FLEET_HARNESS_SERVER_PID = String(serverPids[0])");
         plugin.ShouldContain("input.system.push({ type: \"text\", text: serverNotice })");
         plugin.ShouldContain("Never kill it; exclude it from any kill-by-name or kill-by-pattern cleanup.");
+    }
+
+    [Fact]
+    public void The_plugin_names_only_its_own_pid_when_Fleet_started_it()
+    {
+        var (pids, notice, nodePid) = RunPluginUnder(hostPid: Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        pids.ShouldBe([nodePid]);
+        notice.ShouldContain($"is pid {nodePid} (");
+    }
+
+    [Fact]
+    public void The_plugin_names_the_launcher_too_when_something_between_Fleet_and_it_started_it()
+    {
+        // The test process stands in for the bun shim: it's the plugin's parent, and Fleet's pid is someone else's.
+        var (pids, notice, nodePid) = RunPluginUnder(hostPid: "1234567");
+
+        pids.ShouldBe([Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture), nodePid]);
+        notice.ShouldContain($"is pid {pids[0]} and {nodePid} (");
+        notice.ShouldContain("Never kill either");
+    }
+
+    [Fact]
+    public void The_plugin_names_only_itself_when_Fleet_didnt_say_its_pid()
+        => RunPluginUnder(hostPid: null).Pids.Length.ShouldBe(1);
+
+    [Fact]
+    public void Fleet_hands_the_plugin_its_pid_and_takes_it_out_of_the_agents_shells()
+    {
+        TerminalEnvironment.IsFleetOwned(OpenCode2FleetFiles.HostPidVariable).ShouldBeTrue();
+        File.ReadAllText(RepoPath("src", "WeaveFleet.Infrastructure", "Harnesses", "OpenCode2", "OpenCode2HarnessRuntime.cs"))
+            .ShouldContain("environment[OpenCode2FleetFiles.HostPidVariable]");
+    }
+
+    /// <summary>Runs the plugin's setup under node, a child of this process, with a fake V2 context; returns what it told shells and sessions.</summary>
+    private (string[] Pids, string Notice, string NodePid) RunPluginUnder(string? hostPid)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_dataDirectory, $"plugin-run-{Guid.NewGuid():N}")).FullName;
+        File.WriteAllText(Path.Combine(folder, "index.js"), Plugin());
+        File.WriteAllText(Path.Combine(folder, "package.json"), "{\"type\":\"module\"}");
+        File.WriteAllText(Path.Combine(folder, "run.mjs"), """
+            import plugin from "./index.js"
+            const hooks = {}
+            const ctx = {
+              location: { directory: process.cwd() },
+              session: { hook: async (n, f) => { hooks["session." + n] = f } },
+              shell: { hook: async (n, f) => { hooks["shell." + n] = f } },
+              tool: { hook: async () => {}, transform: async () => {} },
+            }
+            await plugin.setup(ctx)
+            const input = { sessionID: "s", system: [] }
+            hooks["session.context"](input)
+            const event = { env: {}, command: "x" }
+            hooks["shell.create.before"](event)
+            console.log(JSON.stringify({ system: input.system.map((p) => p.text), env: event.env, pid: process.pid }))
+            """);
+
+        var psi = new System.Diagnostics.ProcessStartInfo("node") { RedirectStandardOutput = true, UseShellExecute = false, WorkingDirectory = folder };
+        psi.ArgumentList.Add("run.mjs");
+        foreach (var key in psi.Environment.Keys.Where(k => k.StartsWith("FLEET_", StringComparison.OrdinalIgnoreCase)).ToList())
+            psi.Environment.Remove(key);
+        if (hostPid is not null)
+            psi.Environment[OpenCode2FleetFiles.HostPidVariable] = hostPid;
+        using var process = System.Diagnostics.Process.Start(psi).ShouldNotBeNull();
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        process.ExitCode.ShouldBe(0, output);
+
+        using var json = System.Text.Json.JsonDocument.Parse(output);
+        var env = json.RootElement.GetProperty("env");
+        var pids = env.GetProperty("FLEET_HARNESS_SERVER_PIDS").GetString()!.Split(' ');
+        var notice = json.RootElement.GetProperty("system").EnumerateArray().Select(e => e.GetString()!).Single(t => t.Contains("Never kill "));
+        env.GetProperty("FLEET_HARNESS_SERVER_PID").GetString().ShouldBe(pids[0]);
+        return (pids, notice, json.RootElement.GetProperty("pid").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]

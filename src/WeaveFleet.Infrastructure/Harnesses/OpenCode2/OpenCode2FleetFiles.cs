@@ -108,6 +108,9 @@ internal static class OpenCode2FleetFiles
     /// </summary>
     internal const string ShellEnvironmentVariable = "FLEET_SHELL_ENVIRONMENT";
 
+    /// <summary>Fleet's own process id, for the plugin to tell a launcher between Fleet and the server from Fleet itself.</summary>
+    internal const string HostPidVariable = "FLEET_HOST_PID";
+
     /// <summary>
     /// <see cref="ShellEnvironmentVariable"/>'s value: <c>{"NAME": null}</c> removes a variable from the shell,
     /// <c>{"NAME": "value"}</c> sets it (see <see cref="WeaveFleet.Application.Terminals.TerminalEnvironment.AgentShellChanges"/>).

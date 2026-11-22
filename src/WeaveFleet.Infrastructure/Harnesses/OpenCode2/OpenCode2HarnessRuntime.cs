@@ -784,6 +784,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[AgentHandoff.EnvironmentVariable] = "1";
         if (setup.Mods)
             environment[ModsFeature.EnvironmentVariable] = "1";
+
+        // Lets the plugin tell whether the process that started it is Fleet or a launcher (Windows' bun shim) between
+        // Fleet and the server. Fleet-owned, so the agent's shells don't keep it.
+        environment[OpenCode2FleetFiles.HostPidVariable] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (setup.WeaveConfigFolder is { } weaveFolder)
             environment[WeaveEnvironment.GlobalConfigDir] = weaveFolder;
         if (setup.MemoryFolder is { } memoryFolder)

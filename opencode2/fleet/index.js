@@ -748,10 +748,22 @@ async function holdAgentDenies(ctx) {
 
 // This plugin runs inside the OpenCode 2 server that hosts every session, so its pid is the one whose death stops them
 // all. An agent's own kill-by-name cleanup (`pkill -f "opencode serve"`) has taken it down before: say which it is.
+// Fleet watches the process it started. When that is a launcher (on Windows the bun shim `opencode2.EXE` starts the real
+// server as a child), the launcher's death is what Fleet sees, so it is named too. Fleet passes its own pid in
+// FLEET_HOST_PID: a parent that isn't Fleet is the launcher. $FLEET_HARNESS_SERVER_PID stays the outermost process of
+// the two, the one Fleet watches, and $FLEET_HARNESS_SERVER_PIDS lists them all, space-separated, for a plain check.
 const serverPid = process.pid
+const launcherPid = (() => {
+  const host = Number(process.env.FLEET_HOST_PID)
+  const parent = process.ppid
+  return Number.isInteger(host) && host > 0 && Number.isInteger(parent) && parent > 1 && parent !== host ? parent : null
+})()
+const serverPids = launcherPid ? [launcherPid, serverPid] : [serverPid]
 const serverNotice =
-  `Fleet's OpenCode 2 server, the process hosting this session, is pid ${serverPid} (\`opencode2 serve\`, also in $FLEET_HARNESS_SERVER_PID). ` +
-  "Never kill it; exclude it from any kill-by-name or kill-by-pattern cleanup."
+  `Fleet's OpenCode 2 server, hosting this session, is pid ${serverPids.join(" and ")} (also in $FLEET_HARNESS_SERVER_PIDS). ` +
+  (launcherPid
+    ? "Never kill either; exclude both from any kill-by-name or kill-by-pattern cleanup."
+    : "Never kill it; exclude it from any kill-by-name or kill-by-pattern cleanup.")
 
 export default {
   id: "fleet",
@@ -805,7 +817,8 @@ export default {
           if (value === null) delete event.env[name]
           else event.env[name] = String(value)
         }
-        event.env.FLEET_HARNESS_SERVER_PID = String(serverPid)
+        event.env.FLEET_HARNESS_SERVER_PID = String(serverPids[0])
+        event.env.FLEET_HARNESS_SERVER_PIDS = serverPids.join(" ")
         const sessionID = shellSessions.get(event.command)
         if (sessionID) {
           shellSessions.delete(event.command)
