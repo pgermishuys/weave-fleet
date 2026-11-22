@@ -641,7 +641,11 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // Read before mapping too: the mapper forgets a tool call once it ends. A subagent call is running work, which Fleet
         // records with its child session.
         if (_mapper.TryReadDelegation(evt) is { } delegation)
+        {
+            foreach (var superseded in _mapper.TakeSuperseded())
+                Write(_mapper.WorkEvent(superseded, called: false));
             Write(_mapper.WorkEvent(delegation, called: evt.Type == "session.tool.called"));
+        }
         else if (_mapper.TryReadUntrackedCompletion(evt) is { } completion)
             Write(completion);
 

@@ -51,6 +51,17 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     private readonly Dictionary<string, OpenCode2Delegation> _reportedSubagents = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// When the call behind each open run in a child was made (V2's clock, ms), by child session. V2's notices name only
+    /// the child, but each says when it was posted: one posted before the call that started the run now open in the
+    /// child is for an earlier run, which a resume, a notice or the server's stop already ended.
+    /// </summary>
+    private readonly Dictionary<string, long> _runStartedAt = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _calledAt = new(StringComparer.Ordinal);
+
+    /// <summary>Runs a newer call in the same child ended (<see cref="TakeSuperseded"/>).</summary>
+    private readonly List<OpenCode2Delegation> _superseded = [];
+
+    /// <summary>
     /// The calls whose work carries on in the background, by the handle it runs under (<see cref="BackgroundHandle"/>),
     /// until the notice that it finished, or the server stopping (<see cref="BackgroundWorkEnded"/>).
     /// </summary>
@@ -319,7 +330,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             return null;
 
         if (evt.Type == "session.inbox.enqueued")
-            return FinishedBackgroundDelegation(evt.Data);
+            return FinishedBackgroundDelegation(evt.Data, evt.Created);
 
         if (evt.Type is not ("session.tool.called" or "session.tool.progress" or "session.tool.success" or "session.tool.failed")
             || ReadToolRef(evt.Data) is not { } call
@@ -350,8 +361,22 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             },
             background);
 
+        if (evt.Type == "session.tool.called" && evt.Created is { } calledAt)
+            _calledAt[call.CallId] = calledAt;
+
         if (background && childSessionId is not null)
+        {
+            // A child runs one execution at a time: a call that starts work in a child whose earlier call is still open
+            // means the earlier run is over, whatever its notice said or whether Fleet heard it.
+            if (_backgroundSubagents.TryGetValue(childSessionId, out var earlier) && earlier.ToolCallId != delegation.ToolCallId)
+                _superseded.Add(earlier with { Status = "cancelled" });
+
             _backgroundSubagents[childSessionId] = delegation;
+            if ((_calledAt.Remove(call.CallId, out var calledTime) ? calledTime : evt.Created) is { } began)
+                _runStartedAt[childSessionId] = began;
+            else
+                _runStartedAt.Remove(childSessionId);
+        }
 
         return delegation;
     }
@@ -361,16 +386,17 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// (<c>metadata.childID</c>) and how it ended (<c>metadata.state</c>: <c>completed</c>, <c>error</c> or
     /// <c>cancelled</c>), not the tool call, so the call is found by its child.
     /// </summary>
-    private OpenCode2Delegation? FinishedBackgroundDelegation(JsonElement data)
+    private OpenCode2Delegation? FinishedBackgroundDelegation(JsonElement data, long? postedAt)
         => ReadNoticeMetadata(data) is { } metadata
-            ? FinishedBackgroundDelegation(metadata, ReadNoticeItem(data) is { } item ? ReadString(item, "text") : null)
+            ? FinishedBackgroundDelegation(metadata, ReadNoticeItem(data) is { } item ? ReadString(item, "text") : null, postedAt)
             : null;
 
-    private OpenCode2Delegation? FinishedBackgroundDelegation(JsonElement metadata, string? text)
+    private OpenCode2Delegation? FinishedBackgroundDelegation(JsonElement metadata, string? text, long? postedAt)
     {
         if (ReadString(metadata, "source") != SubagentTool
             || ReadString(metadata, "childID") is not { } childSessionId
-            || !(_backgroundSubagents.TryGetValue(childSessionId, out var started) || _reportedSubagents.TryGetValue(childSessionId, out started)))
+            || !(_backgroundSubagents.TryGetValue(childSessionId, out var started) || _reportedSubagents.TryGetValue(childSessionId, out started))
+            || (postedAt is { } posted && _runStartedAt.TryGetValue(childSessionId, out var startedAt) && posted < startedAt))
         {
             return null;
         }
@@ -386,6 +412,14 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         _reportedSubagents[childSessionId] = started;
 
         return started with { Status = NoticeStatus(metadata) };
+    }
+
+    /// <summary>The runs a newer call in the same child ended since the last call, each cancelled: they ended without a notice Fleet could match.</summary>
+    public IReadOnlyList<OpenCode2Delegation> TakeSuperseded()
+    {
+        var taken = _superseded.ToList();
+        _superseded.Clear();
+        return taken;
     }
 
     private static bool StillRunning(JsonElement metadata, string? text)
@@ -467,7 +501,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             if (message is not { Type: "synthetic" } || message.Metadata.ValueKind != JsonValueKind.Object)
                 continue;
 
-            if (FinishedBackgroundDelegation(message.Metadata, message.Text) is { } delegation)
+            if (FinishedBackgroundDelegation(message.Metadata, message.Text, message.Time?.Created) is { } delegation)
                 events.Add(WorkEvent(delegation, called: false));
             else if (UntrackedCompletion(message.Metadata, message.Text) is { } ended)
                 events.Add(ended);

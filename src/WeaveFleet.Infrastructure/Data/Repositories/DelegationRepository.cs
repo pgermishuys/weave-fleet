@@ -281,7 +281,28 @@ public sealed class DelegationRepository : IDelegationRepository
     {
         // System-level recovery operation — no user filter
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.ExecuteNonQueryAsync(
+
+        // A run resumed in the child it already ran in ended the run before it: that one is over, not lost with Fleet, so
+        // the agent isn't told its work was lost (LostWorkNote).
+        var superseded = await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE delegations
+            SET status = 'cancelled',
+                ended_reason = 'cancelled',
+                updated_at = @CompletedAt,
+                completed_at = @CompletedAt
+            WHERE status IN ('pending', 'running')
+              AND kind = 'subagent' AND child_session_id IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM delegations newer
+                  WHERE newer.parent_session_id = delegations.parent_session_id
+                    AND newer.child_session_id = delegations.child_session_id
+                    AND newer.kind = 'subagent'
+                    AND newer.created_at > delegations.created_at)
+            """,
+            cmd => { cmd.AddParameter("CompletedAt", completedAt); });
+
+        return superseded + await conn.ExecuteNonQueryAsync(
             """
             UPDATE delegations
             SET status = 'cancelled',
