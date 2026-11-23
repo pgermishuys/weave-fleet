@@ -67,14 +67,28 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
 
     public List<(string Request, string? Token, string? Body)> Requests { get; } = [];
 
-    HttpClient IHttpClientFactory.CreateClient(string name) => new(this, disposeHandler: false);
+    /// <summary>Each request with the name of the client it went through (<see cref="IHttpClientFactory.CreateClient"/>).</summary>
+    public List<(string Request, string Client)> Clients { get; } = [];
+
+    private const string ClientHeader = "X-Test-Client";
+
+    HttpClient IHttpClientFactory.CreateClient(string name)
+    {
+        var client = new HttpClient(this, disposeHandler: false);
+        client.DefaultRequestHeaders.Add(ClientHeader, name);
+        return client;
+    }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var line = $"{request.Method} {request.RequestUri!.AbsolutePath}";
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
         lock (Requests)
+        {
             Requests.Add((line, request.Headers.Authorization?.Parameter, body));
+            if (request.Headers.TryGetValues(ClientHeader, out var client))
+                Clients.Add((line, client.Single()));
+        }
 
         if (Fails is not null)
             throw Fails;

@@ -86,10 +86,18 @@ public sealed class FakeHarnessSession : IHarnessSession
     /// </summary>
     public Func<CommandOptions, string?> CommandMessageIdBehavior { get; set; } = options => options.MessageId;
 
-    public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
+    /// <summary>
+    /// Optional override for <see cref="IHarnessSession.SendCommandAsync"/>, run after the call is recorded and before
+    /// <see cref="CommandMessageIdBehavior"/>. Allows tests to make command delivery slow or fail.
+    /// </summary>
+    public Func<CommandOptions, CancellationToken, Task>? SendCommandBehavior { get; set; }
+
+    public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         _sendCommandCalls.Add(options);
-        return Task.FromResult(CommandMessageIdBehavior(options));
+        if (SendCommandBehavior is { } behavior)
+            await behavior(options, ct).ConfigureAwait(false);
+        return CommandMessageIdBehavior(options);
     }
 
     private readonly ConcurrentBag<ShellCommandOptions> _shellCommandCalls = [];

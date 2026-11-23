@@ -238,6 +238,76 @@ public sealed class MessageIdGenerationTests : IAsyncDisposable
         result.IsSuccess.ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task a_prompt_already_shown_still_reaches_the_harness_when_the_caller_stops_waiting()
+    {
+        // The request that sent it is cancelled while the harness is still getting ready (OpenCode 2 settling a new
+        // folder; a machine that sent a task giving up): the conversation shows the message, so it must still go.
+        SeedSession();
+        using var caller = new CancellationTokenSource();
+        var delivered = false;
+        _defaultSession.SendPromptBehavior = async (_, _, ct) =>
+        {
+            await caller.CancelAsync();
+            await Task.Delay(TimeSpan.FromMilliseconds(50), ct);
+            delivered = true;
+        };
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello", null, caller.Token);
+
+        delivered.ShouldBeTrue();
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task a_command_already_shown_still_reaches_the_harness_when_the_caller_stops_waiting()
+    {
+        SeedSession();
+        using var caller = new CancellationTokenSource();
+        var delivered = false;
+        _defaultSession.SendCommandBehavior = async (_, ct) =>
+        {
+            await caller.CancelAsync();
+            await Task.Delay(TimeSpan.FromMilliseconds(50), ct);
+            delivered = true;
+        };
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.CommandSessionAsync("s1", new CommandOptions { Command = "review" }, caller.Token);
+
+        delivered.ShouldBeTrue();
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task a_prompt_the_caller_gave_up_on_before_it_was_shown_is_neither_shown_nor_sent()
+    {
+        SeedSession();
+        using var caller = new CancellationTokenSource();
+        await caller.CancelAsync();
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => sut.PromptSessionAsync("s1", "hello", null, caller.Token));
+
+        _defaultSession.SendPromptCalls.ShouldBeEmpty();
+        _builder.EventBroadcaster.Broadcasts.ShouldNotContain(b => b.Topic == "session:s1" && b.Type == "message.updated");
+    }
+
+    private void SeedSession() => _builder.SessionRepository.Seed(new Session
+    {
+        Id = "s1",
+        InstanceId = "inst-1",
+        Title = "Test",
+        Status = "active",
+        Directory = "/tmp",
+        CreatedAt = "2026-01-01",
+        RetentionStatus = "active"
+    });
+
     private SessionOrchestrator BuildSutWithTracker()
     {
         var userContext = new TestUserContext("user-1");
