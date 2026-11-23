@@ -281,18 +281,38 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             return ObserveLocation(directory, evt.Type);
 
         // A plugin that rebuilds the agents or commands while V2 loads a folder (Weave does, in a git repository, on
-        // 2.3) makes V2 send them naming no folder, and not again naming it. Every folder still loading gets it.
+        // 2.3) makes V2 send them naming no folder, and not again naming it. Every folder still loading gets it:
+        // one Fleet waits for, and one V2 has begun loading on its own (any request naming a folder loads it, a new
+        // session's browser attach included), whose events go by before a prompt there asks.
         if (evt.Type is not ("agent.updated" or "command.updated"))
             return false;
 
         var finished = false;
-        foreach (var (loading, loaded) in _locations)
-        {
-            if (!loaded.Task.IsCompleted)
-                finished |= ObserveLocation(loading, evt.Type);
-        }
+        foreach (var loading in FoldersStillLoading())
+            finished |= ObserveLocation(loading, evt.Type);
 
         return finished;
+    }
+
+    private HashSet<string> FoldersStillLoading()
+    {
+        var folders = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (directory, loaded) in _locations)
+        {
+            if (!loaded.Task.IsCompleted)
+                folders.Add(directory);
+        }
+
+        foreach (var (directory, seen) in _locationEvents)
+        {
+            bool begun;
+            lock (seen)
+                begun = seen.Count > 0;
+            if (begun && !(_locations.TryGetValue(directory, out var loaded) && loaded.Task.IsCompleted))
+                folders.Add(directory);
+        }
+
+        return folders;
     }
 
     private bool ObserveLocation(string directory, string type)
