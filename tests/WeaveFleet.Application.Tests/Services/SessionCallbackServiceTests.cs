@@ -292,6 +292,69 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
         callback.Status.ShouldBe(SessionCallbackStatuses.Fired);
     }
 
+    private readonly SessionTurnOutcomes _outcomes = new();
+
+    [Fact]
+    public async Task A_child_the_user_stopped_is_reported_as_stopped_not_completed()
+    {
+        SeedLiveTarget();
+        var callback = Register(status: SessionCallbackStatuses.Pending);
+        var dispatcher = BuildDispatcher();
+
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        _outcomes.MarkStopped(Source);
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+
+        _live.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldBe("Session 'Write the tests' (s-worker) was stopped before it finished.");
+        callback.Status.ShouldBe(SessionCallbackStatuses.Fired);
+    }
+
+    [Fact]
+    public async Task A_child_whose_turn_failed_is_reported_with_the_reason()
+    {
+        SeedLiveTarget();
+        Register(status: SessionCallbackStatuses.Pending);
+        var dispatcher = BuildDispatcher();
+
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        dispatcher.Observe(Source, UserId, new TurnFailed
+        {
+            Payload = new TurnFailedPayload { SessionId = Source, Error = new TurnError { Name = "APIError", Message = "The provider returned 500." } },
+        });
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+
+        _live.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldBe("Session 'Write the tests' (s-worker) failed: The provider returned 500.");
+    }
+
+    [Fact]
+    public async Task A_stop_then_a_failure_still_reads_as_stopped_and_a_later_turn_that_finishes_reads_completed()
+    {
+        SeedLiveTarget();
+        Register(status: SessionCallbackStatuses.Pending);
+        var dispatcher = BuildDispatcher();
+
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        _outcomes.MarkStopped(Source);
+        dispatcher.Observe(Source, UserId, new TurnFailed
+        {
+            Payload = new TurnFailedPayload { SessionId = Source, Error = new TurnError { Name = "Aborted", Message = "aborted" } },
+        });
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+        _live.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldContain("was stopped before it finished");
+
+        // A later delegation on the same child: its first reply clears the old outcome.
+        Register(status: SessionCallbackStatuses.Pending);
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+        _live.SendPromptCalls.Select(c => c.Text).ShouldBe(
+            [Completion, "Session 'Write the tests' (s-worker) was stopped before it finished."],
+            ignoreOrder: true);
+    }
+
     private SessionCallbackDispatcher BuildDispatcher()
     {
         _builder.Build();
@@ -305,9 +368,11 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
                     _builder.SessionRepository,
                     _builder.Prompting,
                     _builder.ActivityTracker,
-                    NullLogger<SessionCallbackService>.Instance));
+                    NullLogger<SessionCallbackService>.Instance,
+                    _outcomes));
             }),
-            NullLogger<SessionCallbackDispatcher>.Instance);
+            NullLogger<SessionCallbackDispatcher>.Instance,
+            _outcomes);
     }
 
     private static MessageUpdated Reply(string sessionId) => new()

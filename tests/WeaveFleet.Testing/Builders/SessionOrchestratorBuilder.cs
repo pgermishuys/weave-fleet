@@ -95,6 +95,7 @@ public sealed class SessionOrchestratorBuilder
     private AgentMemoryService? _agentMemory;
     private WeaveFleet.Application.Mods.ModPromptHook? _modPrompts;
     private SessionUpdates? _updates;
+    private SessionTurnOutcomes? _turnOutcomes;
     private WeaveFleet.Application.Updates.UserActivityClock? _activity;
     private readonly List<ISessionSourceProvider> _additionalSourceProviders = [];
 
@@ -156,6 +157,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithUserActivity(WeaveFleet.Application.Updates.UserActivityClock activity)
     {
         _activity = activity;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithTurnOutcomes(SessionTurnOutcomes outcomes)
+    {
+        _turnOutcomes = outcomes;
         return this;
     }
 
@@ -224,7 +231,7 @@ public sealed class SessionOrchestratorBuilder
         Prompting = new SessionPrompting(
             SessionRepository, HarnessRegistry, Activation, ActivityTracker, delegationService, sessionSourceResolutionService,
             SessionSourceUsageRepository, EventBroadcaster, _userContext, NullLogger<SessionPrompting>.Instance,
-            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts, updates: _updates, activity: _activity);
+            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts, updates: _updates, turnOutcomes: _turnOutcomes, activity: _activity);
         Asks = new SessionAsks(SessionRepository, InstanceTracker, Activation, NullLogger<SessionAsks>.Instance, _activity);
         Catalog = new SessionCatalog(SessionRepository, Activation, NullLogger<SessionCatalog>.Instance);
         History = new SessionHistory(SessionRepository, SessionMessageProxy, _options, NullLogger<SessionHistory>.Instance);
