@@ -192,20 +192,28 @@ internal static class ClaudeCodeMapper
     }
 
     /// <summary>
-    /// Why a <c>UserPromptSubmit</c> hook turned the prompt away, from Claude Code's <c>informational</c> line; the result
-    /// that follows says <c>success</c>, so this is the only place it shows. Null for any other system line.
+    /// Why a hook stopped the turn, from Claude Code's <c>informational</c> line; the result that follows says
+    /// <c>success</c>, so this is the only place it shows. A <c>UserPromptSubmit</c> hook that turned the prompt away
+    /// carries the hook's <c>reason</c>; any other hook that answered <c>continue: false</c> (a Stop hook, say) sends
+    /// <c>prevent_continuation</c> with the words in <c>content</c>. Null for any other system line.
     /// </summary>
     internal static string? DescribeBlockedPrompt(ClaudeCodeSystemMessage system)
     {
-        if (system.Subtype != "informational"
-            || system.PromptSubmitOutcome is not { ValueKind: JsonValueKind.Object } outcome
-            || !outcome.TryGetProperty("kind", out var kind) || kind.GetString() != "blocked_by_hook")
+        if (system.Subtype != "informational")
             return null;
 
-        var reason = outcome.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
-        return string.IsNullOrWhiteSpace(reason)
-            ? "Claude Code blocked the prompt: a hook turned it away."
-            : $"Claude Code blocked the prompt: {reason.Trim()}";
+        if (system.PromptSubmitOutcome is { ValueKind: JsonValueKind.Object } outcome
+            && outcome.TryGetProperty("kind", out var kind) && kind.GetString() == "blocked_by_hook")
+        {
+            var reason = outcome.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+            return string.IsNullOrWhiteSpace(reason)
+                ? "Claude Code blocked the prompt: a hook turned it away."
+                : $"Claude Code blocked the prompt: {reason.Trim()}";
+        }
+
+        return system.PreventContinuation == true
+            ? string.IsNullOrWhiteSpace(system.Content) ? "Claude Code stopped: a hook ended the turn." : system.Content.Trim()
+            : null;
     }
 
     /// <summary>
