@@ -17,6 +17,27 @@ public sealed class AcpClientTests
     }
 
     [Fact]
+    public async Task a_request_with_a_limit_fails_with_a_readable_reason_when_the_agent_never_answers()
+    {
+        await using var agent = new FakeAcpAgent { Handle = (_, _) => new TaskCompletionSource<JsonNode?>().Task };
+
+        var failure = await Should.ThrowAsync<AcpException>(
+            agent.Client.RequestAsync("initialize", new JsonObject(), TimeSpan.FromMilliseconds(200), CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)));
+
+        failure.Message.ShouldStartWith("The agent didn't answer initialize within");
+    }
+
+    [Fact]
+    public async Task a_request_with_a_limit_still_ends_when_the_caller_cancels()
+    {
+        await using var agent = new FakeAcpAgent { Handle = (_, _) => new TaskCompletionSource<JsonNode?>().Task };
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            agent.Client.RequestAsync("session/new", new JsonObject(), TimeSpan.FromSeconds(30), cancel.Token).WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task an_error_response_becomes_an_exception_with_the_agents_words()
     {
         await using var agent = new FakeAcpAgent { Handle = (_, _) => throw new InvalidOperationException("fusion routing transport failed") };

@@ -297,7 +297,7 @@ public sealed partial class CopilotHarnessRuntime(
 
         await using var agent = await StartAsync(ownerUserId, folder, ct).ConfigureAwait(false);
         // The model list without a session: a session/new would leave one in the user's own Copilot history each time.
-        var listed = await agent.Client.RequestAsync("_fleet/models", new JsonObject(), ct).ConfigureAwait(false);
+        var listed = await agent.Client.RequestAsync("_fleet/models", new JsonObject(), AcpClient.StartupTimeout, ct).ConfigureAwait(false);
         var (models, current) = AcpHarnessSession.ParseModelList(listed);
         var catalog = new HarnessCatalog
         {
@@ -333,7 +333,7 @@ public sealed partial class CopilotHarnessRuntime(
                     ["terminal"] = false,
                 },
                 ["clientInfo"] = new JsonObject { ["name"] = "weave-fleet", ["version"] = "1" },
-            }, ct).ConfigureAwait(false);
+            }, AcpClient.StartupTimeout, ct).ConfigureAwait(false);
             return agent;
         }
         catch (AcpException ex)
@@ -349,7 +349,7 @@ public sealed partial class CopilotHarnessRuntime(
         var request = new JsonObject { ["cwd"] = directory, ["mcpServers"] = mcpServers };
         if (AcpHarnessSession.SkillDirectoriesMeta(skillDirectory) is { } meta)
             request["_meta"] = meta;
-        return agent.Client.RequestAsync("session/new", request, ct);
+        return agent.Client.RequestAsync("session/new", request, AcpClient.StartupTimeout, ct);
     }
 
     /// <summary>
