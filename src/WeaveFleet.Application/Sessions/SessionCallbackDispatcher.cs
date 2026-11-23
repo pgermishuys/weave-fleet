@@ -18,7 +18,7 @@ namespace WeaveFleet.Application.Sessions;
 /// started mark is saved before the idle event that follows it is handled, and a callback is never delivered twice by
 /// an idle event and the poll at once.
 /// </remarks>
-public sealed partial class SessionCallbackDispatcher(IServiceScopeFactory scopeFactory, ILogger<SessionCallbackDispatcher> logger)
+public sealed partial class SessionCallbackDispatcher(IServiceScopeFactory scopeFactory, ILogger<SessionCallbackDispatcher> logger, SessionTurnOutcomes? outcomes = null)
 {
     private readonly Lock _gate = new();
     private readonly HashSet<string> _working = new(StringComparer.Ordinal);
@@ -42,6 +42,9 @@ public sealed partial class SessionCallbackDispatcher(IServiceScopeFactory scope
 
         switch (domainEvent)
         {
+            case TurnFailed failed:
+                outcomes?.MarkFailed(sessionId, failed.Payload.Error);
+                break;
             case MessageCreated { Payload.Info.Role: "assistant" }:
             case MessageUpdated { Payload.Info.Role: "assistant" }:
                 // Once a turn: a reply streams many updates.
@@ -50,6 +53,8 @@ public sealed partial class SessionCallbackDispatcher(IServiceScopeFactory scope
                     if (!_working.Add(sessionId))
                         return;
                 }
+
+                outcomes?.Clear(sessionId);
 
                 Enqueue(userId, (callbacks, _) => callbacks.MarkSourceStartedAsync(sessionId), CancellationToken.None);
                 break;

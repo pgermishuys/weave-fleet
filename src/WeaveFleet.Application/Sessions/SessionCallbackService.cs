@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Sessions;
@@ -26,7 +27,8 @@ public sealed partial class SessionCallbackService(
     ISessionRepository sessionRepository,
     SessionPrompting prompting,
     SessionActivityTracker activity,
-    ILogger<SessionCallbackService> logger)
+    ILogger<SessionCallbackService> logger,
+    SessionTurnOutcomes? outcomes = null)
 {
     /// <summary>How long one delivery may take, resuming the target included, before it's left for the next try.</summary>
     internal static readonly TimeSpan DeliveryTimeout = TimeSpan.FromMinutes(2);
@@ -93,7 +95,7 @@ public sealed partial class SessionCallbackService(
 
     private async Task<bool> DeliverAsync(SessionCallback cb, Session source, CancellationToken ct)
     {
-        var text = $"Session '{source.Title}' ({source.Id}) completed.";
+        var text = ReportText(source, outcomes?.Get(source.Id));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(DeliveryTimeout);
@@ -115,6 +117,18 @@ public sealed partial class SessionCallbackService(
         await callbackRepository.MarkFiredAsync(cb.Id).ConfigureAwait(false);
         LogCallbackFired(cb.Id, cb.TargetSessionId);
         return true;
+    }
+
+    /// <summary>What the target is told: the real outcome of the source's last turn, in plain words.</summary>
+    internal static string ReportText(Session source, TurnError? failure)
+    {
+        var name = $"Session '{source.Title}' ({source.Id})";
+        return SessionUpdates.OutcomeOf(failure) switch
+        {
+            SessionUpdates.Stopped => $"{name} was stopped before it finished.",
+            SessionUpdates.Failed => $"{name} failed: {failure!.Message}",
+            _ => $"{name} completed.",
+        };
     }
 
     private static bool InTurn(string? activityStatus) => SessionActivityTracker.IsInTurn(activityStatus);

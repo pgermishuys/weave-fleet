@@ -45,6 +45,7 @@ public sealed partial class SessionPrompting(
     ModPromptHook? modPrompts = null,
     ModTurnHook? modTurns = null,
     SessionUpdates? updates = null,
+    SessionTurnOutcomes? turnOutcomes = null,
     UserActivityClock? activity = null)
 {
     /// <summary>The error code of a prompt the harness refused because its turn is still running.</summary>
@@ -432,6 +433,7 @@ public sealed partial class SessionPrompting(
         modTurns?.Aborted(id);
         // So a session that asked to hear when this turn ends isn't told it finished.
         updates?.MarkStopped(id);
+        turnOutcomes?.MarkStopped(id);
         await instanceResult.Value.AbortAsync(ct);
         return Unit.Value;
     }
