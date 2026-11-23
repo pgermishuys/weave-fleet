@@ -200,6 +200,79 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
+    public async Task A_folder_whose_agents_and_commands_come_naming_no_folder_is_loaded()
+    {
+        // 2.3.2 with the Weave adapter, in a git repository: the folder's provider and model events name it, and its
+        // agent and command events, rebuilt by the plugin while V2 loads the folder, name none (captured 23 Nov 2026).
+        var api = CatalogApi();
+        await using var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance)
+        {
+            LocationLoadTimeout = TimeSpan.FromSeconds(30),
+        };
+        var load = server.LoadLocationAsync(Folder, CancellationToken.None);
+        // V2 is asked to load it, then sends its events.
+        while (!api.Requests.Any(r => r.Path == "/api/location"))
+            await Task.Delay(10);
+
+        server.Route(CatalogEvent("provider.updated", Folder));
+        server.Route(CatalogEvent("model.updated", Folder));
+        server.Route(CatalogEvent("agent.updated", directory: null));
+        server.Route(CatalogEvent("command.updated", directory: null));
+
+        await load.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task An_agent_event_naming_no_folder_leaves_a_folder_already_loaded_alone()
+    {
+        // Not a change to the folder's catalog either: only a folder's own events say its catalog changed.
+        var api = CatalogApi();
+        await using var server = LoadingServer(api);
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+
+        server.Route(CatalogEvent("agent.updated", directory: null));
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+
+        api.Requests.Count(r => r.Path == "/api/location").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_folder_that_never_finished_loading_is_waited_for_once()
+    {
+        // Seen on 2.3: V2 sends a folder's provider and model events but never its agent and command ones, and it
+        // works in that folder all the same. Each prompt read the catalog and settled the folder, so each waited out
+        // the timeout twice (30 s) before it went.
+        var api = CatalogApi();
+        await using var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance)
+        {
+            LocationLoadTimeout = TimeSpan.FromSeconds(1),
+        };
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        await server.SettleLocationAsync(Folder, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Asked for once: the reads after the first went straight on, without loading and waiting again.
+        api.Requests.Count(r => r.Path == "/api/location").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_folder_that_timed_out_and_unloaded_is_waited_for_again()
+    {
+        var api = CatalogApi();
+        await using var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance)
+        {
+            LocationLoadTimeout = TimeSpan.FromMilliseconds(100),
+        };
+        await server.LoadLocationAsync(Folder, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        server.Route(LocationShutDown(Folder));
+        await server.LoadLocationAsync(Folder, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        api.Requests.Count(r => r.Path == "/api/location").ShouldBe(2);
+    }
+
+    [Fact]
     public async Task The_catalog_offers_the_folders_agents_and_the_models_of_providers_that_are_on()
     {
         await using var server = LoadingServer(CatalogApi());
@@ -829,6 +902,14 @@ public sealed class OpenCode2AgentsTests
             Location = new OpenCode2EventLocation { Directory = directory },
             Data = JsonDocument.Parse("{}").RootElement.Clone(),
         });
+
+    private static OpenCode2Event CatalogEvent(string type, string? directory) => new()
+    {
+        Id = $"evt_{type}",
+        Type = type,
+        Location = directory is null ? null : new OpenCode2EventLocation { Directory = directory },
+        Data = JsonDocument.Parse("{}").RootElement.Clone(),
+    };
 
     private static OpenCode2Event LocationShutDown(string directory) => new()
     {
