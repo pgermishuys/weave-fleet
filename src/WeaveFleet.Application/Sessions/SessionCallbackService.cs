@@ -41,8 +41,8 @@ public sealed partial class SessionCallbackService(
     /// A session's turn ended. Fires the callbacks it was the source of, and those waiting for it as their target to
     /// be free. Its idle event is the signal, so the activity tracker isn't asked about it: it may not have caught up.
     /// </summary>
-    public Task<int> OnSessionIdledAsync(string sessionId, CancellationToken ct = default)
-        => FireReadyAsync(sessionId, ct);
+    public Task<int> OnSessionIdledAsync(string sessionId, TurnError? ended = null, CancellationToken ct = default)
+        => FireReadyAsync(sessionId, ended, ct);
 
     /// <summary>
     /// The poll: fires every started callback whose source isn't in a turn. That covers a source whose turn ended
@@ -50,9 +50,9 @@ public sealed partial class SessionCallbackService(
     /// delivery that failed before.
     /// </summary>
     public Task<int> ProcessPendingCallbacksAsync(CancellationToken ct = default)
-        => FireReadyAsync(idledSessionId: null, ct);
+        => FireReadyAsync(idledSessionId: null, idledOutcome: null, ct);
 
-    private async Task<int> FireReadyAsync(string? idledSessionId, CancellationToken ct)
+    private async Task<int> FireReadyAsync(string? idledSessionId, TurnError? idledOutcome, CancellationToken ct)
     {
         var started = await callbackRepository.GetStartedAsync().ConfigureAwait(false);
         var fired = 0;
@@ -86,16 +86,16 @@ public sealed partial class SessionCallbackService(
             if (cb.TargetSessionId != idledSessionId && InTurn(activity.Get(cb.TargetSessionId)?.ActivityStatus))
                 continue;
 
-            if (await DeliverAsync(cb, source, ct).ConfigureAwait(false))
+            if (await DeliverAsync(cb, source, cb.SourceSessionId == idledSessionId ? idledOutcome : outcomes?.Get(source.Id), ct).ConfigureAwait(false))
                 fired++;
         }
 
         return fired;
     }
 
-    private async Task<bool> DeliverAsync(SessionCallback cb, Session source, CancellationToken ct)
+    private async Task<bool> DeliverAsync(SessionCallback cb, Session source, TurnError? failure, CancellationToken ct)
     {
-        var text = ReportText(source, outcomes?.Get(source.Id));
+        var text = ReportText(source, failure);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(DeliveryTimeout);

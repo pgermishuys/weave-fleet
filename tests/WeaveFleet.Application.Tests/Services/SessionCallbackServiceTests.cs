@@ -355,6 +355,29 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
             ignoreOrder: true);
     }
 
+    [Fact]
+    public async Task A_child_stopped_with_a_prompt_queued_is_reported_stopped_and_its_queued_turn_adds_no_second_report()
+    {
+        SeedLiveTarget();
+        var callback = Register(status: SessionCallbackStatuses.Pending);
+        var dispatcher = BuildDispatcher();
+
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        await dispatcher.Pending;
+        _outcomes.MarkStopped(Source);
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        // The queue sends its prompt on that idle, and the turn's first reply comes before the report is delivered.
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        await dispatcher.Pending;
+
+        // The queued turn finishes.
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+
+        _live.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldBe("Session 'Write the tests' (s-worker) was stopped before it finished.");
+        callback.Status.ShouldBe(SessionCallbackStatuses.Fired);
+    }
+
     private SessionCallbackDispatcher BuildDispatcher()
     {
         _builder.Build();
