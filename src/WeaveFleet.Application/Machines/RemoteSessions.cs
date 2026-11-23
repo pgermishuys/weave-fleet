@@ -17,8 +17,8 @@ namespace WeaveFleet.Application.Machines;
 public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFactory httpClients)
 {
     /// <summary>
-    /// The client that starts sessions: it gives up at once on a machine that isn't there, but waits for one that is while
-    /// it fetches the branch, makes the worktree and starts the harness.
+    /// The client that starts sessions and gives them messages: it gives up at once on a machine that isn't there, but
+    /// waits for one that is while it fetches the branch, makes the worktree and starts the harness.
     /// </summary>
     public const string HttpClientName = "RemoteSessions";
 
@@ -246,7 +246,11 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
         }
     }
 
-    /// <summary>Delivers a message from <paramref name="from"/> to a session on the machine (its peer endpoint).</summary>
+    /// <summary>
+    /// Delivers a message from <paramref name="from"/> to a session on the machine (its peer endpoint). The machine
+    /// answers once the session's harness has it, which can mean starting the harness and, for a new folder, waiting for
+    /// it to settle; so it goes through the client that waits for a machine that's there, as a start does.
+    /// </summary>
     public async Task<(RemoteDelivered? Delivered, string? Error)> MessageAsync(
         RemoteMachine machine,
         string token,
@@ -258,7 +262,7 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
         var body = new RemotePeerMessage(from.MachineId, from.MachineName, from.SessionId, from.Title, text);
         var (answer, away, refused) = await RemoteMachineRequests.SendAsync(
             httpClients,
-            RemoteMachineService.HttpClientName,
+            HttpClientName,
             machine,
             token,
             HttpMethod.Post,

@@ -169,6 +169,12 @@ public sealed partial class SessionPrompting(
             : await modPrompts.ApplyAsync(sessionResult.Value.UserId, id, text, ct).ConfigureAwait(false);
         text = modPrompt.Text;
 
+        // From the broadcast on, the conversation shows the message, so it goes to the harness even if the caller stops
+        // waiting (a request closed mid-send, a machine that handed over a task and gave up): cut off, it would read as
+        // sent and never arrive. The harness's own waits bound the send. A caller gone before then gets nothing shown.
+        ct.ThrowIfCancellationRequested();
+        var sendCt = CancellationToken.None;
+
         try
         {
             // Generate ascending message ID for the user prompt.
@@ -192,11 +198,11 @@ public sealed partial class SessionPrompting(
                     : modPrompt.Mod is { Length: > 0 } rewriter ? new ModMark(ModMark.Rewritten, rewriter) : null,
             };
 
-            await BroadcastUserMessageAsync(id, userMsg, effectiveCorrelationId, ct).ConfigureAwait(false);
+            await BroadcastUserMessageAsync(id, userMsg, effectiveCorrelationId, sendCt).ConfigureAwait(false);
 
             // Ensure the event subscription is established before sending the prompt.
             // This prevents early events from being lost during activation/resume.
-            await activation.EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
+            await activation.EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, sendCt).ConfigureAwait(false);
 
             // With memory on, write what the session's folder reads before the model sees the prompt: OpenCode reads that
             // file at a session's first model request. A harness that doesn't read the file (Claude Code) takes the notes
@@ -207,14 +213,14 @@ public sealed partial class SessionPrompting(
                     sessionResult.Value.UserId,
                     sessionResult.Value.Directory,
                     canSave: harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsFleetTools == true,
-                    ct).ConfigureAwait(false);
+                    sendCt).ConfigureAwait(false);
 
             // A session's instructions keep the notes it started with, so a change since then goes with this prompt, in
             // the notes the harness gives the model unseen. Only the harnesses that pass those notes on are told.
             var modelNotes = SideConversations.ModelNotesFor(sessionResult.Value);
             if (agentMemory is not null
                 && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsSideConversations == true
-                && await agentMemory.ChangesForAsync(sessionResult.Value, ct).ConfigureAwait(false) is { } memoryChanges)
+                && await agentMemory.ChangesForAsync(sessionResult.Value, sendCt).ConfigureAwait(false) is { } memoryChanges)
                 modelNotes = [.. modelNotes ?? [], memoryChanges];
 
             // Work the agent left running that was lost (Fleet or its harness process restarted) won't report back: the
@@ -248,9 +254,9 @@ public sealed partial class SessionPrompting(
 
             try
             {
-                await instanceResult.Value.SendPromptAsync(wireText, promptOptionsWithMessageId, ct);
+                await instanceResult.Value.SendPromptAsync(wireText, promptOptionsWithMessageId, sendCt);
             }
-            catch (Exception ex) when (IsSendTimeout(ex, ct))
+            catch (Exception ex) when (IsSendTimeout(ex, sendCt))
             {
                 // Fleet stopped waiting; the harness may still take the prompt. A failure here would show an error row for
                 // a message that arrives, and put a queued prompt back to be sent a second time. The turn's own events say
@@ -264,7 +270,7 @@ public sealed partial class SessionPrompting(
             // Your reply is what a recap waits for: it clears the current one and counts toward the next. A side
             // conversation gets none: it's only ever seen beside its session.
             if (sessionRecaps is not null && sessionResult.Value.SideOfSessionId is null)
-                await sessionRecaps.OnPromptSentAsync(id, sessionResult.Value.UserId, ct).ConfigureAwait(false);
+                await sessionRecaps.OnPromptSentAsync(id, sessionResult.Value.UserId, sendCt).ConfigureAwait(false);
 
             // The harness keeps its own copy of the words; the mark is Fleet's, by the same id.
             if (userMsg.Mod is { } mark && messageRepository is not null)
@@ -461,9 +467,12 @@ public sealed partial class SessionPrompting(
         // id stores the command's message under it; one that doesn't says which id it chose.
         options = options with { MessageId = AscendingMessageId.New() };
         var userMsg = MessagePersistenceService.CreateUserCommandMessage(options, DateTimeOffset.UtcNow);
-        await BroadcastUserMessageAsync(id, userMsg, ct).ConfigureAwait(false);
 
-        var harnessMessageId = await instanceResult.Value.SendCommandAsync(options, ct);
+        // Shown, so sent even if the caller stops waiting, as a prompt is (PromptSessionCoreAsync).
+        ct.ThrowIfCancellationRequested();
+        await BroadcastUserMessageAsync(id, userMsg, CancellationToken.None).ConfigureAwait(false);
+
+        var harnessMessageId = await instanceResult.Value.SendCommandAsync(options, CancellationToken.None);
 
         // The harness's message holds what it made of the command (OpenCode's whole template). Remembering the command
         // under that message's id lets the conversation show "/name arguments" there too, after a reload. A command the

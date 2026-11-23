@@ -130,6 +130,17 @@ public sealed class MachineHandoffBridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task The_task_goes_over_the_client_that_waits_for_the_harness_not_the_five_second_one()
+    {
+        // The machine there answers once its session has the task, after its harness has started and (OpenCode 2) a new
+        // folder has settled for about 3 s: the 5 s client gave up first and the task was lost.
+        var result = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
+
+        result.IsSuccess.ShouldBeTrue(result.Error?.Message);
+        _atlas.Clients.ShouldContain(("POST /api/machine/peer/sessions/s-remote/message", RemoteSessions.HttpClientName));
+    }
+
+    [Fact]
     public async Task A_start_repeated_after_a_timeout_gives_back_the_first_session_not_a_second()
     {
         var first = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
