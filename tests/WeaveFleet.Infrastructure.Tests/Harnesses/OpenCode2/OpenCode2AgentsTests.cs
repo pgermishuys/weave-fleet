@@ -223,6 +223,24 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
+    public async Task A_folder_V2_loaded_before_Fleet_asked_counts_its_agents_and_commands_naming_no_folder()
+    {
+        // V2 loads a folder on any request that names it (a new session's browser attach does), so in a session the
+        // user prompts a few seconds after it's idle, the events naming no folder went by before the prompt asked.
+        var api = CatalogApi();
+        await using var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance)
+        {
+            LocationLoadTimeout = TimeSpan.FromSeconds(30),
+        };
+        server.Route(CatalogEvent("provider.updated", Folder));
+        server.Route(CatalogEvent("model.updated", Folder));
+        server.Route(CatalogEvent("agent.updated", directory: null));
+        server.Route(CatalogEvent("command.updated", directory: null));
+
+        await server.LoadLocationAsync(Folder, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task An_agent_event_naming_no_folder_leaves_a_folder_already_loaded_alone()
     {
         // Not a change to the folder's catalog either: only a folder's own events say its catalog changed.
