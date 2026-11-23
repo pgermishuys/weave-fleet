@@ -246,11 +246,56 @@ const TEXT_BLOCKS = new Set([
   "paragraph_open", "heading_open", "blockquote_open", "list_item_open", "th_open", "td_open",
 ]);
 
-/** Each block of prose takes its own direction from its first strong letter, so Arabic and Hebrew read right to left. Code stays as it is. */
+const RTL_LETTER = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u;
+const ANY_LETTER = /\p{L}/u;
+
+/** The words of a block's prose: whitespace-separated, skipping paths, URLs and identifiers, which say nothing about the language. */
+function proseWords(text: string, everything: string): { rtl: number; ltr: number; firstStrong: "rtl" | "ltr" | null } {
+  let rtl = 0;
+  let ltr = 0;
+  // What the browser's first-strong rule would see: every character of the block, code included.
+  const first = [...everything].find((c) => ANY_LETTER.test(c));
+  const firstStrong: "rtl" | "ltr" | null = first ? (RTL_LETTER.test(first) ? "rtl" : "ltr") : null;
+  for (const word of text.split(/\s+/)) {
+    const letter = [...word].find((c) => ANY_LETTER.test(c));
+    if (!letter) continue;
+    if (/[/\\_@#]|:\/\/|\.\w/u.test(word) && !RTL_LETTER.test(word)) continue;
+    if (RTL_LETTER.test(word)) rtl++;
+    else ltr++;
+  }
+  return { rtl, ltr, firstStrong };
+}
+
+/**
+ * Each block of prose takes its direction from its dominant script, counted in words, so a Persian sentence that opens with a
+ * Latin product name, a file path or a code chip still reads right to left. Code, links and file references don't count.
+ * Where the browser's first-strong rule (`dir="auto"`) would already agree, that stays; a block with no letters inherits.
+ */
 function textDirection(md: MarkdownIt): void {
   md.core.ruler.push("text_direction", (state) => {
-    for (const token of state.tokens) {
-      if (TEXT_BLOCKS.has(token.type)) token.attrSet("dir", "auto");
+    const tokens = state.tokens;
+    for (let i = 0; i < tokens.length; i++) {
+      const open = tokens[i]!;
+      if (!TEXT_BLOCKS.has(open.type)) continue;
+
+      let text = "";
+      let everything = "";
+      let inLink = 0;
+      for (let j = i + 1; j < tokens.length && !(tokens[j]!.level === open.level && tokens[j]!.type === open.type.replace("_open", "_close")); j++) {
+        if (tokens[j]!.type !== "inline") continue;
+        for (const child of tokens[j]!.children ?? []) {
+          if (child.type === "link_open") inLink++;
+          else if (child.type === "link_close") inLink--;
+          else if (child.type === "text" && !inLink) text += child.content;
+          if (child.type === "text" || child.type === "code_inline") everything += child.content;
+          else if (child.type === "softbreak" || child.type === "hardbreak") text += " ";
+        }
+        text += " ";
+      }
+
+      const { rtl, ltr, firstStrong } = proseWords(text, everything);
+      const dominant = rtl === ltr ? firstStrong : rtl > ltr ? "rtl" : "ltr";
+      open.attrSet("dir", dominant && firstStrong && dominant !== firstStrong ? dominant : "auto");
     }
   });
 }
