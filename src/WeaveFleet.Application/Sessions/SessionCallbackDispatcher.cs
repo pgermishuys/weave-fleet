@@ -62,7 +62,10 @@ public sealed partial class SessionCallbackDispatcher(IServiceScopeFactory scope
                 lock (_gate)
                     _working.Remove(sessionId);
 
-                Enqueue(userId, (callbacks, ct) => callbacks.OnSessionIdledAsync(sessionId, ct), CancellationToken.None);
+                // Read now: a queued prompt starts the next turn at once, and its first reply clears the outcome before
+                // the report is delivered.
+                var ended = outcomes?.Get(sessionId);
+                Enqueue(userId, (callbacks, ct) => callbacks.OnSessionIdledAsync(sessionId, ended, ct), CancellationToken.None);
                 break;
         }
     }
