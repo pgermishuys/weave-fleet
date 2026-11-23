@@ -1387,6 +1387,17 @@ describe("NewSessionComposer", () => {
       expect(pathRows()[1]).toContain("northwind-api");
     });
 
+    it("stays at the root when Up is pressed there, instead of writing //", async () => {
+      const view = await mountComposer();
+
+      await openPathBox(view);
+      await typePath("/");
+      await inDocument().get("[aria-label='Up one folder']").trigger("click");
+      await flushPromises();
+
+      expect(pathInput().element.value).toBe("/");
+    });
+
     it("creates a folder inside a folder, typed with \\ or /, on the branch asked for", async () => {
       const view = await mountComposer();
 

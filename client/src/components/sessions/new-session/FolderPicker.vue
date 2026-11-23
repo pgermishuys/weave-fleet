@@ -746,7 +746,9 @@ function showPath(text?: string): void {
 
 /** Goes into a folder: the box shows what's in it. */
 function enterFolder(path: string): void {
-  pathText.value = `${typedPathFor(path)}${separatorOf(path)}`;
+  const typed = typedPathFor(path);
+  // A root already ends in its separator ("/", "C:\\"): don't double it.
+  pathText.value = /[/\\]$/.test(typed) ? typed : `${typed}${separatorOf(path)}`;
   pathHighlight.value = 0;
   void nextTick(() => pathInput.value?.focus());
 }
