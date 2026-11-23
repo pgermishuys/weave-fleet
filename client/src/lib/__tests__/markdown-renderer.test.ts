@@ -164,6 +164,28 @@ describe("text direction", () => {
   });
 });
 
+describe("text direction by dominant script", () => {
+  const render = (src: string) => createMarkdownRenderer().render(src);
+
+  it("reads a Persian sentence that opens with a Latin name right to left", () => {
+    expect(render("Fleet این برنامه را برای تیم ما سریع‌تر می‌کند")).toContain('<p dir="rtl">');
+  });
+
+  it("reads a Persian sentence that opens with a file path or a code chip right to left", () => {
+    expect(render("src/lib/app.ts فایل اصلی برنامه است و باید تغییر کند")).toContain('<p dir="rtl">');
+    expect(render("`useFleet` یک هوک است که وضعیت برنامه را نگه می‌دارد")).toContain('<p dir="rtl">');
+  });
+
+  it("reads an English sentence that opens with an Arabic word left to right", () => {
+    expect(render("مرحبا is how you greet someone in Arabic and this sentence is English")).toContain('<p dir="ltr">');
+  });
+
+  it("leaves the first-strong rule where it already agrees", () => {
+    expect(render("plain English text")).toContain('<p dir="auto">');
+    expect(render("جملهٔ فارسی ساده")).toContain('<p dir="auto">');
+  });
+});
+
 describe("ordered lists after a line of text", () => {
   const render = (src: string) => createMarkdownRenderer().render(src);
 
