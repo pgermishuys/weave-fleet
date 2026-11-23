@@ -63,7 +63,9 @@ public sealed class WorkspaceRootService(
 
         var normalizedPath = normalizedResult.Value;
 
-        var existing = await workspaceRootRepository.GetByPathAsync(normalizedPath);
+        // Rows saved before paths were spelled as on disk may differ in case; they're the same folder here.
+        var existing = await workspaceRootRepository.GetByPathAsync(normalizedPath)
+            ?? (await workspaceRootRepository.ListAsync()).FirstOrDefault(r => string.Equals(r.Path, normalizedPath, PathComparison));
         if (existing is not null)
             return FleetError.ValidationError("Path", $"Path is already registered: {normalizedPath}");
 
@@ -198,9 +200,17 @@ public sealed class WorkspaceRootService(
         return path.Length == 1 ? home : Path.Combine(home, path[2..]);
     }
 
-    public static string CanonicalizePath(string path)
+    /// <summary>
+    /// The path with symlinks resolved and each folder spelled as it is on disk. On Windows and macOS a folder is the
+    /// same folder in any letter case, so <c>c:\src\shop</c> and <c>C:\Src\Shop</c> must come out identical or they'd
+    /// be two roots; on Linux a differently-cased path is a different (usually missing) folder and stays as given.
+    /// </summary>
+    public static string CanonicalizePath(string path) => CanonicalizePath(path, NameOnDisk);
+
+    /// <param name="nameOnDisk">The name a folder's child has on disk, given the parent and a spelling that may differ in case; null when there's none.</param>
+    internal static string CanonicalizePath(string path, Func<string, string, string?> nameOnDisk)
     {
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = SpelledAsOnDisk(Path.GetFullPath(path), nameOnDisk);
         var root = Path.GetPathRoot(fullPath);
         if (string.IsNullOrWhiteSpace(root))
             return fullPath;
@@ -223,6 +233,51 @@ public sealed class WorkspaceRootService(
         }
 
         return Path.GetFullPath(currentPath);
+    }
+
+    /// <summary>How paths compare here: ignoring case where the file system does (Windows, macOS), exactly elsewhere.</summary>
+    internal static StringComparison PathComparison { get; } =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static string SpelledAsOnDisk(string fullPath, Func<string, string, string?> nameOnDisk)
+    {
+        var root = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(root))
+            return fullPath;
+
+        // A drive letter is case-insensitive too; Windows spells it capital.
+        var spelled = OperatingSystem.IsWindows() && root.Length >= 2 && root[1] == ':'
+            ? char.ToUpperInvariant(root[0]) + root[1..]
+            : root;
+
+        var found = true;
+        foreach (var segment in fullPath[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            // Once a folder isn't there, nothing under it is either: the rest stays as given.
+            var onDisk = found ? nameOnDisk(spelled, segment) : null;
+            found = onDisk is not null;
+            spelled = Path.Combine(spelled, onDisk ?? segment);
+        }
+
+        return spelled;
+    }
+
+    /// <summary>The name <paramref name="parent"/>'s child folder <paramref name="name"/> has on disk, matching case the way this file system does.</summary>
+    private static string? NameOnDisk(string parent, string name)
+    {
+        if (name.AsSpan().IndexOfAny('*', '?') >= 0)
+            return null;
+
+        try
+        {
+            return new DirectoryInfo(parent)
+                .EnumerateDirectories(name, new EnumerationOptions { MatchCasing = MatchCasing.PlatformDefault, AttributesToSkip = 0 })
+                .FirstOrDefault()?.Name;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return null;
+        }
     }
 
     private static string[] GetEnvRoots()
