@@ -225,6 +225,18 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AHookThatStopsTheTurn_SaysWhy()
+    {
+        // A Stop (or PostToolUse) hook answering {"continue":false,"stopReason":…}: Claude Code (2.1.330) sends an
+        // informational line with prevent_continuation, then a success result that says nothing of it.
+        await PumpAsync(
+            """{"type":"system","subtype":"informational","content":"Stop hook prevented continuation: Run the tests before stopping","level":"warning","prevent_continuation":true,"uuid":"a1","session_id":"s1"}""",
+            """{"type":"result","subtype":"success","is_error":false,"num_turns":1,"result":"","session_id":"s1","usage":{"input_tokens":1,"output_tokens":1}}""");
+
+        AllText().ShouldBe(["Stop hook prevented continuation: Run the tests before stopping"]);
+    }
+
+    [Fact]
     public async Task NotLoggedIn_ShowsClaudesMessageOnce()
     {
         await PumpAsync(Fixture("not-logged-in.jsonl"));

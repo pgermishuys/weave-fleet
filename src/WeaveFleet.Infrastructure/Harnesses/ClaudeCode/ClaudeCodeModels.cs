@@ -217,6 +217,12 @@ internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
     /// </summary>
     [JsonPropertyName("prompt_submit_outcome")] public JsonElement? PromptSubmitOutcome { get; init; }
 
+    /// <summary>On an <c>informational</c> line: the words Claude Code shows for it.</summary>
+    [JsonPropertyName("content")] public string? Content { get; init; }
+
+    /// <summary>On an <c>informational</c> line: true when execution stops after it (a hook answered <c>continue: false</c>).</summary>
+    [JsonPropertyName("prevent_continuation")] public bool? PreventContinuation { get; init; }
+
     /// <summary>On the <c>status</c> line that ends a compaction: <c>success</c> or <c>failed</c>.</summary>
     [JsonPropertyName("compact_result")] public string? CompactResult { get; init; }
 
