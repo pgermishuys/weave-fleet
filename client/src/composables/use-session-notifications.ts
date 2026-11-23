@@ -113,8 +113,10 @@ export function useSessionNotifications(): void {
       void registration.value.showNotification(payload.title || "Weave Fleet", {
         body: payload.body ?? "",
         tag: sessionId,
+        // The tag makes a second alert for the session replace the first; without this the replacement is silent.
+        renotify: true,
         data: { url: `/sessions/${encodeURIComponent(sessionId)}` },
-      }).catch(() => undefined);
+      } as NotificationOptions).catch(() => undefined);
       return;
     }
 
@@ -122,7 +124,9 @@ export function useSessionNotifications(): void {
       const notification = new Notification(payload.title || "Weave Fleet", {
         body: payload.body ?? "",
         tag: sessionId,
-      });
+        // A second alert for the session replaces the first; this makes the replacement sound again.
+        renotify: true,
+      } as NotificationOptions);
 
       constructed.set(sessionId, notification);
       notification.onclick = () => {

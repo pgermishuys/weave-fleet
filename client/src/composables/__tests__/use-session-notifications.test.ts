@@ -102,6 +102,31 @@ describe("useSessionNotifications", () => {
     expect(shown[0].options.tag).toBe("s1");
   });
 
+  it("makes a second alert for the same session sound again instead of replacing the first silently", async () => {
+    await mountNotifications();
+
+    handler?.(notificationEvent("s1", "finished"));
+    handler?.(notificationEvent("s1", "needs_you"));
+    await flushAll();
+
+    expect(shown).toHaveLength(2);
+    // The same tag replaces the first; without renotify the replacement makes no sound or buzz.
+    expect(shown.every((n) => (n.options as { renotify?: boolean }).renotify === true)).toBe(true);
+  });
+
+  it("asks the service worker to renotify too", async () => {
+    const { useServiceWorker } = await import("@/composables/use-service-worker");
+    const showNotification = vi.fn().mockResolvedValue(undefined);
+    useServiceWorker().registration.value = { showNotification, getNotifications: vi.fn().mockResolvedValue([]) } as unknown as ServiceWorkerRegistration;
+    await mountNotifications();
+
+    handler?.(notificationEvent("s1"));
+    await flushAll();
+
+    expect(showNotification.mock.calls[0]?.[1]).toMatchObject({ tag: "s1", renotify: true });
+    useServiceWorker().registration.value = null;
+  });
+
   it("stays quiet when the setting is off", async () => {
     await mountNotifications(false);
 
