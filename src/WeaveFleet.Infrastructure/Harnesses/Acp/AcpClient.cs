@@ -67,6 +67,28 @@ internal sealed partial class AcpClient : IAsyncDisposable
         }
     }
 
+    /// <summary>How long an agent gets to answer a request that starts a session (<c>initialize</c>, <c>session/new</c>, <c>session/load</c>) or lists what it offers.</summary>
+    public static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(90);
+
+    /// <summary>
+    /// A request that must be answered within <paramref name="timeout"/>: an agent that never answers (a hung or
+    /// mis-launched process) fails with a readable <see cref="AcpException"/> instead of leaving the start waiting
+    /// for ever. Not for <c>session/prompt</c>, which runs as long as the turn does.
+    /// </summary>
+    public async Task<JsonElement> RequestAsync(string method, JsonNode? parameters, TimeSpan timeout, CancellationToken ct)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(timeout);
+        try
+        {
+            return await RequestAsync(method, parameters, limit.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new AcpException($"The agent didn't answer {method} within {(int)timeout.TotalSeconds} s.");
+        }
+    }
+
     public Task NotifyAsync(string method, JsonNode? parameters, CancellationToken ct = default)
         => WriteAsync(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = method, ["params"] = parameters }, ct);
 

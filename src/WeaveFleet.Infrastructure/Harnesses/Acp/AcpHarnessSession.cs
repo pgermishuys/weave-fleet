@@ -219,7 +219,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         var load = new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = McpServers?.DeepClone() ?? new JsonArray() };
         if (SkillDirectoriesMeta(SkillDirectory) is { } meta)
             load["_meta"] = meta;
-        return agent.Client.RequestAsync("session/load", load, ct);
+        return agent.Client.RequestAsync("session/load", load, AcpClient.StartupTimeout, ct);
     }
 
     /// <summary>
