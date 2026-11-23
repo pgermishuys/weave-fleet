@@ -222,7 +222,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// Loads <paramref name="directory"/> on the server and waits until V2 has read its config. V2 loads a folder in
     /// the background: <c>GET /api/location</c> returns first, and the folder's catalog is complete once V2 has sent
     /// its catalog events for it (about 2 s for a new folder). A folder loaded before (by a session there, or an
-    /// earlier read) isn't waited for again.
+    /// earlier read) isn't waited for again, nor is one whose wait timed out once.
     /// </summary>
     public async Task LoadLocationAsync(string directory, CancellationToken ct)
     {
@@ -239,7 +239,10 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         }
         catch (TimeoutException)
         {
+            // Waited out once: V2 may never send the rest (it works in the folder all the same), and each prompt
+            // reads and settles its folder, so it isn't waited for again until V2 unloads it.
             LogLocationLoadTimedOut(_logger, directory, LocationLoadTimeout.TotalSeconds);
+            loaded.TrySetResult();
         }
     }
 
@@ -271,13 +274,33 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     private bool ObserveLocation(OpenCode2Event evt)
     {
-        if (evt.Location?.Directory is not { Length: > 0 } directory || Array.IndexOf(LocationLoadedEvents, evt.Type) < 0)
+        if (Array.IndexOf(LocationLoadedEvents, evt.Type) < 0)
             return false;
 
+        if (evt.Location?.Directory is { Length: > 0 } directory)
+            return ObserveLocation(directory, evt.Type);
+
+        // A plugin that rebuilds the agents or commands while V2 loads a folder (Weave does, in a git repository, on
+        // 2.3) makes V2 send them naming no folder, and not again naming it. Every folder still loading gets it.
+        if (evt.Type is not ("agent.updated" or "command.updated"))
+            return false;
+
+        var finished = false;
+        foreach (var (loading, loaded) in _locations)
+        {
+            if (!loaded.Task.IsCompleted)
+                finished |= ObserveLocation(loading, evt.Type);
+        }
+
+        return finished;
+    }
+
+    private bool ObserveLocation(string directory, string type)
+    {
         var seen = _locationEvents.GetOrAdd(directory, static _ => new HashSet<string>(StringComparer.Ordinal));
         lock (seen)
         {
-            seen.Add(evt.Type);
+            seen.Add(type);
             if (seen.Count < LocationLoadedEvents.Length)
                 return false;
             seen.Clear();
