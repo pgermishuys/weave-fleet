@@ -1262,7 +1262,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 ?? (resources.Count > 0 ? string.Join(", ", resources) : PermissionEvents.String(data, "message")),
             Detail = PermissionEvents.String(metadata, "diff"),
             Directory = PermissionEvents.String(metadata, "cwd") ?? PermissionEvents.String(metadata, "workdir"),
-            Always = PermissionEvents.Strings(data, "save"),
+            Always = SavedPatterns(PermissionEvents.Strings(data, "save"), action, resources),
             CallId = data.TryGetProperty("source", out var source) ? PermissionEvents.String(source, "id") : null,
             Subagent = subagent || harnessSessionId != ResumeToken ? "subagent" : null,
         };
@@ -1273,6 +1273,13 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.WaitingInput));
         }
     }
+
+    /// <summary>
+    /// What "Don't ask again" covers. V2 sends no list for a shell command its scanner can't analyse (it's allowed once
+    /// only), and an empty list would let Fleet's gate allow every command; so a command with no list covers just itself.
+    /// </summary>
+    private static IReadOnlyList<string> SavedPatterns(IReadOnlyList<string> save, string action, IReadOnlyList<string> resources)
+        => save.Count == 0 && PermissionKinds.Classify(action) == PermissionKinds.Shell ? resources : save;
 
     /// <summary>
     /// What an MCP tool's ask carries: V2 asks for its name with the resource <c>*</c> and the call's input under
