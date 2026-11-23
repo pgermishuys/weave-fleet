@@ -118,6 +118,9 @@ internal sealed class PendingPermissionAsks
     internal bool Add(PermissionAsk ask, string harnessSessionId, string? fleetSessionId = null)
         => _asks.TryAdd(ask.Id, new Entry(ask, harnessSessionId, fleetSessionId));
 
+    /// <summary>The asks waiting now.</summary>
+    internal IReadOnlyList<Entry> All => [.. _asks.Values];
+
     /// <summary>The waiting ask <paramref name="id"/>, or <see langword="null"/>.</summary>
     internal Entry? Get(string id) => _asks.TryGetValue(id, out var entry) ? entry : null;
 

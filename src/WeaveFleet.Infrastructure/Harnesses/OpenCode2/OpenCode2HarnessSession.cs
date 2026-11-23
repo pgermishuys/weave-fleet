@@ -953,13 +953,49 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.Busy));
             foreach (var harnessEvent in _mapper.MapPendingQuestions(forms))
                 _events.Writer.TryWrite(harnessEvent);
+            // Last, so an ask that waits is the status the turn ends up with.
+            await SyncPermissionsAsync(server, ct).ConfigureAwait(false);
             SetStatus(HarnessSessionStatus.Running);
         }
         else if (wasRunning)
         {
             _questions.Clear();
+            DropPermissionsNotIn([]);
             _events.Writer.TryWrite(_mapper.Idle());
             SetStatus(HarnessSessionStatus.Idle);
+        }
+    }
+
+    /// <summary>
+    /// Reads the asks V2 holds for the session and makes Fleet's match: one asked while the stream was down is put to
+    /// the user, one answered meanwhile (in V2's own TUI, say) goes. A V2 with no such route leaves them as they are.
+    /// </summary>
+    private async Task SyncPermissionsAsync(OpenCode2Server server, CancellationToken ct)
+    {
+        IReadOnlyList<JsonElement>? waiting;
+        try
+        {
+            waiting = await server.Client.GetPermissionsAsync(ResumeToken, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            return;
+        }
+
+        if (waiting is null)
+            return;
+        DropPermissionsNotIn([.. waiting.Select(item => PermissionEvents.String(item, "id")).OfType<string>()]);
+        foreach (var item in waiting)
+            OnPermissionAsked(item, subagent: false);
+    }
+
+    /// <summary>The session's own asks that aren't in <paramref name="stillWaiting"/> were answered or cancelled: they go.</summary>
+    private void DropPermissionsNotIn(IReadOnlyCollection<string> stillWaiting)
+    {
+        foreach (var entry in _permissions.Pending.All)
+        {
+            if (entry.HarnessSessionId == ResumeToken && !stillWaiting.Contains(entry.Ask.Id))
+                SettlePermission(entry.Ask.Id, PermissionReplies.Gone);
         }
     }
 

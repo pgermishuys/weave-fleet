@@ -256,6 +256,21 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         return body?.Data ?? [];
     }
 
+    /// <summary>
+    /// The session's permission requests waiting for an answer (<c>GET /api/session/{id}/permission</c>), each as V2's
+    /// <c>permission.asked</c> carries it. Null when this V2 has no such route.
+    /// </summary>
+    public async Task<IReadOnlyList<JsonElement>?> GetPermissionsAsync(string sessionId, CancellationToken ct)
+    {
+        using var response = await http.GetAsync($"api/session/{Uri.EscapeDataString(sessionId)}/permission", ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            return null;
+        using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct).ConfigureAwait(false);
+        return document.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array
+            ? [.. data.EnumerateArray().Select(item => item.Clone())]
+            : null;
+    }
+
     public async Task ReplyToFormAsync(string sessionId, string formId, Dictionary<string, JsonElement> answer, CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(

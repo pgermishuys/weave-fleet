@@ -256,6 +256,60 @@ public sealed class OpenCode2PermissionTests
         (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.WaitingInput);
     }
 
+    [Fact]
+    public async Task A_resync_finds_an_ask_that_came_while_the_stream_was_down()
+    {
+        var (session, _) = StartWithPermissions($$$"""{"data":[{"id":"per_gap","sessionID":"{{{Session}}}","action":"shell","resources":["git push origin main"],"save":["git push *"],"metadata":{"command":"git push origin main"},"source":{"type":"tool","messageID":"msg_1","id":"call_1"}}]}""");
+        await using var _ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+
+        await session.ResyncAsync(new HashSet<string> { Session }, CancellationToken.None);
+
+        var events = await ReadAvailableAsync(session);
+        events.Where(e => e.Type == EventTypes.PermissionAsked).ShouldHaveSingleItem().Payload!.Value.GetProperty("id").GetString().ShouldBe("per_gap");
+        StatusesIn(events).Last().ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    [Fact]
+    public async Task A_resync_drops_an_ask_that_was_answered_elsewhere_while_the_stream_was_down()
+    {
+        var (session, _) = StartWithPermissions("""{"data":[]}""");
+        await using var _ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        session.OnEvent(Asked("per_1", "shell", "git push origin main"));
+        await ReadAvailableAsync(session);
+
+        await session.ResyncAsync(new HashSet<string> { Session }, CancellationToken.None);
+
+        var replied = (await ReadAvailableAsync(session)).Where(e => e.Type == EventTypes.PermissionReplied).ShouldHaveSingleItem().Payload!.Value;
+        replied.GetProperty("reply").GetString().ShouldBe(PermissionReplies.Gone);
+        await Should.ThrowAsync<KeyNotFoundException>(
+            () => session.ReplyToPermissionAsync("per_1", PermissionReplies.Once, null, CancellationToken.None));
+    }
+
+    private static (OpenCode2HarnessSession Session, StubHandler Api) StartWithPermissions(string permissionList)
+    {
+        var api = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/session/active" => Json("{\"data\":{\"" + Session + "\":{}}}"),
+            var path when path == $"/api/session/{Session}/form" => Json("""{"data":[]}"""),
+            var path when path == $"/api/session/{Session}/permission" && request.Method == HttpMethod.Get => Json(permissionList),
+            var path when path.StartsWith($"/api/session/{Session}/message", StringComparison.Ordinal) => Json("""{"data":[]}"""),
+            var path when path == $"/api/session/{Session}" && request.Method == HttpMethod.Get => Json("{\"data\":{\"id\":\"" + Session + "\"}}"),
+            _ => new HttpResponseMessage(HttpStatusCode.NoContent),
+        });
+        var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance);
+        var session = new OpenCode2HarnessSession(
+            "opencode2-1",
+            new OpenCode2SessionInfo { Id = Session },
+            new OpenCode2SessionContext("fleet-1", "local-user", "/work", null, null),
+            server,
+            _ => Task.FromResult(server),
+            analytics: null,
+            NullLogger.Instance);
+        return (session, api);
+    }
+
     private static HttpResponseMessage Json(string body)
         => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
