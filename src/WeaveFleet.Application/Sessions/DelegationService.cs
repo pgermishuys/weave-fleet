@@ -555,10 +555,27 @@ public sealed class DelegationService(
         var workIds = running.Select(r => r.WorkId).ToHashSet(StringComparer.Ordinal);
         var children = running.Select(r => r.ChildHarnessSessionId).OfType<string>().ToHashSet(StringComparer.Ordinal);
         var lost = 0;
-        foreach (var work in await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false))
+        var works = await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false);
+
+        // A subagent's child is linked to its call a moment after the call: a turn can end, and Fleet look, in between.
+        // A child no linked work runs in is that call's, so the call isn't lost, just not linked yet.
+        var unclaimedChildren = children.Count;
+        foreach (var linked in works.Where(w => w.IsRunning && w.ChildSessionId is not null))
+        {
+            if (await RunsInAsync(linked, children).ConfigureAwait(false))
+                unclaimedChildren--;
+        }
+
+        foreach (var work in works)
         {
             if (!work.IsRunning || workIds.Contains(work.WorkId) || await RunsInAsync(work, children).ConfigureAwait(false))
                 continue;
+
+            if (work.Kind == WorkKinds.Subagent && work.ChildSessionId is null && unclaimedChildren > 0)
+            {
+                unclaimedChildren--;
+                continue;
+            }
 
             await HandleWorkEndedAsync(parentSessionId, work.WorkId, WorkEndedReasons.Lost).ConfigureAwait(false);
             lost++;
