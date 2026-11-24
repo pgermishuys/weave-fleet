@@ -100,7 +100,7 @@ public sealed partial class OpenCode2ServerLiveTests
     /// <summary>The model call that wakes a parent with a background subagent's report (a <c>&lt;subagent&gt;</c> message) saying <paramref name="text"/>.</summary>
     private static bool IsSubagentReport(string request, string text)
         => LlmRequest.OffersTools(request) && LlmRequest.LastRole(request) == "user"
-            && LlmRequest.LastUserText(request) is { } last && last.Contains("<subagent", StringComparison.Ordinal) && last.Contains(text, StringComparison.Ordinal);
+            && LlmRequest.LastUserText(request) is { } last && Notice.Has(last, "subagent") && last.Contains(text, StringComparison.Ordinal);
 
     [OpenCode2Fact]
     public async Task A_broken_profile_is_refused_with_what_OpenCode_2_would_leave_out_and_its_check_server_stops()

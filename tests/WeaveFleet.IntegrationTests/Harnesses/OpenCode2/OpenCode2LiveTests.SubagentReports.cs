@@ -20,7 +20,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 public sealed partial class OpenCode2LiveTests
 {
     private static List<string> ReportsOf(LiveEvents events, string id)
-        => LatestParts<TextMessageEventPart>(events, id).Select(p => p.Text).Where(t => t.StartsWith("<subagent", StringComparison.Ordinal)).ToList();
+        => LatestParts<TextMessageEventPart>(events, id).Select(p => p.Text).Where(t => Notice.Is(t, "subagent")).ToList();
 
     [OpenCode2Fact]
     public async Task A_child_that_goes_idle_twice_is_one_delegation_with_one_report_per_round()
@@ -38,7 +38,7 @@ public sealed partial class OpenCode2LiveTests
                 return ToolCall("call_two_rounds", "subagent", new { description = "A two-round helper", prompt = childPrompt, agent = "general", subagent_type = "general" });
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "Handed over." };
-            if (LlmRequest.Starts(request, "<subagent") && request.Contains("A two-round helper", StringComparison.Ordinal))
+            if (LlmRequest.StartsNotice(request, "subagent") && request.Contains("A two-round helper", StringComparison.Ordinal))
                 return new ScriptedLlmResponse { Text = "Noted." };
             return null;
         });
@@ -81,7 +81,7 @@ public sealed partial class OpenCode2LiveTests
                 return ToolCall("call_idle_shell", "subagent", new { description = "A helper with a shell", prompt = childPrompt, agent = "general", subagent_type = "general" });
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "Handed over." };
-            if (LlmRequest.Starts(request, "<subagent") && request.Contains("A helper with a shell", StringComparison.Ordinal))
+            if (LlmRequest.StartsNotice(request, "subagent") && request.Contains("A helper with a shell", StringComparison.Ordinal))
                 return new ScriptedLlmResponse { Text = "Noted." };
             return null;
         });

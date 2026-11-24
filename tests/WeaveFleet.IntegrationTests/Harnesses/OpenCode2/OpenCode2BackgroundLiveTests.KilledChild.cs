@@ -51,7 +51,7 @@ public sealed partial class OpenCode2BackgroundLiveTests
         await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_killed_sub").Status is "cancelled" or "failed", cts.Token);
         await Task.Delay(5000, cts.Token);
 
-        LatestParts<TextMessageEventPart>(events, id).Where(p => p.Text.StartsWith("<subagent", StringComparison.Ordinal)).ShouldBeEmpty();
+        LatestParts<TextMessageEventPart>(events, id).Where(p => Notice.Is(p.Text, "subagent")).ShouldBeEmpty();
         LatestParts<ToolMessageEventPart>(events, id).Count(p => p.CallId == "call_killed_sub").ShouldBe(1);
         (await Delegations(id)).Count(d => d.ParentToolCallId == "call_killed_sub").ShouldBe(1);
         SessionSnapshot snapshot;

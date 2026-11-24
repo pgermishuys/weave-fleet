@@ -27,7 +27,7 @@ public sealed partial class OpenCode2BackgroundLiveTests
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "The server is running." };
             // The notice that the stopped shell ended wakes the session. Only this test's: the first answer that matches wins.
-            if (LlmRequest.Starts(request, "<shell") && request.Contains("server-ready", StringComparison.Ordinal))
+            if (LlmRequest.StartsNotice(request, "shell") && request.Contains("server-ready", StringComparison.Ordinal))
                 return new ScriptedLlmResponse { Text = "Noted, the server stopped." };
             return null;
         });
@@ -83,7 +83,7 @@ public sealed partial class OpenCode2BackgroundLiveTests
                 return ToolCall("call_rw_sub", "subagent", new { description = "A long helper", prompt = childPrompt, agent = "general", subagent_type = "general", background = true });
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "The helper is on it." };
-            if (LlmRequest.Starts(request, "<subagent") && request.Contains("A long helper", StringComparison.Ordinal))
+            if (LlmRequest.StartsNotice(request, "subagent") && request.Contains("A long helper", StringComparison.Ordinal))
                 return new ScriptedLlmResponse { Text = "The helper was stopped." };
             return null;
         });

@@ -400,7 +400,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
                 return new ScriptedLlmResponse { Text = "B it is." };
             if (LlmRequest.Starts(request, prompt))
                 return ToolCall("call_sub", "subagent", new { description = "Pick a database", prompt = childPrompt, agent = "helper", subagent_type = "helper" });
-            if (LlmRequest.OffersTools(request) && LlmRequest.LastRole(request) == "user" && LlmRequest.LastUserText(request)!.Contains("<subagent") && LlmRequest.LastUserText(request)!.Contains("B it is."))
+            if (LlmRequest.OffersTools(request) && LlmRequest.LastRole(request) == "user" && Notice.Has(LlmRequest.LastUserText(request)!, "subagent") && LlmRequest.LastUserText(request)!.Contains("B it is."))
                 return new ScriptedLlmResponse { Text = "The helper says: B." };
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "Handed over." };
@@ -442,7 +442,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
         await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).LastOrDefault()?.Text == "The helper says: B.", cts.Token);
         await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_sub").Status == "completed", cts.Token);
         LlmRequest.LastToolText(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Continues(r, childPrompt))).ShouldNotBeNull().ShouldContain("B");
-        fleet.Llm.Queue.Requests.ShouldContain(r => LlmRequest.LastRole(r) == "user" && LlmRequest.LastUserText(r)!.Contains("<subagent") && LlmRequest.LastUserText(r)!.Contains("B it is."));
+        fleet.Llm.Queue.Requests.ShouldContain(r => LlmRequest.LastRole(r) == "user" && Notice.Has(LlmRequest.LastUserText(r)!, "subagent") && LlmRequest.LastUserText(r)!.Contains("B it is."));
         (await child.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.Idle);
     }
 
@@ -457,7 +457,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "It's running in the background." };
             // V2 wakes the session with a notice of its own; the model is called again with it.
-            if (LlmRequest.Starts(request, "<shell"))
+            if (LlmRequest.StartsNotice(request, "shell"))
                 return new ScriptedLlmResponse { Text = "The background command finished." };
             return null;
         });
@@ -477,7 +477,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
 
         // The notice V2 posts when the command really finishes shows in the conversation, with its output.
         var notice = await WaitForAsync(events, () => Task.FromResult(LatestParts<TextMessageEventPart>(events, id)
-            .FirstOrDefault(p => p.Text.StartsWith("<shell", StringComparison.Ordinal))), cts.Token);
+            .FirstOrDefault(p => Notice.Is(p.Text, "shell"))), cts.Token);
         notice.Text.ShouldContain("late-output");
         notice.Text.ShouldContain("state=\"completed\"");
         // The notice is the harness's own word, so it's neither the user's message nor a turn of the agent's.
@@ -516,7 +516,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
             if (LlmRequest.Continues(request, prompt))
                 return new ScriptedLlmResponse { Text = "The helper is on it." };
             // Only this test's own report: answers from every test stay queued, and the report of any other subagent has a <subagent> start too.
-            if (LlmRequest.Starts(request, "<subagent") && request.Contains("A slow helper", StringComparison.Ordinal))
+            if (LlmRequest.StartsNotice(request, "subagent") && request.Contains("A slow helper", StringComparison.Ordinal))
                 return new ScriptedLlmResponse { Text = "The helper came back." };
             return null;
         });
@@ -552,7 +552,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
         // The delegation is recorded off the relay's pump (RunningWorkRecorder), so the notice may reach the
         // conversation a moment after the delegation reads completed.
         var notice = await WaitForAsync(events, () => Task.FromResult(LatestParts<TextMessageEventPart>(events, id)
-            .FirstOrDefault(p => p.Text.StartsWith("<subagent", StringComparison.Ordinal))), cts.Token);
+            .FirstOrDefault(p => Notice.Is(p.Text, "subagent"))), cts.Token);
         notice.Text.ShouldContain("The child is done.");
         await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "The helper came back."), cts.Token);
     }
