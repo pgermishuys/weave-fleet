@@ -42,7 +42,7 @@ function Expand-Archive {
 
     # The stand-in must break Expand-Archive the way the report did, or this test proves nothing.
     $probe = Join-Path $work 'probe'
-    $probeOut = & powershell -NoProfile -Command "Expand-Archive -Path '$zip' -DestinationPath '$probe' -Force" 2>&1 | Out-String
+    $probeOut = & powershell -NoProfile -Command "try { Expand-Archive -Path '$zip' -DestinationPath '$probe' -Force } catch { `$_.Exception.Message }" 2>&1 | Out-String
     if ($probeOut -notmatch 'Cannot find an overload for "ExtractToDirectory" and the argument count: "3"') { Fail "the stand-in Expand-Archive didn't fail as expected: $probeOut" }
 
     $installDir = Join-Path $work 'home\fleet'
