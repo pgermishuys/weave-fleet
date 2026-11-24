@@ -84,7 +84,7 @@ echo Checking for staged Fleet update...
   "$tmp = '%UPDATE_DIR%\extract_tmp';" ^
   "if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force };" ^
   "New-Item -ItemType Directory -Path $tmp | Out-Null;" ^
-  "if ($a.EndsWith('.zip')) { Expand-Archive -Path $archive -DestinationPath $tmp -Force }" ^
+  "if ($a.EndsWith('.zip')) { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $tmp) }" ^
   "else { tar -xzf $archive -C $tmp };" ^
   "$extracted = Get-ChildItem $tmp | Where-Object { $_.PSIsContainer } | Select-Object -First 1;" ^
   "if (-not $extracted -or -not (Test-Path ($extracted.FullName + '\app'))) {" ^
