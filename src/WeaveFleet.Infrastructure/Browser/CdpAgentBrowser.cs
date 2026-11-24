@@ -1052,7 +1052,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             await Task.Delay(100, ct);
         }
 
-        return AgentBrowserResult.Fail(AgentBrowserFailures.Failed, condition switch
+        return AgentBrowserResult.Fail(AgentBrowserFailures.ConditionUnmet, condition switch
         {
             "text" => $"\"{action.Text}\" didn't appear within {timeout.TotalMilliseconds:0} ms. Read the page to see what it shows instead.",
             "textGone" => $"\"{action.Text}\" was still there after {timeout.TotalMilliseconds:0} ms.",
