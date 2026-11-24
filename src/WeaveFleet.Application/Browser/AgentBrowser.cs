@@ -148,6 +148,9 @@ public static class AgentBrowserFailures
     /// <summary>No browser to drive (none installed, or it failed to start).</summary>
     public const string NoBrowser = "no_browser";
 
+    /// <summary>A wait's condition didn't hold before its timeout. OpenCode 2 reports that as <c>met: false</c> with what the page showed, not as an error.</summary>
+    public const string ConditionUnmet = "condition_unmet";
+
     /// <summary>The action ran and failed, or couldn't run.</summary>
     public const string Failed = "failed";
 }
