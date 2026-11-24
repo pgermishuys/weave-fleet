@@ -156,6 +156,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private const string ResumeGonePrefix = "No conversation found with session ID:";
 
     private string? _claudeSessionId;    // captured from init message, used for --resume
+    // Where the transcript ended when the running process last finished a turn: a turn added after it came from elsewhere.
+    private (string Path, long Length)? _transcriptMark;
     // The memory notes from the session's first prompt, sent with every prompt after it: a system prompt that changes
     // between --resume runs can't reuse the conversation's prompt cache.
     private string? _memoryNotes;
@@ -484,6 +486,21 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         if (process is { IsRunning: true } && current is not null)
         {
+            // A turn typed in a terminal (claude --resume) lands in the transcript but not in this process's memory: a
+            // new process resumes from the file and so has it. Not while work it left running would end with it.
+            if (_transcriptMark is { } mark && ClaudeTranscriptTail.HasTurnsAfter(mark))
+            {
+                bool working;
+                lock (_gate)
+                    working = _tasks.HasBackgroundWork;
+                if (!working)
+                {
+                    _transcriptMark = null;
+                    await StopProcessAsync(process, "a terminal added turns to the session's transcript").ConfigureAwait(false);
+                    return await StartProcessAsync(wanted, ct).ConfigureAwait(false);
+                }
+            }
+
             // Claude Code lists an MCP server's tools and its skills when it starts, so a switch that changed since
             // (memory, messages between sessions, Settings → Permissions, a built-in skill) takes a new process, which resumes
             // the conversation. Not while work it left running would end with it: until that's done, the process keeps
@@ -533,6 +550,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
 
         return await StartProcessAsync(wanted, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Notes where the transcript ends, as the process leaves it after a turn.</summary>
+    private void MarkTranscript()
+    {
+        if (_claudeSessionId is not { Length: > 0 } id)
+            return;
+
+        _transcriptMark = ClaudeTranscriptTail.Mark(
+            id, _workingDirectory, _environmentVariables.GetValueOrDefault("CLAUDE_CONFIG_DIR"));
     }
 
     /// <summary>Asks the running process to change a setting; true when it's already that, or it did.</summary>
@@ -1867,6 +1894,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             // Persist resume token captured from result message (fallback)
             _ = PersistResumeTokenAsync(result.SessionId);
         }
+
+        MarkTranscript();
 
         var apiErrorMessage = _apiErrorMessage;
         _apiErrorMessage = null;
