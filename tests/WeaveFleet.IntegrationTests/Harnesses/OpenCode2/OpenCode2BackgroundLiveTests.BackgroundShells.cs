@@ -47,7 +47,7 @@ public sealed partial class OpenCode2BackgroundLiveTests
 
         // So the command finishes, V2 posts its notice, and the session picks up (a turn of its own) on the same server.
         var notice = await WaitForAsync(events, () => Task.FromResult(LatestParts<TextMessageEventPart>(events, id)
-            .FirstOrDefault(p => p.Text.StartsWith("<shell", StringComparison.Ordinal) && p.Text.Contains("idle-late-output", StringComparison.Ordinal))), cts.Token);
+            .FirstOrDefault(p => Notice.Is(p.Text, "shell") && p.Text.Contains("idle-late-output", StringComparison.Ordinal))), cts.Token);
         notice.Text.ShouldContain("state=\"completed\"");
         harness.ProcessId.ShouldBe(server);
 
@@ -98,7 +98,7 @@ public sealed partial class OpenCode2BackgroundLiveTests
 
             // So the command finishes, V2 posts its notice, and the session picks up (a turn of its own).
             await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id)
-                .Any(p => p.Text.StartsWith("<shell", StringComparison.Ordinal) && p.Text.Contains("settings-late-output", StringComparison.Ordinal)), cts.Token);
+                .Any(p => Notice.Is(p.Text, "shell") && p.Text.Contains("settings-late-output", StringComparison.Ordinal)), cts.Token);
             harness.ProcessId.ShouldBe(server);
 
             // Once it's finished (and the turn the notice started), the next request gets a server with the new settings.

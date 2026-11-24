@@ -322,6 +322,12 @@ internal static class LlmRequest
         => Texts(request, "user").LastOrDefault(text => !text.TrimStart().StartsWith("<system-update>", StringComparison.Ordinal)) is { } text
             && text.Contains(prompt, StringComparison.Ordinal);
 
+    /// <summary>Whether the request is a turn's first model call and the turn's prompt is a background <paramref name="kind"/> notice (<see cref="Notice"/>).</summary>
+    public static bool StartsNotice(string request, string kind)
+        => OffersTools(request) && LastRole(request) == "user"
+            && Texts(request, "user").LastOrDefault(text => !text.TrimStart().StartsWith("<system-update>", StringComparison.Ordinal)) is { } text
+            && Notice.Has(text, kind);
+
     public static HashSet<string> OfferedToolNames(string request)
     {
         using var body = JsonDocument.Parse(request);
@@ -367,4 +373,17 @@ internal sealed class OpenCode2FactAttribute : FactAttribute
         if (Environment.GetEnvironmentVariable("FLEET_REQUIRE_OPENCODE2") != "1" && !OpenCode2LiveFleet.IsInstalled())
             Skip = "OpenCode 2 (opencode2, 2.x) isn't installed where the harness looks: ~/.weave/harnesses/opencode2, PATH or ~/.opencode/bin.";
     }
+}
+
+/// <summary>
+/// What V2 tells a session when background work (<c>shell</c>, <c>subagent</c>) finishes: <c>&lt;shell …&gt;</c> and
+/// <c>&lt;subagent …&gt;</c> up to 2.3, <c>&lt;background-result kind="shell|subagent" …&gt;</c> from 2.4.
+/// </summary>
+internal static class Notice
+{
+    public static bool Is(string text, string kind)
+        => text.StartsWith($"<{kind}", StringComparison.Ordinal) || text.StartsWith($"<background-result kind=\"{kind}\"", StringComparison.Ordinal);
+
+    public static bool Has(string text, string kind)
+        => text.Contains($"<{kind} ", StringComparison.Ordinal) || text.Contains($"<background-result kind=\"{kind}\"", StringComparison.Ordinal);
 }
