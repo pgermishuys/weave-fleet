@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Browser;
+using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Users;
 
@@ -298,21 +300,59 @@ internal sealed partial class OpenCode2BrowserAttachments
             await using var scope = owner._scopes.CreateAsyncScope();
             if (kind == "preview")
                 return await PreviewAsync(scope.ServiceProvider, (string?)action["path"], ct).ConfigureAwait(false);
+            // 2.4's navigate({ path }): Fleet doesn't move a tab to a file. V2 tells the agent to call tabs.open({ path }).
+            if (kind == "navigate.path")
+                return OpenCode2BrowserJson.Failure(AgentBrowserFailures.Unsupported, "Fleet opens a workspace file in a tab of its own: call tabs.open({ path }).");
 
             var browser = scope.ServiceProvider.GetRequiredService<IAgentBrowser>();
             var result = await browser.RunAsync(new AgentBrowserCall(Context.FleetSessionId, Context.OwnerUserId, OpenCode2BrowserJson.Action(kind, action)), ct).ConfigureAwait(false);
             return OpenCode2BrowserJson.Outcome(kind, result);
         }
 
-        /// <summary>The plugin's <c>preview</c>: a page in a page canvas, through the same bridge as <c>fleet_page_show</c>.</summary>
+        /// <summary>
+        /// The plugin's <c>preview</c> (<c>tabs.open({ path })</c>): a page in a page canvas, through the same bridge as
+        /// <c>fleet_page_show</c>. V2 2.4 needs the answer to carry the tab the agent can drive the page in (<c>tabID</c> and
+        /// <c>url</c>), so the agent's own tab opens on the page Fleet serves for the canvas.
+        /// </summary>
         private async Task<JsonObject> PreviewAsync(IServiceProvider services, string? path, CancellationToken ct)
         {
             if (services.GetService<PageBridge>() is not { } pages)
                 return OpenCode2BrowserJson.Failure(AgentBrowserFailures.Unsupported, "Fleet can't show files here. Use fleet_page_show.");
             var shown = await pages.ShowAsync(server.BridgeToken, HarnessSessionId, path, title: null, ct: ct).ConfigureAwait(false);
-            return shown.IsSuccess
-                ? OpenCode2BrowserJson.Success(new JsonObject { ["path"] = path ?? string.Empty })
-                : OpenCode2BrowserJson.Failure(AgentBrowserFailures.Failed, shown.Error.Message + " Fleet shows HTML pages; for other files, tell the user the path.");
+            if (!shown.IsSuccess)
+                return OpenCode2BrowserJson.Failure(AgentBrowserFailures.Failed, shown.Error.Message + " Fleet shows HTML pages; for other files, tell the user the path.");
+
+            var url = await PageUrlAsync(services, shown.Value.CanvasId, ct).ConfigureAwait(false);
+            if (url is null)
+                return OpenCode2BrowserJson.Success(new JsonObject { ["path"] = path ?? string.Empty });
+
+            var browser = services.GetRequiredService<IAgentBrowser>();
+            var opened = await browser.RunAsync(
+                new AgentBrowserCall(Context.FleetSessionId, Context.OwnerUserId, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = url }), ct).ConfigureAwait(false);
+            if (opened.Failure is { } failure)
+                return OpenCode2BrowserJson.Failure(failure.Code, "The page is in the user's tab, but Fleet's browser couldn't open it for you: " + failure.Message);
+            if (opened.Tab is not { } tab)
+                return OpenCode2BrowserJson.Success(new JsonObject { ["path"] = path ?? string.Empty });
+
+            return OpenCode2BrowserJson.Success(new JsonObject
+            {
+                ["path"] = path ?? string.Empty,
+                ["tabID"] = tab.Id,
+                ["url"] = tab.Url,
+                ["tab"] = OpenCode2BrowserJson.Tab(tab),
+            });
+        }
+
+        /// <summary>The address Fleet serves the page canvas <paramref name="canvasId"/> at, or null when it has none.</summary>
+        private async Task<string?> PageUrlAsync(IServiceProvider services, string? canvasId, CancellationToken ct)
+        {
+            if (canvasId is null || services.GetService<ILocalFleetUrl>()?.TryGet() is not { Length: > 0 } fleet)
+                return null;
+            using var user = services.GetRequiredService<IBackgroundUserScope>().Begin(Context.OwnerUserId);
+            var canvas = await services.GetRequiredService<ICanvasService>().GetAsync(Context.FleetSessionId, canvasId, ct).ConfigureAwait(false);
+            return canvas is not null && canvas.Kind == CanvasKinds.Page && PageState.Parse(canvas.StateJson) is { PageId.Length: > 0 } page
+                ? new Uri(PageRules.Root(fleet, page.PageId), page.Entry).AbsoluteUri
+                : null;
         }
 
         private async Task PublishAsync(CancellationToken ct)
