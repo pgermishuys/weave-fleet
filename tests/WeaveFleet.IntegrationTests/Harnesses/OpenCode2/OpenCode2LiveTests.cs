@@ -287,6 +287,48 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
     }
 
     [OpenCode2Fact]
+    public async Task The_agent_opens_an_HTML_file_in_a_tab_it_can_drive_with_tabs_open_path()
+    {
+        // V2 2.4's tabs.open({ path }) needs the answer to carry the tab's id and address for an HTML file, else it fails
+        // with "acknowledged the file but did not return its tab".
+        // 2.3 has no path form: tabs.open({ path }) there opens a blank tab.
+        var version = await HarnessProbe.RunAsync(OpenCode2LiveFleet.FindExecutable()!, ["--version"], CancellationToken.None);
+        if (HarnessProbe.ParseVersion(version.StandardOutput) is not { } v || !Version.TryParse(v.Split('-')[0], out var parsed) || parsed < new Version(2, 4))
+            return;
+
+        const string warmUp = "Say hi. (tab warm-up)";
+        const string prompt = "Open the page. (tabs.open path)";
+        var folder = fleet.NewFolder("tab-path");
+        var page = Path.Combine(folder, "options.html");
+        await File.WriteAllTextAsync(page, "<!doctype html><title>Options</title><p>Option A or option B?</p>");
+        fleet.Answer(request => LlmRequest.Starts(request, warmUp) ? new ScriptedLlmResponse { Text = "Hi." } : null);
+        fleet.Answer(request => LlmRequest.Starts(request, prompt)
+            ? new ScriptedLlmResponse
+            {
+                StopReason = "tool_calls",
+                ToolCalls = [new ScriptedToolCall("call_open", "execute", JsonSerializer.Serialize(new { code = $"return await tools.browser.tabs.open({{ path: {JsonSerializer.Serialize(page)} }})" }))],
+            }
+            : LlmRequest.Continues(request, prompt) ? new ScriptedLlmResponse { Text = "Opened." }
+            : null);
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(folder, "Tab path", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+        await PromptAsync(id, warmUp, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+        fleet.Services.GetRequiredService<AgentBrowserSettingsChanges>().Notify(OpenCode2LiveFleet.Owner, new AgentBrowserSettings());
+        await Task.Delay(TimeSpan.FromSeconds(4), cts.Token);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Count(e => e.Type == "session.idle") >= 2, cts.Token);
+
+        var requests = fleet.Llm.Queue.Requests.Where(r => LlmRequest.Starts(r, prompt) || LlmRequest.Continues(r, prompt)).ToList();
+        var result = LlmRequest.LastToolText(requests[^1]).ShouldNotBeNull();
+        result.ShouldNotContain("did not return its tab");
+        result.ShouldMatch("/pages/");
+    }
+
+    [OpenCode2Fact]
     public async Task The_agent_shows_a_page_it_wrote_and_is_sent_there_from_a_file_server()
     {
         const string prompt = "Show me the two options. (page)";
