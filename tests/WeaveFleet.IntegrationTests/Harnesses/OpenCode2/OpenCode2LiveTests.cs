@@ -258,6 +258,35 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
     }
 
     [OpenCode2Fact]
+    public async Task Fleets_browser_attaches_to_a_session_made_in_a_folder_V2_has_not_loaded_yet()
+    {
+        // V2 registers the browser plugin's RPC once it has loaded the folder; Fleet's attach, sent as the session is made,
+        // was answered "RPC is unavailable" and never asked again, so the session had no browser tools for good.
+        const string prompt = "List your browser tabs. (cold folder)";
+        fleet.Answer(request => LlmRequest.Starts(request, prompt)
+            ? new ScriptedLlmResponse
+            {
+                StopReason = "tool_calls",
+                ToolCalls = [new ScriptedToolCall("call_tabs", "execute", """{"code":"return await tools.browser.tabs.list({})"}""")],
+            }
+            : LlmRequest.Continues(request, prompt) ? new ScriptedLlmResponse { Text = "Listed." }
+            : null);
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("cold-browser"), "Cold browser", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+        await Task.Delay(TimeSpan.FromSeconds(6), cts.Token);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+        var requests = fleet.Llm.Queue.Requests.Where(r => LlmRequest.Starts(r, prompt) || LlmRequest.Continues(r, prompt)).ToList();
+        var result = LlmRequest.LastToolText(requests[^1]).ShouldNotBeNull();
+        result.ShouldNotContain("Unknown tool");
+        result.ShouldNotContain("[browser.denied]");
+    }
+
+    [OpenCode2Fact]
     public async Task The_agent_shows_a_page_it_wrote_and_is_sent_there_from_a_file_server()
     {
         const string prompt = "Show me the two options. (page)";

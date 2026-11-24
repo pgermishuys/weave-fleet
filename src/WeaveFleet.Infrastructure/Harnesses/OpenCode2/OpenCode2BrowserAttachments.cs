@@ -176,26 +176,51 @@ internal sealed partial class OpenCode2BrowserAttachments
         }
 
         /// <summary>Holds the <c>attach</c> call open until V2 ends it (closed, replaced) or Fleet stops it.</summary>
+        /// <summary>
+        /// V2 registers the browser plugin's RPC once it has loaded the session's folder, which a session made a moment ago
+        /// (or a resumed one, on a server just started) may not have yet: the attach is answered "RPC is unavailable".
+        /// It's asked again, every <see cref="RetryDelay"/> for up to <see cref="Retries"/> times, so the browser is there
+        /// by the session's first turn rather than never.
+        /// </summary>
         public async Task RunAsync()
         {
-            string reason;
-            try
+            string reason = "ended";
+            for (var attempt = 0; attempt <= Retries; attempt++)
             {
-                var ended = await server.Client.BrowserRpcAsync(
-                    "attach", Context.WorkingDirectory, Input(new JsonObject { ["version"] = Version }), longLived: true, _stop.Token).ConfigureAwait(false);
-                reason = ended?.GetValueKind() == JsonValueKind.String ? ended.GetValue<string>() : "ended";
-            }
-            catch (OperationCanceledException)
-            {
-                reason = "switched off";
-            }
-            catch (HttpRequestException error)
-            {
-                reason = error.Message;
+                try
+                {
+                    var ended = await server.Client.BrowserRpcAsync(
+                        "attach", Context.WorkingDirectory, Input(new JsonObject { ["version"] = Version }), longLived: true, _stop.Token).ConfigureAwait(false);
+                    reason = ended?.GetValueKind() == JsonValueKind.String ? ended.GetValue<string>() : "ended";
+                    break;
+                }
+                catch (OperationCanceledException)
+                {
+                    reason = "switched off";
+                    break;
+                }
+                catch (HttpRequestException error)
+                {
+                    reason = error.Message;
+                    if (attempt == Retries || !error.Message.Contains("RPC is unavailable", StringComparison.Ordinal) || !server.IsRunning)
+                        break;
+                    try
+                    {
+                        await Task.Delay(RetryDelay, _stop.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        reason = "switched off";
+                        break;
+                    }
+                }
             }
 
             LogDetached(owner._logger, HarnessSessionId, reason);
         }
+
+        private const int Retries = 30;
+        private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
 
         public async Task OnAttachedAsync()
         {
