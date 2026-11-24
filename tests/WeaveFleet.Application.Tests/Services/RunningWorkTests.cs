@@ -284,6 +284,29 @@ public sealed class RunningWorkTests
     }
 
     [Fact]
+    public async Task A_background_subagent_whose_child_is_not_linked_yet_is_not_lost_when_the_harness_runs_a_child()
+    {
+        // The turn ended and Fleet looked before the harness told Fleet which child the call started: the call is not lost.
+        await _sut.HandleWorkReportedAsync(Parent, Subagent(background: true));
+
+        var lost = await _sut.SettleLostWorkAsync(Parent, [new WorkReport { WorkId = "ses_child", ChildHarnessSessionId = "ses_child" }]);
+
+        lost.ShouldBe(0);
+        _work.All.Single(w => w.WorkId == "call_sub").IsRunning.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_subagent_with_no_child_running_in_the_harness_is_still_lost()
+    {
+        await _sut.HandleWorkReportedAsync(Parent, Subagent(background: true));
+
+        var lost = await _sut.SettleLostWorkAsync(Parent, []);
+
+        lost.ShouldBe(1);
+        _work.All.Single(w => w.WorkId == "call_sub").EndedReason.ShouldBe(WorkEndedReasons.Lost);
+    }
+
+    [Fact]
     public async Task A_child_that_finished_ends_its_newest_run_and_the_earlier_one_with_it()
     {
         _sessions.Seed(new Session { Id = "fleet-child", OpencodeSessionId = "ses_child", UserId = "user-1" });
