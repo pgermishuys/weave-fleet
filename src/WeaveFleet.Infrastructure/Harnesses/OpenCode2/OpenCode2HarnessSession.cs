@@ -1245,12 +1245,16 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     }
 
     /// <inheritdoc />
-    /// <remarks>"Don't ask again" is Fleet's to keep (<see cref="PermissionGate"/>); V2 is answered once.</remarks>
+    /// <remarks>
+    /// "Don't ask again" is Fleet's to keep (<see cref="PermissionGate"/>); V2 is answered once. An ask V2 sent no save list
+    /// for (a shell command its scanner can't read asks <c>external_directory</c> on <c>*</c> that way) is never remembered:
+    /// the gate would turn the empty list into every resource, letting the agent into every folder for the session.
+    /// </remarks>
     public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
     {
         var entry = _permissions.Pending.Get(requestId)
             ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
-        if (reply == PermissionReplies.Always)
+        if (reply == PermissionReplies.Always && entry.Ask.Always.Count > 0)
             await _permissions.AllowFromNowOnAsync(entry.Ask, ct).ConfigureAwait(false);
 
         var rejected = reply == PermissionReplies.Reject;
