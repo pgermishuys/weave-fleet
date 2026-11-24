@@ -37,6 +37,9 @@ Remove-Item Env:\Fleet__Auth__RequireToken -ErrorAction SilentlyContinue
 Remove-Item Env:\Fleet__PrivateNetworksOnly -ErrorAction SilentlyContinue
 Remove-Item Env:\WEAVE_FLEET_PORT -ErrorAction SilentlyContinue
 Remove-Item Env:\WEAVE_FLEET_HOST -ErrorAction SilentlyContinue
+# What a session on a node inherits from the node's launcher: fleet run there must still start a plain Fleet.
+$env:EXTRA_ARGS = ' --node'
+$env:NODE = '1'
 
 $script:failures = 0
 function Fail([string]$message) {

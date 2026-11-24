@@ -215,6 +215,8 @@ echo   --print             With install-service: show what it would register and
 exit /b 0
 
 :parse_args
+rem A node started by this launcher passes EXTRA_ARGS (" --node") to everything it starts; a fleet run there starts clean.
+set "EXTRA_ARGS="
 set "PORT_OVERRIDE="
 set "HOST_OVERRIDE="
 set "DATA_DIR_OVERRIDE="

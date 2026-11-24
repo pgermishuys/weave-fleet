@@ -173,9 +173,10 @@ function Get-ExpectedHash {
     throw "Could not locate a checksum for $AssetName."
 }
 
-# Not Expand-Archive: Windows PowerShell started from PowerShell 7 inherits its PSModulePath and can load an Archive
-# module built for .NET Core, whose Expand-Archive calls ExtractToDirectory(string, string, bool). .NET Framework has
-# no such overload, so it fails with "Cannot find an overload for ExtractToDirectory". The two-argument call exists in both.
+# Not Expand-Archive: Windows PowerShell can load an Archive module built for .NET Core (a newer one installed for it, or
+# PowerShell 7's Modules folder on PSModulePath), whose Expand-Archive calls ZipArchive.ExtractToDirectory(destination,
+# overwrite). .NET Framework has no such overload, so `fleet update` failed with "Cannot find an overload for
+# ExtractToDirectory". ZipFile's two-argument ExtractToDirectory exists in both.
 function Expand-Zip {
     param(
         [string] $ArchivePath,

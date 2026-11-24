@@ -1,7 +1,7 @@
 # Runs scripts/install.ps1 the way `fleet update` does (Windows PowerShell 5.1) against a dummy release served from disk
 # (file://). First on PSModulePath is a stand-in Archive module whose Expand-Archive does what one built for .NET Core
-# does: it calls ExtractToDirectory(string, string, bool), which .NET Framework doesn't have. Windows PowerShell started
-# from PowerShell 7 can load such a module, and the install must work anyway. The Windows half of scripts/test-install.sh.
+# does: it calls ZipArchive.ExtractToDirectory(destination, overwrite), which .NET Framework doesn't have. Windows
+# PowerShell can load such a module, and the install must work anyway. The Windows half of scripts/test-install.sh.
 $ErrorActionPreference = 'Stop'
 
 function Fail([string]$message) { Write-Host "FAIL: $message"; exit 1 }
@@ -29,8 +29,10 @@ try {
     Set-Content (Join-Path $mod 'Microsoft.PowerShell.Archive.psm1') @'
 function Expand-Archive {
     param([string] $Path, [string] $DestinationPath, [switch] $Force)
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($Path, $DestinationPath, [bool] $Force)
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+    try { [System.IO.Compression.ZipFileExtensions]::ExtractToDirectory($archive, $DestinationPath, [bool] $Force) }
+    finally { $archive.Dispose() }
 }
 '@
     $env:PSModulePath = (Join-Path $work 'modules') + ';' + $savedModulePath
@@ -41,7 +43,7 @@ function Expand-Archive {
     # The stand-in must break Expand-Archive the way the report did, or this test proves nothing.
     $probe = Join-Path $work 'probe'
     $probeOut = & powershell -NoProfile -Command "Expand-Archive -Path '$zip' -DestinationPath '$probe' -Force" 2>&1 | Out-String
-    if ($probeOut -notmatch 'ExtractToDirectory') { Fail "the stand-in Expand-Archive didn't fail as expected: $probeOut" }
+    if ($probeOut -notmatch 'Cannot find an overload for "ExtractToDirectory" and the argument count: "3"') { Fail "the stand-in Expand-Archive didn't fail as expected: $probeOut" }
 
     $installDir = Join-Path $work 'home\fleet'
     $env:WEAVE_FLEET_VERSION = 'v0.0.1'
