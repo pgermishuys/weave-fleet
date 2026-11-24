@@ -552,6 +552,11 @@ jobs:
         shell: powershell
         run: ./scripts/test-launchers.ps1
 
+      - name: Test install.ps1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/test-install.ps1
+
       # The pre-push check runs in Git Bash on Windows, so its tests run there too.
       - name: Test pre-push-check.sh
         shell: bash

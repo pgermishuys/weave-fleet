@@ -173,6 +173,20 @@ function Get-ExpectedHash {
     throw "Could not locate a checksum for $AssetName."
 }
 
+# Not Expand-Archive: Windows PowerShell can load an Archive module built for .NET Core (a newer one installed for it, or
+# PowerShell 7's Modules folder on PSModulePath), whose Expand-Archive calls ZipArchive.ExtractToDirectory(destination,
+# overwrite). .NET Framework has no such overload, so `fleet update` failed with "Cannot find an overload for
+# ExtractToDirectory". ZipFile's two-argument ExtractToDirectory exists in both.
+function Expand-Zip {
+    param(
+        [string] $ArchivePath,
+        [string] $DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)
+}
+
 function Get-PackageRoot {
     param(
         [string] $ExtractDir
@@ -300,7 +314,7 @@ try {
     $null = New-Item -ItemType Directory -Path $extractDir
 
     if ($assetName.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
-        Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
+        Expand-Zip -ArchivePath $archivePath -DestinationPath $extractDir
     }
     else {
         tar -xzf $archivePath -C $extractDir
