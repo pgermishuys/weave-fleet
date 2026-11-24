@@ -29,6 +29,24 @@ describe("QueuedMessages", () => {
     expect(labels).toEqual(["Next · from tests-after-edits", "Queued", "Queued"]);
   });
 
+  it("names the session whose message waits, and shows its words rather than the tag", () => {
+    const wrapper = mount(QueuedMessages, {
+      props: {
+        items: [
+          { id: "q-1", text: "<fleet-session-message from=\"ses_a1\" title=\"Fix the login flake\">\nThe tests pass now.\n</fleet-session-message>", kind: "prompt" },
+          { id: "q-2", text: "<fleet-session-message from=\"ses_b2\" title=\"Fix login\" machine=\"m-1\" machine-name=\"atlas\">\nDone.\n</fleet-session-message>", kind: "prompt" },
+        ],
+        canSendNow: () => false,
+      },
+    });
+
+    expect(wrapper.findAll(".queued__label").map((label) => label.text())).toEqual([
+      "Next · from Fix the login flake",
+      "Queued · from Fix login on atlas",
+    ]);
+    expect(wrapper.findAll(".queued__text").map((text) => text.text())).toEqual(["The tests pass now.", "Done."]);
+  });
+
   it("offers Send now only for what can go into the turn", async () => {
     const wrapper = mount(QueuedMessages, {
       props: { items, canSendNow: (item: QueuedMessage) => !item.text.startsWith("/") },

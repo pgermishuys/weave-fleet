@@ -2,6 +2,7 @@
 import { CornerDownRight, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import type { QueuedMessage } from "@/composables/use-session-queue";
+import { parsePeerMessage } from "@/lib/session-messages";
 
 defineOptions({
   name: "QueuedMessages",
@@ -16,6 +17,22 @@ defineProps<{
   /** Whether each item can be sent now, into the running turn. */
   canSendNow: (item: QueuedMessage) => boolean;
 }>();
+
+/** A message another session's agent sent waits wrapped in its tag: the row names the sender and shows the words. */
+function peerOf(item: QueuedMessage) {
+  return parsePeerMessage(item.text);
+}
+
+function label(item: QueuedMessage, index: number): string {
+  const base = index === 0 ? "Next" : "Queued";
+  const peer = peerOf(item)?.peer;
+  if (peer) return `${base} · from ${peer.title}${peer.machineName ? ` on ${peer.machineName}` : ""}`;
+  return item.mod ? `${base} · from ${item.mod}` : base;
+}
+
+function shownText(item: QueuedMessage): string {
+  return peerOf(item)?.text ?? item.text;
+}
 
 const emit = defineEmits<{
   sendNow: [index: number];
@@ -35,11 +52,11 @@ const emit = defineEmits<{
       class="queued__item"
       data-testid="queued-message"
     >
-      <span class="queued__label">{{ index === 0 ? "Next" : "Queued" }}<template v-if="item.mod"> · from {{ item.mod }}</template></span>
+      <span class="queued__label">{{ label(item, index) }}</span>
       <span
         class="queued__text"
-        :title="item.text"
-      >{{ item.text }}</span>
+        :title="shownText(item)"
+      >{{ shownText(item) }}</span>
       <Button
         v-if="canSendNow(item)"
         variant="ghost"
@@ -58,7 +75,7 @@ const emit = defineEmits<{
       <Button
         variant="toolbar-icon"
         size="toolbar"
-        :aria-label="`Remove queued message: ${item.text}`"
+        :aria-label="`Remove queued message: ${shownText(item)}`"
         title="Remove from the queue"
         data-testid="queued-remove"
         @click="emit('remove', index)"
