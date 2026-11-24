@@ -291,6 +291,11 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
     {
         // V2 2.4's tabs.open({ path }) needs the answer to carry the tab's id and address for an HTML file, else it fails
         // with "acknowledged the file but did not return its tab".
+        // 2.3 has no path form: tabs.open({ path }) there opens a blank tab.
+        var version = await HarnessProbe.RunAsync(OpenCode2LiveFleet.FindExecutable()!, ["--version"], CancellationToken.None);
+        if (HarnessProbe.ParseVersion(version.StandardOutput) is not { } v || !Version.TryParse(v.Split('-')[0], out var parsed) || parsed < new Version(2, 4))
+            return;
+
         const string warmUp = "Say hi. (tab warm-up)";
         const string prompt = "Open the page. (tabs.open path)";
         var folder = fleet.NewFolder("tab-path");
