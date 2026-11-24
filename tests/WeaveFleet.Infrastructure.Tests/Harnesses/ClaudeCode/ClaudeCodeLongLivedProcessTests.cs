@@ -292,6 +292,52 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Turns_a_terminal_added_to_the_transcript_take_a_new_process_that_resumes_them()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var transcript = TranscriptFile();
+        Start(configDirectory: Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(transcript)))!);
+        await PromptAsync("one");
+
+        // `claude --resume cc-1` in a terminal: a turn lands in the file the live process never reads again.
+        File.AppendAllText(transcript,
+            """{"type":"user","uuid":"t-1","parentUuid":"a-0","message":{"role":"user","content":"typed in a terminal"}}""" + "\n"
+            + """{"type":"assistant","uuid":"t-2","parentUuid":"t-1","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}""" + "\n");
+        await PromptAsync("two");
+
+        Starts().ShouldBe(2);
+        ShouldHaveArgument(Arguments(1), "--resume", "cc-1");
+    }
+
+    [Fact]
+    public async Task Entries_that_are_not_turns_added_to_the_transcript_keep_the_process()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var transcript = TranscriptFile();
+        Start(configDirectory: Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(transcript)))!);
+        await PromptAsync("one");
+
+        File.AppendAllText(transcript, """{"type":"ai-title","aiTitle":"A title"}""" + "\n"
+            + """{"type":"last-prompt","lastPrompt":"one"}""" + "\n");
+        await PromptAsync("two");
+
+        Starts().ShouldBe(1);
+    }
+
+    /// <summary>A transcript for session cc-1 in a config folder of its own, where Claude Code would keep it.</summary>
+    private string TranscriptFile()
+    {
+        var path = Path.Combine(_directory, "config", "projects", WeaveFleet.Application.TerminalSessions.ClaudeTranscriptLocator.Slug(_directory), "cc-1.jsonl");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, """{"type":"user","uuid":"a-0","message":{"role":"user","content":"one"}}""" + "\n");
+        return path;
+    }
+
+    [Fact]
     public async Task A_new_model_is_switched_to_on_the_running_process()
     {
         if (OperatingSystem.IsWindows())
@@ -953,7 +999,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
 
     private ClaudeCodeHarnessSession Start(
         bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null, ClaudeCodeBridgeTokenRegistry? bridgeTokens = null,
-        string? binary = null)
+        string? binary = null, string? configDirectory = null)
     {
         var delegations = new InMemoryDelegationRepository();
         var sessions = _sessions;
@@ -985,7 +1031,9 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
             fleetSessionId: "fleet-cc",
             workingDirectory: _directory,
             config: new ClaudeCodeOptions { BinaryPath = binary ?? FakeClaude(honoursInterrupt, switchesModel), IdleShutdownSeconds = IdleSeconds },
-            environmentVariables: new Dictionary<string, string>(),
+            environmentVariables: configDirectory is null
+                ? new Dictionary<string, string>()
+                : new Dictionary<string, string> { ["CLAUDE_CONFIG_DIR"] = configDirectory },
             shutdownTimeout: TimeSpan.FromSeconds(2),
             scopeFactory: services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             logger: _log,
