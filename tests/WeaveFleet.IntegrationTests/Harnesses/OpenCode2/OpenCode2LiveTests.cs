@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Sessions;
@@ -213,6 +214,43 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
         LlmRequest.LastToolText(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Continues(r, prompt))).ShouldNotBeNull()
             .ShouldMatch(CanvasId().ToString());
         LatestParts<ToolMessageEventPart>(events, id).Single(p => p.CallId == "call_open").State.ShouldBeOfType<ToolCompletedState>();
+    }
+
+    [OpenCode2Fact]
+    public async Task The_agent_calls_a_browser_tool_while_Fleet_is_its_browser_and_V2_does_not_refuse_it()
+    {
+        // V2 2.4's browser plugin refuses a call that any browser deny but its own grant covers, with "[browser.denied] ...
+        // denied for this agent by configuration"; before that the deny made V2 hide the tools ("Unknown tool").
+        const string warmUp = "Say hi. (browser warm-up)";
+        const string prompt = "List your browser tabs. (browser)";
+        fleet.Answer(request => LlmRequest.Starts(request, warmUp) ? new ScriptedLlmResponse { Text = "Hi." } : null);
+        fleet.Answer(request => LlmRequest.Starts(request, prompt)
+            ? new ScriptedLlmResponse
+            {
+                StopReason = "tool_calls",
+                ToolCalls = [new ScriptedToolCall("call_tabs", "execute", """{"code":"return await tools.browser.tabs.list({})"}""")],
+            }
+            : LlmRequest.Continues(request, prompt) ? new ScriptedLlmResponse { Text = "Listed." }
+            : null);
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("browser"), "Browser", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+
+        // The plugin is there once V2 has loaded the folder, which a session's first turn does; Fleet's attach as the
+        // session was made came too early, so switching the setting on again attaches it now.
+        await PromptAsync(id, warmUp, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+        fleet.Services.GetRequiredService<AgentBrowserSettingsChanges>().Notify(OpenCode2LiveFleet.Owner, new AgentBrowserSettings());
+        await Task.Delay(TimeSpan.FromSeconds(4), cts.Token);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Count(e => e.Type == "session.idle") >= 2, cts.Token);
+
+        var requests = fleet.Llm.Queue.Requests.Where(r => LlmRequest.Starts(r, prompt) || LlmRequest.Continues(r, prompt)).ToList();
+        var result = LlmRequest.LastToolText(requests[^1]).ShouldNotBeNull();
+        result.ShouldNotContain("[browser.denied]");
+        result.ShouldNotContain("Unknown tool");
     }
 
     [OpenCode2Fact]

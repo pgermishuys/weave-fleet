@@ -78,15 +78,16 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         new() { Action = "browser", Resource = "*", Effect = "allow" };
 
     /// <summary>
-    /// <paramref name="rules"/> with the browser's rules where they belong: <see cref="DenyBrowser"/> after everything
-    /// else, then <see cref="AllowBrowser"/> when Fleet is the session's browser (<paramref name="attached"/>). Every
-    /// other rule stays as it is, in order.
+    /// <paramref name="rules"/> with the browser's rules where they belong. Detached, <see cref="DenyBrowser"/> goes after
+    /// everything else, so the tools stay hidden. Attached (Fleet is the session's browser), there is no deny, only
+    /// <see cref="AllowBrowser"/>: OpenCode 2.4's browser plugin refuses any call that a browser deny other than its own
+    /// grant covers, wherever the deny sits, and a 2.3 server shows and allows the tools on the allow alone. Every other
+    /// rule stays as it is, in order.
     /// </summary>
     internal static List<OpenCode2PermissionRule> WithBrowser(IEnumerable<OpenCode2PermissionRule> rules, bool attached)
     {
-        List<OpenCode2PermissionRule> result = [.. rules.Where(rule => rule != DenyBrowser && rule != AllowBrowser), DenyBrowser];
-        if (attached)
-            result.Add(AllowBrowser);
+        List<OpenCode2PermissionRule> result = [.. rules.Where(rule => rule != DenyBrowser && rule != AllowBrowser)];
+        result.Add(attached ? AllowBrowser : DenyBrowser);
         return result;
     }
 
