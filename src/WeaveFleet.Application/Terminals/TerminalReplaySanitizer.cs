@@ -205,13 +205,31 @@ public sealed class TerminalReplaySanitizer
             && content[i + 1] is (byte)'q' or (byte)'r';
     }
 
-    /// <summary>Foreground, background and cursor colour queries (OSC 10/11/12 with ? or an rgb: reply).</summary>
+    /// <summary>
+    /// Foreground, background and cursor colour queries (OSC 10/11/12 with ?) and their replies. A reply is
+    /// <c>rgb:rrrr/gggg/bbbb</c>, four hex digits a channel; a shorter <c>rgb:</c> value (<c>rgb:44/55/66</c>)
+    /// is a setter, such as a base16 theme script's, and stays.
+    /// </summary>
     private static bool ShouldStripOsc(ReadOnlySpan<byte> content)
     {
         if (content.Length < 4 || content[0] != (byte)'1' || content[1] is not ((byte)'0' or (byte)'1' or (byte)'2') || content[2] != (byte)';')
             return false;
         var value = content[3..];
-        return value[0] == (byte)'?' || value.StartsWith("rgb:"u8);
+        return value[0] == (byte)'?' || IsFourDigitRgb(value);
+    }
+
+    private static bool IsFourDigitRgb(ReadOnlySpan<byte> value)
+    {
+        // rgb: + 4 + / + 4 + / + 4
+        if (value.Length != 4 + 14 || !value.StartsWith("rgb:"u8))
+            return false;
+        for (var i = 4; i < value.Length; i++)
+        {
+            var slash = i == 8 || i == 13;
+            if (slash ? value[i] != (byte)'/' : !Uri.IsHexDigit((char)value[i]))
+                return false;
+        }
+        return true;
     }
 
     private static bool AllOf(ReadOnlySpan<byte> body, string allowed)

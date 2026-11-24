@@ -12,6 +12,8 @@ public sealed class TerminalReplaySanitizerTests
     [InlineData(Esc + "[31mred" + Esc + "[0m")]
     [InlineData(Esc + "[2J" + Esc + "[H")]
     [InlineData(Esc + "[!p")]                       // DECSTR, a setter
+    [InlineData(Esc + "]11;rgb:44/55/66\u0007")]     // base16 background setter, short channels
+    [InlineData(Esc + "]12;rgb:A/BC/def" + Esc + "\\")] // cursor colour setter, mixed widths
     [InlineData(Esc + "[2 q")]                      // DECSCUSR, cursor shape
     [InlineData(Esc + "[u")]                        // restore cursor
     [InlineData(Esc + "[?2004h")]                   // bracketed paste on
