@@ -122,6 +122,31 @@ public sealed class OpenCode2PermissionTests
     }
 
     [Fact]
+    public async Task Dont_ask_again_on_an_ask_with_no_save_list_never_widens_to_every_resource()
+    {
+        var (api, server, session) = Start();
+        await using var _ = server;
+        await using var __ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        // A command V2's scanner can't read asks for every directory (external_directory on "*") with no save list.
+        session.OnEvent(Event("permission.asked", $$$"""
+            {"id":"per_1","sessionID":"{{{Session}}}","action":"external_directory","resources":["*"],
+             "source":{"type":"tool","messageID":"msg_1","id":"call_1"}}
+            """));
+        (await ReadAvailableAsync(session)).Where(e => e.Type == EventTypes.PermissionAsked).ShouldHaveSingleItem();
+
+        await session.ReplyToPermissionAsync("per_1", PermissionReplies.Always, null, CancellationToken.None);
+
+        // Allowed once, not for every folder from now on: a folder outside the session's asks again.
+        session.OnEvent(Event("permission.asked", $$$"""
+            {"id":"per_2","sessionID":"{{{Session}}}","action":"external_directory","resources":["/etc/*"],"save":["/etc/*"],
+             "source":{"type":"tool","messageID":"msg_1","id":"call_2"}}
+            """));
+        (await ReadAvailableAsync(session)).ShouldContain(e => e.Type == EventTypes.PermissionAsked);
+        api.Requests.ShouldNotContain(r => r.Path.EndsWith("/permission/per_2/reply", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_refusal_carries_the_users_words_to_the_agent()
     {
         var (api, server, session) = Start();
