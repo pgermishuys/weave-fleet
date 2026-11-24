@@ -85,6 +85,11 @@ const hasAnyAnswer = computed(() =>
   || customTexts.value.some((text) => text.trim().length > 0)
 );
 
+// A multi-select question can be answered with none of its choices (V2's question tool takes it as "Unanswered");
+// Skip would dismiss the question and interrupt the turn instead.
+const canAnswerNone = computed(() => questionInput.value?.questions.some((q) => q.multiple) ?? false);
+const canSend = computed(() => hasAnyAnswer.value || canAnswerNone.value);
+
 // Number keys pick a choice in the question that has focus (the first one otherwise).
 const choiceCount = computed(() => {
   const first = questionInput.value?.questions[0];
@@ -354,10 +359,10 @@ function answerText(questionIdx: number): string {
         type="button"
         class="qcard__btn qcard__btn--send"
         data-testid="question-submit-button"
-        :disabled="loading || !hasAnyAnswer"
+        :disabled="loading || !canSend"
         @click="submit"
       >
-        {{ loading ? "Sending…" : "Send answer" }}
+        {{ loading ? "Sending…" : hasAnyAnswer || !canAnswerNone ? "Send answer" : "Send none" }}
       </button>
       <button
         type="button"
