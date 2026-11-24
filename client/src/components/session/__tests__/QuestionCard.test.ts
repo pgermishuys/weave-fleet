@@ -89,6 +89,29 @@ describe("QuestionCard", () => {
     expect(onSubmit).toHaveBeenCalledWith([["Staging"]]);
   });
 
+  it("lets a multi-select question be sent with nothing ticked, as an answer of none, while a single choice still needs one", async () => {
+    const multi = [{ ...questions[0]!, multiple: true }];
+    const { wrapper, onSubmit } = mountCard({ status: "running", input: { questions: multi } });
+    const send = wrapper.get("[data-testid='question-submit-button']");
+
+    expect(send.attributes("disabled")).toBeUndefined();
+    expect(send.text()).toBe("Send none");
+    await send.trigger("click");
+    expect(onSubmit).toHaveBeenCalledWith([[]]);
+
+    const single = mountCard({ status: "running", input: { questions } });
+    expect(single.wrapper.get("[data-testid='question-submit-button']").attributes("disabled")).toBeDefined();
+    single.wrapper.unmount();
+    wrapper.unmount();
+  });
+
+  it("calls the button Send answer once a multi-select has something ticked", async () => {
+    const { wrapper } = mountCard({ status: "running", input: { questions: [{ ...questions[0]!, multiple: true }] } });
+    await wrapper.get("[data-testid='question-pill-Staging']").trigger("click");
+    expect(wrapper.get("[data-testid='question-submit-button']").text()).toBe("Send answer");
+    wrapper.unmount();
+  });
+
   it("picks a choice by its number key and sends on Enter", async () => {
     const { wrapper, onSubmit } = mountCard({ status: "running", input: { questions } });
     const card = wrapper.get("[data-testid='question-card-active']");
