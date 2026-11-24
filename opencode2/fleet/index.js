@@ -736,6 +736,10 @@ async function holdAgentDenies(ctx) {
   if (ctx.permission?.hook) {
     await ctx.permission.hook("evaluate", async (event) => {
       if (event.effect === "deny") return
+      // OpenCode 2.4's browser plugin appends "browser * deny" to every agent's rules, to hide its tools until a browser
+      // attaches, and an attachment's grant (a session rule) overrides it. It refuses a deny from config itself, so this
+      // hook leaves the browser (and its skill) to it: holding the plugin's own deny here refused every call from an attached session.
+      if (event.action === "browser" || (event.action === "skill" && event.resources?.length && event.resources.every((resource) => resource === "browser"))) return
       const rules = await rulesOf(event.agent, event.sessionID)
       if (!rules.some((rule) => rule.effect === "deny")) return
       const resources = event.resources?.length ? event.resources : ["*"]
