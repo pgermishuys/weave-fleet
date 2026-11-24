@@ -251,6 +251,10 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenC
         var result = LlmRequest.LastToolText(requests[^1]).ShouldNotBeNull();
         result.ShouldNotContain("[browser.denied]");
         result.ShouldNotContain("Unknown tool");
+        // Fleet's own plugin holds an agent's denies too, and 2.4's browser plugin puts "browser * deny" on every agent
+        // until a browser attaches: the call must not be refused by either, but answer with the session's tabs.
+        result.ShouldNotContain("may not use");
+        result.ShouldContain("\"tabs\"");
     }
 
     [OpenCode2Fact]
