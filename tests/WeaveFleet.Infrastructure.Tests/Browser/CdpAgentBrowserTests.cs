@@ -199,6 +199,23 @@ public sealed class CdpAgentBrowserTests
         after.ShouldContain("[checkbox] \"I agree\" checked=true");
     }
 
+    [Fact]
+    public async Task A_wait_that_times_out_fails_with_condition_unmet_so_OpenCode_2_can_report_met_false()
+    {
+        if (Chrome() is not { } options)
+            return;
+        using var site = new LocalSite(Signup);
+        await using var browser = Browser(options, new Steps(), Limits(site));
+        var opened = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = site.Url });
+        opened.Failure.ShouldBeNull(opened.Failure?.Code + ": " + opened.Failure?.Message);
+        var tab = opened.Tab.ShouldNotBeNull();
+
+        var unmet = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Wait) { TabId = tab.Id, Condition = "text", Text = "Never shown", TimeoutMs = 300 });
+
+        unmet.Failure.ShouldNotBeNull().Code.ShouldBe(AgentBrowserFailures.ConditionUnmet);
+        unmet.Tab.ShouldNotBeNull();
+    }
+
     private const string Locked = """
         <!doctype html><title>Locked demo</title>
         <label for="ro">Read only</label><input id="ro" readonly value="fixed">
