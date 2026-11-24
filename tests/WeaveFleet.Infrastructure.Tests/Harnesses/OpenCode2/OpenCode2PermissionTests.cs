@@ -201,6 +201,23 @@ public sealed class OpenCode2PermissionTests
     }
 
     [Theory]
+    [InlineData(PermissionLevels.All)]
+    [InlineData(PermissionLevels.Ask)]
+    [InlineData(PermissionLevels.Edits)]
+    public void An_attached_browser_leaves_no_browser_deny_for_2_4_to_refuse_its_calls_by(string level)
+    {
+        // OpenCode 2.4's browser plugin refuses a call that any browser deny other than its own grant covers, wherever
+        // the deny sits in the list, so an attached session carries none; the allow Fleet adds is the plugin's grant shape.
+        var rules = OpenCode2HttpClient.WithBrowser(OpenCode2HttpClient.RulesFor(level, hideStepTool: true), attached: true);
+
+        rules.ShouldNotContain(OpenCode2HttpClient.DenyBrowser);
+        rules[^1].ShouldBe(OpenCode2HttpClient.AllowBrowser);
+        OpenCode2HttpClient.BrowserAllowed(rules).ShouldBeTrue();
+        // Detached, the tools hide again.
+        OpenCode2HttpClient.WithBrowser(rules, attached: false).ShouldContain(OpenCode2HttpClient.DenyBrowser);
+    }
+
+    [Theory]
     [InlineData(PermissionLevels.All, false)]
     [InlineData(PermissionLevels.Ask, true)]
     [InlineData(PermissionLevels.Edits, true)]
