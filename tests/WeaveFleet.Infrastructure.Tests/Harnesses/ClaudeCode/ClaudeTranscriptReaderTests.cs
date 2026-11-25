@@ -15,6 +15,18 @@ public sealed class ClaudeTranscriptReaderTests
         => ClaudeTranscriptReader.Read(File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ClaudeCode", "transcripts", name)));
 
     [Fact]
+    public void A_background_task_notice_Claude_Code_wrote_as_a_user_entry_is_not_the_users_message()
+    {
+        var transcript = Read("background-notices.jsonl");
+
+        Assert.Equal(["user", "assistant", "assistant", "assistant", "assistant"], transcript.Messages.Select(m => m.Role));
+        Assert.DoesNotContain(transcript.Messages, m => m.TextContent.Contains("<task-notification>"));
+        Assert.Equal("Water the orchard in the background and tell me when it is done.", transcript.Messages[0].TextContent);
+        Assert.Contains(transcript.Messages, m => m.TextContent == "The watering finished.");
+        Assert.Contains(transcript.Messages, m => m.TextContent == "The pump was stopped.");
+    }
+
+    [Fact]
     public void A_plain_conversation_is_its_prompts_and_replies_and_nothing_else()
     {
         var transcript = Read("plain.jsonl");
