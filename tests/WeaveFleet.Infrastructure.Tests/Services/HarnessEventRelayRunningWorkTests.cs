@@ -179,7 +179,8 @@ public sealed class HarnessEventRelayRunningWorkTests : IDisposable
         });
         harness.Emit(new HarnessEvent { Type = EventTypes.SessionIdle, SessionId = "ses_1", Timestamp = DateTimeOffset.UtcNow });
 
-        await WaitUntilAsync(() => !_work.All.Single().IsRunning, cts.Token);
+        // The reason is what's asserted, so it's what's awaited: a subagent's status changes a moment before its reason is set.
+        await WaitUntilAsync(() => _work.All.Single().EndedReason is not null, cts.Token);
         _work.All.Single().EndedReason.ShouldBe(WorkEndedReasons.Error);
 
         harness.Complete();
