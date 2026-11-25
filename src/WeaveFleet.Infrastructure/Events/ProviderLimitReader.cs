@@ -67,6 +67,9 @@ internal static partial class ProviderLimitReader
                 return TurnErrorKinds.Overloaded;
         }
 
+        // A quota counted per minute or second ("Quota exceeded for requests per minute") frees itself in moments.
+        if (PerMinuteQuota().IsMatch(text))
+            return TurnErrorKinds.RateLimit;
         if (UsageText().IsMatch(text))
             return TurnErrorKinds.UsageLimit;
         if (status == 429 || RateText().IsMatch(text))
@@ -302,6 +305,9 @@ internal static partial class ProviderLimitReader
 
     [GeneratedRegex(@"(?<!not your )usage[_\s-]?limit|usagelimitexceeded|(?:hit|reached) your [\w\s-]{0,30}?limit|quota[_\s-]?exceeded|exceeded your (?:current )?quota", RegexOptions.IgnoreCase)]
     private static partial Regex UsageText();
+
+    [GeneratedRegex(@"quota[^\n]{0,80}?per[_\s-]?(?:minute|second)|per[_\s-]?(?:minute|second)[_\s-]?quota", RegexOptions.IgnoreCase)]
+    private static partial Regex PerMinuteQuota();
 
     [GeneratedRegex(@"rate[_\s-]?limit|too[_\s-]?many[_\s-]?requests|throttl|temporarily limiting requests|resource[_\s-]?exhausted", RegexOptions.IgnoreCase)]
     private static partial Regex RateText();
