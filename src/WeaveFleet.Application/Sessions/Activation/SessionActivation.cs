@@ -88,7 +88,7 @@ public sealed partial class SessionActivation(
             ActivityKind.Internal);
         activateActivity?.SetTag(FleetInstrumentation.SessionIdTag, session.Id);
 
-        var instance = instanceTracker.Get(session.InstanceId);
+        var instance = LiveInstance(session.InstanceId);
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
 
@@ -100,7 +100,7 @@ public sealed partial class SessionActivation(
             if (currentSession is null)
                 return FleetError.NotFoundFor(nameof(Session), session.Id);
 
-            instance = instanceTracker.Get(currentSession.InstanceId);
+            instance = LiveInstance(currentSession.InstanceId);
             if (instance is not null)
                 return Result.Success<IHarnessSession>(instance);
 
@@ -111,6 +111,21 @@ public sealed partial class SessionActivation(
         {
             activationLock.Release();
         }
+    }
+
+    /// <summary>
+    /// The tracked harness for <paramref name="instanceId"/>, unless its process has exited: that one is let go, so the
+    /// session wakes on a new one instead of sending its prompt to a process that isn't there.
+    /// </summary>
+    private IHarnessSession? LiveInstance(string instanceId)
+    {
+        var instance = instanceTracker.Get(instanceId);
+        if (instance is not { ProcessGone: true })
+            return instance;
+
+        instanceTracker.Remove(instanceId);
+        _ = SafeStopAsync(instance, CancellationToken.None);
+        return null;
     }
 
     /// <summary>The profile an existing session started with, as it is now.</summary>

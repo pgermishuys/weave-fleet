@@ -582,6 +582,23 @@ public sealed class PiHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_process_that_exits_while_idle_says_nothing_and_marks_the_session_for_replacing()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        session.ProcessGone.ShouldBeFalse();
+
+        harness.Process.Exit(0);
+
+        // No error card for the conversation, but the next prompt must not go to this object.
+        session.ProcessGone.ShouldBeTrue();
+        using var drain = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        var events = new List<HarnessEvent>();
+        try { await foreach (var e in session.SubscribeAsync(drain.Token)) events.Add(e); } catch (OperationCanceledException) { }
+        events.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task running_work_is_the_subagents_the_running_call_reported_and_none_once_it_ends()
     {
         await using var harness = CreateHarness();

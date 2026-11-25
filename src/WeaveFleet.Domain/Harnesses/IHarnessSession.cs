@@ -26,6 +26,13 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Current lifecycle status.</summary>
     HarnessSessionStatus Status { get; }
 
+    /// <summary>
+    /// The agent's process has exited and this object can't take a prompt any more. The session then wakes on its next
+    /// prompt with a new harness session, resumed from its token, as after an idle stop. A harness that starts its own
+    /// replacement process, or whose process outlives the session object, stays false.
+    /// </summary>
+    bool ProcessGone => false;
+
     /// <summary>Gracefully stop the agent process.</summary>
     Task StopAsync(CancellationToken ct);
 
