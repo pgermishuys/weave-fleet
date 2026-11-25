@@ -124,6 +124,33 @@ public sealed class HarnessUpdateServiceTests
     }
 
     [Fact]
+    public async Task An_update_stopped_after_its_time_that_left_the_harness_missing_says_to_reinstall_it()
+    {
+        var service = NewService(result: _ =>
+        {
+            // The updater moved the old binary aside and was killed before the new one was in place.
+            _runtime.Availability = HarnessAvailability.NotInstalled("opencode isn't installed.");
+            return new HarnessUpdateService.UpdaterResult(-1, "moving the old version aside", TimedOut: true);
+        });
+
+        await service.StartAsync("opencode", CancellationToken.None);
+        var failed = await JobAsync(service, job => job.Phase == HarnessUpdatePhases.Failed);
+
+        failed.Message.ShouldBe("The update was stopped half way and opencode isn't there any more. Reinstall it: /home/you/.opencode/bin/opencode upgrade 1.18.31");
+    }
+
+    [Fact]
+    public async Task An_update_stopped_after_its_time_that_left_the_harness_working_says_it_did_not_finish()
+    {
+        var service = NewService(result: _ => new HarnessUpdateService.UpdaterResult(-1, "", TimedOut: true));
+
+        await service.StartAsync("opencode", CancellationToken.None);
+        var failed = await JobAsync(service, job => job.Phase == HarnessUpdatePhases.Failed);
+
+        failed.Message.ShouldBe("The update didn't finish within 5 minutes. Run it yourself: /home/you/.opencode/bin/opencode upgrade 1.18.31");
+    }
+
+    [Fact]
     public async Task An_update_that_leaves_the_version_unchanged_is_a_failure()
     {
         var service = NewService(result: _ => new HarnessUpdateService.UpdaterResult(0, "Claude is up to date!", TimedOut: false));
