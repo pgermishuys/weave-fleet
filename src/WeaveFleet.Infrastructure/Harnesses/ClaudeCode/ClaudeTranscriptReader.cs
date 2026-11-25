@@ -190,6 +190,11 @@ internal static class ClaudeTranscriptReader
             if (Bool(entry, "isMeta") || Bool(entry, "isCompactSummary"))
                 return;
 
+            // A background task's end is written as a user entry of origin "task-notification": Claude Code's note to the
+            // model (<task-notification> XML), not something the user typed. The reply it woke stays.
+            if (entry.TryGetProperty("origin", out var origin) && String(origin, "kind") == "task-notification")
+                return;
+
             _claudeMessageId = null;
             if (!entry.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object
                 || !message.TryGetProperty("content", out var content))
