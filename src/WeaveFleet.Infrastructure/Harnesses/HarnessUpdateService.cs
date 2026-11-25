@@ -191,6 +191,11 @@ internal sealed partial class HarnessUpdateService(
             {
                 run.Job = Failed(result.Output) with { Output = null };
             }
+            else if (result.TimedOut && !after.Available)
+            {
+                // Killed mid-install: an updater that moves the old binary aside first leaves nothing to run.
+                run.Job = Failed($"The update was stopped half way and {displayName} isn't there any more. Reinstall it: {command!.Display}");
+            }
             else if (result.TimedOut)
             {
                 run.Job = Failed($"The update didn't finish within {UpdateTimeout.TotalMinutes:0} minutes. Run it yourself: {command!.Display}");
