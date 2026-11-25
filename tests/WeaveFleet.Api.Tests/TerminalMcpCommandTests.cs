@@ -107,15 +107,18 @@ public sealed class TerminalMcpCommandTests
     [Fact]
     public async Task While_the_session_is_open_it_sends_a_heartbeat_and_a_kill_without_a_goodbye_leaves_only_those()
     {
-        var fleet = new Handler();
+        var fleet = new Handler(slowMs: 200);
         using var http = new HttpClient(fleet);
         var input = new WaitingReader();
         var run = TerminalMcpCommand.RunAsync(
             "0.0.0.0", 2113, Path.Combine(Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}.db"), "machine-token-0123456789", "1.2.3", http,
             input, new StringWriter(), key => Environment.GetValueOrDefault(key), "/work/orchard", TimeSpan.FromMilliseconds(30));
 
-        await Task.Delay(400);
-        var kinds = fleet.Requests.Select(r => JsonDocument.Parse(r.Body).RootElement.GetProperty("event").GetString()).ToList();
+        // Wait for the beats, not for a stretch of wall clock: a slow Fleet (or a loaded runner) only delays them.
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        List<string?> kinds;
+        while ((kinds = fleet.Kinds()).Count(k => k == "heartbeat") <= 2 && DateTime.UtcNow < deadline)
+            await Task.Delay(10);
         input.End();
         (await run).ShouldBe(0);
 
@@ -140,15 +143,23 @@ public sealed class TerminalMcpCommandTests
         public override Task<string?> ReadLineAsync() => ReadLineAsync(CancellationToken.None).AsTask();
     }
 
-    private sealed class Handler(bool throws = false) : HttpMessageHandler
+    private sealed class Handler(bool throws = false, int slowMs = 0) : HttpMessageHandler
     {
-        public List<(string Url, string? Authorization, string Body)> Requests { get; } = [];
+        private readonly object _gate = new();
+        private readonly List<(string Url, string? Authorization, string Body)> _requests = [];
+
+        public IReadOnlyList<(string Url, string? Authorization, string Body)> Requests { get { lock (_gate) return [.. _requests]; } }
+
+        public List<string?> Kinds() => [.. Requests.Select(r => JsonDocument.Parse(r.Body).RootElement.GetProperty("event").GetString())];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (throws)
                 throw new HttpRequestException("Connection refused");
-            Requests.Add((request.RequestUri!.ToString(), request.Headers.Authorization?.ToString(), await request.Content!.ReadAsStringAsync(cancellationToken)));
+            await Task.Delay(slowMs, cancellationToken);
+            var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            lock (_gate)
+                _requests.Add((request.RequestUri!.ToString(), request.Headers.Authorization?.ToString(), body));
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
         }
     }
