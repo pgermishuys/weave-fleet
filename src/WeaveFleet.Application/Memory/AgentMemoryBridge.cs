@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
@@ -125,7 +126,7 @@ public sealed class AgentMemoryBridge(
     private static string Shorten(string text, int max = 60)
     {
         var line = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        return line.Length <= max ? line : line[..max].TrimEnd() + "…";
+        return line.Length <= max ? line : TextCut.Head(line, max).TrimEnd() + "…";
     }
 
     public async Task<CanvasResult<CanvasToolOutput>> ForgetAsync(

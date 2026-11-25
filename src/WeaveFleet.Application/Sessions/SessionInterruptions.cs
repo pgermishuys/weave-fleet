@@ -193,7 +193,7 @@ public sealed partial class SessionInterruptions(
             && command.GetString()?.Trim() is { Length: > 0 } text)
         {
             var line = text.Split('\n', 2)[0].Trim();
-            return $"{tool.ToolName} ({(line.Length > CommandLimit ? line[..CommandLimit] + "…" : line)})";
+            return $"{tool.ToolName} ({(line.Length > CommandLimit ? TextCut.Head(line, CommandLimit) + "…" : line)})";
         }
 
         return tool.ToolName;
@@ -307,7 +307,7 @@ public sealed partial class SessionInterruptions(
     {
         // Harness errors can carry a stack trace; the row's tooltip wants the reason.
         var reason = message.Split('\n', 2)[0].Trim();
-        var failure = new SessionFailure(time.GetUtcNow(), reason.Length > FailureMessageLimit ? reason[..FailureMessageLimit] : reason);
+        var failure = new SessionFailure(time.GetUtcNow(), reason.Length > FailureMessageLimit ? TextCut.Head(reason, FailureMessageLimit) : reason);
         await interruptions.SetFailureAsync(sessionId, failure.At, failure.Message).ConfigureAwait(false);
         await BroadcastFailureAsync(sessionId, failure, ct).ConfigureAwait(false);
     }

@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Contracts;
 using WeaveFleet.Application.Configuration;
@@ -116,6 +117,6 @@ public static class MachinePeerEndpoints
         return null;
     }
 
-    private static string Clip(string value, int max) => value.Length <= max ? value : value[..max].TrimEnd();
+    private static string Clip(string value, int max) => value.Length <= max ? value : TextCut.Head(value, max).TrimEnd();
 }
 #pragma warning restore IL2026
