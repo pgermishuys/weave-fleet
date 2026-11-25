@@ -75,9 +75,12 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
 
         var session = Start();
 
-        await PromptAsync("start background");
+        await PromptAsync("start gated background");
+        // A loaded machine can be slow between the turn's end and here; the task must still be running.
+        await Task.Delay(1500);
         session.BackgroundWork.ShouldBe(["task-1"]);
         session.ProcessId.ShouldNotBeNull();
+        File.WriteAllText(Path.Combine(_directory, "finish"), "");
 
         // The task finishes after the turn: Claude Code says so and starts a turn with no prompt from Fleet.
         await WaitForAsync(() => Count(EventTypes.SessionIdle) == 2);
@@ -1156,7 +1159,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     /// <summary>
     /// A stand-in for <c>claude</c> that runs prompts until its stdin closes. Each start appends to <c>starts.txt</c> and
     /// writes its arguments to <c>args-N.txt</c>; every stdin line goes to <c>stdin.txt</c>. Prompts: "start background"
-    /// starts a task that finishes a second after the turn, and Claude then goes on by itself; "start slow background"
+    /// "start gated background" does the same but finishes only once the test creates <c>finish</c>;     /// starts a task that finishes a second after the turn, and Claude then goes on by itself; "start slow background"
     /// does the same, with a turn of its own that takes a while; "start lasting background" starts one that doesn't finish; "stream me" streams its reply as it writes it; "hang" starts a tool call that
     /// only an interrupt ends; "ask me" asks a question and "ask me slowly" and "push slowly" ask long ones, then stop reading
     /// until the test writes <c>go</c>; anything else gets "Reply N".
@@ -1191,7 +1194,12 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
               while [ ! -f "$dir/go" ]; do sleep 0.02; done
             }
             wake() {
-              sleep "$1"
+              # "$1" is a wait in seconds, or "gate": wait until the test creates $dir/finish.
+              if [ "$1" = gate ]; then
+                while [ ! -f "$dir/finish" ]; do sleep 0.02; done
+              else
+                sleep "$1"
+              fi
               echo '{"type":"system","subtype":"background_tasks_changed","tasks":[],"session_id":"cc-1"}'
               echo '{"type":"system","subtype":"task_notification","task_id":"task-'$2'","status":"completed","summary":"done","session_id":"cc-1"}'
               echo '{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-test"}'
@@ -1252,6 +1260,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                   echo '{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-test"}'
                   case "$line" in
                     *'start background'*) started "sleep 1"; wake 1 $n 0 & ;;
+                    *'start gated background'*) started "sleep 1"; wake gate $n 0 & ;;
                     *'start slow background'*) started "sleep 2"; wake 0.2 $n 1.5 & ;;
                     *'start lasting background'*) started "sleep 600" ;;
                     *'set a cron'*|*'set a wakeup'*|*'delete the cron'*)
