@@ -49,9 +49,12 @@ public sealed partial class AutomationRunService(
     ILogger<AutomationRunService> logger,
     RemoteAutomationRuns remoteRuns,
     IAutomationWorkflows? workflows = null,
-    IBuiltinAutomations? builtins = null)
+    IBuiltinAutomations? builtins = null,
+    ISessionInterruptionRepository? interruptions = null)
 {
     /// <summary>A run still "starting" after this is assumed stuck, so it no longer holds up the next one.</summary>
+    private readonly ISessionInterruptionRepository? _interruptions = interruptions;
+
     private static readonly TimeSpan StartingTimeout = TimeSpan.FromMinutes(15);
 
     /// <summary>
@@ -153,7 +156,9 @@ public sealed partial class AutomationRunService(
     /// Done, Ended, Failed); any other started run is running while its session is busy. A run on another machine asks
     /// that machine until it has ended (see <see cref="RemoteStateOfAsync"/>).
     /// </summary>
-    public async Task<string> StateOfAsync(AutomationRun run)
+    public Task<string> StateOfAsync(AutomationRun run) => StateOfAsync(run, new Lazy<Task<IReadOnlyDictionary<string, SessionFailure>>>(LoadFailuresAsync));
+
+    private async Task<string> StateOfAsync(AutomationRun run, Lazy<Task<IReadOnlyDictionary<string, SessionFailure>>> failures)
     {
         if (run.Status != AutomationRunStatus.Started)
             return StateOf(run);
@@ -162,7 +167,7 @@ public sealed partial class AutomationRunService(
             return await RemoteStateOfAsync(run);
 
         if (run.WorkflowRunId is null || workflows is null)
-            return StateOf(run);
+            return await WithFailedTurnAsync(run, StateOf(run), failures);
 
         return StateOfWorkflowRun(await workflows.StatusAsync(run.UserId, run.WorkflowRunId));
     }
@@ -175,17 +180,39 @@ public sealed partial class AutomationRunService(
     {
         var states = new string[runs.Count];
         var asking = new List<Task>();
+        var failures = new Lazy<Task<IReadOnlyDictionary<string, SessionFailure>>>(LoadFailuresAsync);
         for (var i = 0; i < runs.Count; i++)
         {
             var index = i;
             if (runs[i] is { Status: AutomationRunStatus.Started, MachineId: not null, SettledState: null })
                 asking.Add(Task.Run(async () => states[index] = await RemoteStateOfAsync(runs[index])));
             else
-                states[i] = await StateOfAsync(runs[i]);
+                states[i] = await StateOfAsync(runs[i], failures);
         }
 
         await Task.WhenAll(asking);
         return states;
+    }
+
+    private Task<IReadOnlyDictionary<string, SessionFailure>> LoadFailuresAsync() =>
+        _interruptions?.ListFailuresForUserAsync() ?? Task.FromResult<IReadOnlyDictionary<string, SessionFailure>>(new Dictionary<string, SessionFailure>());
+
+    /// <summary>
+    /// A run that finished (not busy) reads Failed when its session's last turn failed, with the provider's words as its
+    /// error: the same mark the session row shows, cleared by the session's next turn. Never written to the run.
+    /// </summary>
+    private static async Task<string> WithFailedTurnAsync(
+        AutomationRun run, string state, Lazy<Task<IReadOnlyDictionary<string, SessionFailure>>> failures)
+    {
+        if (state != AutomationRunState.Done || run.SessionId is null)
+            return state;
+
+        if (!(await failures.Value).TryGetValue(run.SessionId, out var failure))
+            return state;
+
+        if (!string.IsNullOrWhiteSpace(failure.Message))
+            run.Error = failure.Message;
+        return AutomationRunState.Failed;
     }
 
     /// <summary>
