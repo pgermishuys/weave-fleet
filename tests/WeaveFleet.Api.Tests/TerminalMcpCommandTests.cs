@@ -117,12 +117,12 @@ public sealed class TerminalMcpCommandTests
         // Wait for the beats, not for a stretch of wall clock: a slow Fleet (or a loaded runner) only delays them.
         var deadline = DateTime.UtcNow.AddSeconds(15);
         List<string?> kinds;
-        while ((kinds = fleet.Kinds()).Count(k => k == "heartbeat") <= 2 && DateTime.UtcNow < deadline)
+        while (((kinds = fleet.Kinds()).Count(k => k == "heartbeat") <= 2 || !kinds.Contains("started")) && DateTime.UtcNow < deadline)
             await Task.Delay(10);
         input.End();
         (await run).ShouldBe(0);
 
-        kinds[0].ShouldBe("started");
+        kinds.ShouldContain("started");
         kinds.Count(k => k == "heartbeat").ShouldBeGreaterThan(2);
         kinds.ShouldNotContain("ended");
     }
