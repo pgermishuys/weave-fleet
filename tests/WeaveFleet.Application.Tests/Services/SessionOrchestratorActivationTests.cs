@@ -106,6 +106,24 @@ public sealed class SessionOrchestratorActivationTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task a_harness_whose_process_is_gone_is_replaced_by_waking_the_session_with_its_token()
+    {
+        SeedSession(resumeToken: "token-saved");
+        // The harness's process exited while the session sat idle: it can't take a prompt.
+        var dead = new FakeHarnessSession("inst-asleep") { ProcessGone = true, Status = HarnessSessionStatus.Error };
+        _builder.InstanceTracker.Register("inst-asleep", dead);
+        var sut = _builder.Build();
+
+        var result = await sut.ActivateSessionAsync(SessionId);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.ShouldBeSameAs(_woken);
+        _runtime.ResumeCalls.ShouldHaveSingleItem().ResumeToken.ShouldBe("token-saved");
+        _builder.InstanceTracker.Get("inst-asleep").ShouldBeNull();
+        _builder.InstanceTracker.Get("inst-woken").ShouldBeSameAs(_woken);
+    }
+
+    [Fact]
     public async Task a_session_that_is_gone_is_not_found()
     {
         var sut = _builder.Build();

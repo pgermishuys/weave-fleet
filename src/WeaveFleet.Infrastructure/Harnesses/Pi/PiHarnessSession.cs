@@ -132,6 +132,11 @@ internal sealed class PiHarnessSession : IHarnessSession
 
     public HarnessSessionStatus Status => _status;
 
+    /// <inheritdoc />
+    public bool ProcessGone => Volatile.Read(ref _processGone);
+
+    private bool _processGone;
+
     internal void UpdateState(PiState state)
     {
         UpdateResumeState(state.SessionFile, state.SessionId);
@@ -591,6 +596,7 @@ internal sealed class PiHarnessSession : IHarnessSession
             return;
         }
 
+        Volatile.Write(ref _processGone, true);
         LogProcessExited(_logger, InstanceId, exitCode, null);
         var turnRunning = _status is HarnessSessionStatus.Running;
         _status = HarnessSessionStatus.Error;

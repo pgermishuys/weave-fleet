@@ -21,6 +21,7 @@ public sealed class FakeHarnessSession : IHarnessSession
     public string HarnessType { get; set; } = "opencode";
     public string? ResumeToken { get; set; }
     public HarnessSessionStatus Status { get; set; } = HarnessSessionStatus.Running;
+    public bool ProcessGone { get; set; }
 
     // ── Call-tracking for assertions ─────────────────────────────────────────
 
