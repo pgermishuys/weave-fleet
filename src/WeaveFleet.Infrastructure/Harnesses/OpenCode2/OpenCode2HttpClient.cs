@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
@@ -756,7 +757,7 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             }
 
             if (error?.Message is { Length: > 0 } message)
-                throw new HarnessSignInException(message.Length > 300 ? message[..300] : message, notFound: response.StatusCode == HttpStatusCode.NotFound);
+                throw new HarnessSignInException(message.Length > 300 ? TextCut.Head(message, 300) : message, notFound: response.StatusCode == HttpStatusCode.NotFound);
         }
 
         throw new HttpRequestException(
@@ -824,7 +825,7 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
 
         var body = ReadableBody(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
         if (body.Length > 500)
-            body = body[..500];
+            body = TextCut.Head(body, 500);
         throw new HttpRequestException(
             $"OpenCode 2 couldn't {action}: {(int)response.StatusCode} {response.ReasonPhrase}. {body}".TrimEnd(),
             inner: null,

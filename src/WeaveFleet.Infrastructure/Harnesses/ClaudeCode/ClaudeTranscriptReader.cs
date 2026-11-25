@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -131,7 +132,7 @@ internal static class ClaudeTranscriptReader
         var trimmed = text?.ReplaceLineEndings(" ").Trim();
         if (string.IsNullOrEmpty(trimmed))
             return null;
-        return trimmed.Length <= 120 ? trimmed : trimmed[..119].TrimEnd() + "…";
+        return trimmed.Length <= 120 ? trimmed : TextCut.Head(trimmed, 119).TrimEnd() + "…";
     }
 
     private sealed class ConversationBuilder(SortedSet<string> unknown)

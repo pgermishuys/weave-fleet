@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -771,7 +772,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         return new AgentBrowserResult
         {
             Tab = await InfoAsync(page, ct),
-            Content = content.Length <= MaxText ? content : content[..MaxText],
+            Content = content.Length <= MaxText ? content : TextCut.Head(content, MaxText),
             Truncated = truncated || content.Length > MaxText,
         };
     }
@@ -796,7 +797,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
 
     private static string Squash(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    private static string Clean(string text, int max) => text.Length <= max ? text : text[..max];
+    private static string Clean(string text, int max) => text.Length <= max ? text : TextCut.Head(text, max);
 
     private static async Task<AgentBrowserResult> EvaluateAsync(Page page, AgentBrowserAction action, AgentBrowserLimits limits, CancellationToken ct)
     {
@@ -1000,7 +1001,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (text.Length == 0)
             return new AgentBody("empty");
         var max = Math.Clamp(maxChars ?? 4000, 1, 20_000);
-        return text.Length <= max ? new AgentBody("text", text) : new AgentBody("text", text[..max], Truncated: true);
+        return text.Length <= max ? new AgentBody("text", text) : new AgentBody("text", TextCut.Head(text, max), Truncated: true);
     }
 
     private static async Task<AgentBrowserResult> DialogAsync(Page page, AgentBrowserAction action, CancellationToken ct)
@@ -1626,7 +1627,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
                 (++tab.ConsoleSeq).ToString(CultureInfo.InvariantCulture),
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 level,
-                truncated ? text[..2000] : text,
+                truncated ? TextCut.Head(text, 2000) : text,
                 truncated,
                 source?.Url is { Length: > 0 } url ? url : null,
                 source?.Line,

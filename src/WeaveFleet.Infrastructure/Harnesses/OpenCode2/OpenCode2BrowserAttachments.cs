@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -502,7 +503,7 @@ internal static class OpenCode2BrowserJson
     public static JsonObject Tab(AgentTab tab) => Object(new JsonObject
     {
         ["id"] = tab.Id,
-        ["url"] = tab.Url.Length <= 16_384 ? tab.Url : tab.Url[..16_384],
+        ["url"] = tab.Url.Length <= 16_384 ? tab.Url : TextCut.Head(tab.Url, 16_384),
         ["title"] = Cut(tab.Title),
         ["loading"] = tab.Loading,
         ["loadError"] = tab.LoadError is { } error ? Cut(error) : null,
@@ -574,5 +575,5 @@ internal static class OpenCode2BrowserJson
         return json;
     }
 
-    private static string Cut(string text) => text.Length <= Short ? text : text[..Short];
+    private static string Cut(string text) => text.Length <= Short ? text : TextCut.Head(text, Short);
 }

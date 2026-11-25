@@ -145,7 +145,7 @@ public sealed class GitHubSessionSourceProvider(
 
         var truncated = markdown.Length > MaxContextCharacters;
         var preview = truncated
-            ? markdown[..MaxContextCharacters]
+            ? TextCut.Head(markdown, MaxContextCharacters)
             : markdown;
 
         return new ResolvedSessionSource(

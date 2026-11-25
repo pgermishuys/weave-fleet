@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Text;
 
 namespace WeaveFleet.Application.Reports;
@@ -100,7 +101,7 @@ public static class ProblemReportComposer
         if (text.Length > MaxTitleLength)
         {
             var cut = text.LastIndexOf(' ', MaxTitleLength);
-            text = (cut > MaxTitleLength / 2 ? text[..cut] : text[..MaxTitleLength]).TrimEnd(',', ';', ':') + "…";
+            text = (cut > MaxTitleLength / 2 ? text[..cut] : TextCut.Head(text, MaxTitleLength)).TrimEnd(',', ';', ':') + "…";
         }
 
         return text.Length == 0 ? "Problem report" : text;

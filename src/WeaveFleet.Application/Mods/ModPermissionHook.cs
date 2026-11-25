@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Buffers;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -109,7 +110,7 @@ public sealed partial class ModPermissionHook(
 
         var text = reason.GetString()!.Trim();
         if (text.Length > MaxReasonLength)
-            text = text[..MaxReasonLength];
+            text = TextCut.Head(text, MaxReasonLength);
         var mod = o.TryGetProperty("mod", out var name) && name.ValueKind == JsonValueKind.String && name.GetString() is { Length: > 0 } n ? n : "A mod";
         return $"{mod}: {text}";
     }

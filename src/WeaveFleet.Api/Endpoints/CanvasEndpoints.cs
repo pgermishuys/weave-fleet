@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Text.Json;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Pages;
@@ -98,7 +99,7 @@ public static class CanvasEndpoints
     // Room for a page of many questions sending every answer at once (client page-bridge.ts MAX_CHOICE_LENGTH).
     private const int MaxChoiceValue = 16_000;
 
-    private static string Shorten(string summary) => summary.Length <= 200 ? summary : summary[..200];
+    private static string Shorten(string summary) => summary.Length <= 200 ? summary : TextCut.Head(summary, 200);
 
     private static async Task<IResult> EndChoiceAsync(
         string id, string callId, HttpContext http, SessionService sessionService, PageChoices choices, PageChoiceAnswer answer)

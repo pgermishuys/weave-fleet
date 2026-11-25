@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Domain.Repositories;
 
@@ -77,7 +78,7 @@ public static class AgentMemory
         if (string.IsNullOrWhiteSpace(how))
             return null;
         var line = string.Join(' ', how.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        return line.Length <= MaxHowLength ? line : line[..MaxHowLength].TrimEnd();
+        return line.Length <= MaxHowLength ? line : TextCut.Head(line, MaxHowLength).TrimEnd();
     }
 
     /// <summary>The longest a learned note lasts however often it was learned again, in days of use.</summary>

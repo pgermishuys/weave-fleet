@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -189,7 +190,7 @@ public sealed partial class DeviceGrantService(
         }
     }
 
-    private static string Clip(string value, int max) => value.Length <= max ? value : value[..max].TrimEnd();
+    private static string Clip(string value, int max) => value.Length <= max ? value : TextCut.Head(value, max).TrimEnd();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Couldn't remove a phone on {Machine} yet; trying again when it answers.")]
     private static partial void LogRemoveWaits(ILogger logger, string machine);
