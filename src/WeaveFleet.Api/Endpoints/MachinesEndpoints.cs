@@ -85,7 +85,7 @@ public static class MachinesEndpoints
                     $"{name} only listens on this machine, so a new server can't reach it. Let others reach it first (Settings → Machines), then make a join code."));
 
             var code = joinCodes.Create();
-            return Results.Ok(new JoinCodeResponse(code.ManualCode, code.ExpiresAt, addresses, JoinTarget.Format(addresses, code.ManualCode), name));
+            return Results.Ok(new JoinCodeResponse(code.ManualCode, code.ExpiresAt, addresses, JoinTarget.Format(addresses, code.ManualCode), name, MachineEndpoints.SecondsLeft(code.ExpiresAt)));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<JoinCodeResponse>(200)

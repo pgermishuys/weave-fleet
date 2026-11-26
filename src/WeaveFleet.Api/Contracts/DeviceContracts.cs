@@ -18,13 +18,15 @@ public sealed record PairingPayload(int V, string MachineId, string MachineName,
 /// <summary>A new pairing code.</summary>
 /// <param name="Secret">The one-time secret. Shown once; never stored in the clear.</param>
 /// <param name="ManualCode">The same code in a form someone can type, <c>XXXX-XXXX</c>.</param>
+/// <param name="ExpiresInSeconds">How long the code has left, by this machine's clock: a screen whose own clock differs counts down from this, not from <c>ExpiresAt</c>.</param>
 /// <param name="Url">What the QR code encodes: <c>&lt;baseUrl&gt;/pair#p=&lt;base64url(payload)&gt;</c>.</param>
 public sealed record CreatePairingResponse(
     string Secret,
     string ManualCode,
     DateTimeOffset ExpiresAt,
     string Url,
-    PairingPayload Payload);
+    PairingPayload Payload,
+    int ExpiresInSeconds = 0);
 
 /// <summary>Names a pairing code by its secret (from the QR code) or its manual code (typed).</summary>
 public sealed record PairingPreviewRequest(string? Secret, string? ManualCode);
@@ -66,7 +68,7 @@ public sealed record PairMachineRequest(string? BaseUrl, string? Code);
 /// <param name="Code">The code, <c>XXXX-XXXX</c>. Good for 30 minutes and one machine.</param>
 /// <param name="Addresses">Where the new machine reaches this one, best first.</param>
 /// <param name="Target">What <c>install.sh --join</c> takes: the addresses, <c>#</c>, the code.</param>
-public sealed record JoinCodeResponse(string Code, DateTimeOffset ExpiresAt, IReadOnlyList<string> Addresses, string Target, string MachineName);
+public sealed record JoinCodeResponse(string Code, DateTimeOffset ExpiresAt, IReadOnlyList<string> Addresses, string Target, string MachineName, int ExpiresInSeconds = 0);
 
 /// <summary>Joins this machine to the Fleet a join line came from (<c>fleet node join</c> asks this machine to).</summary>
 public sealed record JoinFleetRequest(string? Target);

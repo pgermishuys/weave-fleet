@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import QrCode from "@/components/settings/QrCode.vue";
 import ReachDialog from "@/components/settings/ReachDialog.vue";
 import { useMachineReach } from "@/composables/use-machine-reach";
-import { createPairingCode, NoPhoneAddressError, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
+import { codeDeadline, createPairingCode, NoPhoneAddressError, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
 import { pairingAddresses } from "@/lib/pairing";
 import { reachLines } from "@/lib/phone-readiness";
 import { ErrorNote } from "@/components/ui/error-note";
@@ -59,7 +59,9 @@ const reaching = computed(() => reachLines(code.value
   : [props.publicUrl, ...addressesNow.value.map((address) => address.url)].filter((url): url is string => !!url)));
 /** The address a phone opens on the web to type the code: the first one the code carries. */
 const firstUrl = computed(() => code.value?.payload.url ?? "");
-const secondsLeft = computed(() => code.value ? Math.max(0, Math.round((Date.parse(code.value.expiresAt) - now.value) / 1000)) : 0);
+/** When the code runs out by this screen's clock (`codeDeadline`), fixed when it arrives. */
+const deadline = shallowRef(0);
+const secondsLeft = computed(() => code.value ? Math.max(0, Math.round((deadline.value - now.value) / 1000)) : 0);
 const countdown = computed(() => `${Math.floor(secondsLeft.value / 60)}:${String(secondsLeft.value % 60).padStart(2, "0")}`);
 
 function onReachChanged(): void {
@@ -80,6 +82,7 @@ async function start(ownAddress?: string): Promise<void> {
     code.value = await createPairingCode(ownAddress ?? (props.publicUrl || undefined));
     devicesAtStart = [...props.deviceNames];
     now.value = Date.now();
+    deadline.value = codeDeadline(code.value, now.value);
     startTimer();
   } catch (failure) {
     if (failure instanceof NoPhoneAddressError) {
