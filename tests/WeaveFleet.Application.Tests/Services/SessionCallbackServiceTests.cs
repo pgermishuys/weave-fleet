@@ -378,6 +378,52 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
         callback.Status.ShouldBe(SessionCallbackStatuses.Fired);
     }
 
+    private Task StartBackgroundWorkAsync(string workId, string kind = "shell")
+        => _builder.DelegationRepository.InsertAsync(new Delegation
+        {
+            Id = $"d-{workId}",
+            ParentSessionId = Source,
+            Title = "Bash",
+            Status = "running",
+            CreatedAt = "2026-01-01T00:00:00Z",
+            UpdatedAt = "2026-01-01T00:00:00Z",
+            Kind = kind,
+            WorkId = workId,
+            Background = true,
+        });
+
+    [Theory]
+    [InlineData("shell")]
+    [InlineData("subagent")]
+    public async Task A_source_that_ends_its_turn_with_background_work_running_isnt_reported_finished_until_the_work_ends(string kind)
+    {
+        SeedLiveTarget();
+        var callback = Register(status: SessionCallbackStatuses.Pending);
+        var dispatcher = BuildDispatcher();
+
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        await dispatcher.Pending;
+        await StartBackgroundWorkAsync("w1", kind);
+
+        // The agent's turn ends with its work still going; the half answer isn't the result.
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+
+        _live.SendPromptCalls.ShouldBeEmpty();
+        callback.Status.ShouldBe(SessionCallbackStatuses.Started);
+
+        // The work ends, the agent wakes, answers and idles again: now the target hears.
+        var work = (await _builder.DelegationRepository.GetByParentSessionIdAsync(Source)).Single();
+        await _builder.DelegationRepository.UpdateStatusAsync(work.Id, "completed", "2026-01-01T00:01:00Z", "2026-01-01T00:01:00Z");
+        dispatcher.Observe(Source, UserId, Reply(Source));
+        await dispatcher.Pending;
+        dispatcher.Observe(Source, UserId, Idled(Source));
+        await dispatcher.Pending;
+
+        _live.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldBe(Completion);
+        callback.Status.ShouldBe(SessionCallbackStatuses.Fired);
+    }
+
     private SessionCallbackDispatcher BuildDispatcher()
     {
         _builder.Build();
@@ -392,7 +438,8 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
                     _builder.Prompting,
                     _builder.ActivityTracker,
                     NullLogger<SessionCallbackService>.Instance,
-                    _outcomes));
+                    _outcomes,
+                    _builder.DelegationRepository));
             }),
             NullLogger<SessionCallbackDispatcher>.Instance,
             _outcomes);
