@@ -217,6 +217,20 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
         _links.All.Where(l => l.SessionId == "s1").Select(l => l.ResourceId).ShouldBe(["acme/rocket#7"]);
     }
 
+    [Fact]
+    public async Task A_fork_pull_request_checked_out_with_gh_is_found_by_the_pull_ref_the_branch_tracks()
+    {
+        // `gh pr checkout 9` for a fork whose branch maintainers can't edit: the local branch tracks refs/pull/9/head of
+        // the base repository, so no pull request has head acme:fix-typo and the branch-name lookup finds none.
+        _git.Git("config", "branch.fix-typo.remote", "origin");
+        _git.Git("config", "branch.fix-typo.merge", "refs/pull/9/head");
+        OnBranch("s1", "fix-typo");
+
+        await _watcher.RunCycleAsync(CancellationToken.None);
+
+        _links.All.Where(l => l.SessionId == "s1").Select(l => l.ResourceId).ShouldBe(["acme/rocket#9"]);
+    }
+
     private void OnBranch(string sessionId, string branch)
         => _links.BranchTargets.Add(new SmartLinkBranchTarget(sessionId, UserId, branch, _git.Path, null));
 
