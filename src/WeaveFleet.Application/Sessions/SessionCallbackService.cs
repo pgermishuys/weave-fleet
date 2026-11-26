@@ -28,7 +28,8 @@ public sealed partial class SessionCallbackService(
     SessionPrompting prompting,
     SessionActivityTracker activity,
     ILogger<SessionCallbackService> logger,
-    SessionTurnOutcomes? outcomes = null)
+    SessionTurnOutcomes? outcomes = null,
+    IDelegationRepository? delegations = null)
 {
     /// <summary>How long one delivery may take, resuming the target included, before it's left for the next try.</summary>
     internal static readonly TimeSpan DeliveryTimeout = TimeSpan.FromMinutes(2);
@@ -61,6 +62,12 @@ public sealed partial class SessionCallbackService(
             ct.ThrowIfCancellationRequested();
 
             if (cb.SourceSessionId != idledSessionId && InTurn(activity.GetEffectiveActivityStatus(cb.SourceSessionId)))
+                continue;
+
+            // A turn that ended with background work still running (a shell, a monitor, a subagent) isn't the result:
+            // the agent wakes when the work ends and answers again, and the target hears that turn's end.
+            if (delegations is not null
+                && (await delegations.GetByParentSessionIdAsync(cb.SourceSessionId).ConfigureAwait(false)).Any(w => w.IsRunning))
                 continue;
 
             // User-scoped: a source that isn't this user's comes back null.
