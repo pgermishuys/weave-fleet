@@ -5,7 +5,8 @@ import { Check, Copy, TriangleAlert } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { ErrorNote } from "@/components/ui/error-note";
 import { Spinner } from "@/components/ui/spinner";
-import { formatCountdown, toTimestamp } from "@/lib/format";
+import { formatCountdown } from "@/lib/format";
+import { codeDeadline } from "@/lib/devices-api";
 import { useMachinesStore, type JoinCode } from "@/stores/machines";
 
 /**
@@ -39,7 +40,9 @@ let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
 
 const line = computed(() => code.value ? `curl -fsSL ${INSTALL_URL} | sh -s -- --join '${code.value.target}'` : "");
-const leftMs = computed(() => code.value ? toTimestamp(code.value.expiresAt) - now.value : 0);
+/** When the code runs out by this screen's clock (`codeDeadline`), fixed when it arrives. */
+const deadline = shallowRef(0);
+const leftMs = computed(() => code.value ? deadline.value - now.value : 0);
 const expired = computed(() => code.value !== null && leftMs.value <= 0);
 
 async function make(): Promise<void> {
@@ -51,6 +54,7 @@ async function make(): Promise<void> {
     knownIds = new Set(connections.value.map((machine) => machine.id));
     code.value = await machines.makeJoinCode();
     now.value = Date.now();
+    deadline.value = codeDeadline(code.value, now.value);
     scheduleLook();
   } catch (error) {
     code.value = null;

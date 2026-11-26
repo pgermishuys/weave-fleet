@@ -44,8 +44,18 @@ export interface PairingCodeResponse {
   secret: string;
   manualCode: string;
   expiresAt: string;
+  /** What's left by the machine's own clock; absent from an older machine. */
+  expiresInSeconds?: number;
   url: string;
   payload: PairingPayloadV1;
+}
+
+/**
+ * When a code runs out by this screen's clock. The machine that made it counts in its own time, which can differ from
+ * the screen's by minutes; `expiresInSeconds` doesn't depend on either clock, so it wins where the machine says it.
+ */
+export function codeDeadline(code: { expiresAt: string; expiresInSeconds?: number }, receivedAt: number): number {
+  return typeof code.expiresInSeconds === "number" ? receivedAt + code.expiresInSeconds * 1000 : Date.parse(code.expiresAt);
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {

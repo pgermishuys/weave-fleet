@@ -75,7 +75,7 @@ public static class DeviceEndpoints
 
             var code = codes.Create();
             var payload = new PairingPayload(1, identity.Id, identity.Name ?? Environment.MachineName, urls[0], code.Secret, urls);
-            return Results.Ok(new CreatePairingResponse(code.Secret, code.ManualCode, code.ExpiresAt, PairingAddresses.Link(payload), payload));
+            return Results.Ok(new CreatePairingResponse(code.Secret, code.ManualCode, code.ExpiresAt, PairingAddresses.Link(payload), payload, MachineEndpoints.SecondsLeft(code.ExpiresAt)));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<CreatePairingResponse>(200)

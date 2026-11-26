@@ -174,6 +174,8 @@ export interface MachineCandidate {
 export interface JoinCode {
   code: string;
   expiresAt: string;
+  /** What's left by the machine's own clock; absent from an older machine. See `codeDeadline`. */
+  expiresInSeconds?: number;
   addresses: string[];
   target: string;
   machineName: string;

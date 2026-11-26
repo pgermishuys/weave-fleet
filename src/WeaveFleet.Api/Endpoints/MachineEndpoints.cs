@@ -111,6 +111,10 @@ public static class MachineEndpoints
     /// An absolute http(s) URL reduced to scheme, host, port and path, without a trailing slash, query or fragment.
     /// Null when <paramref name="value"/> isn't one.
     /// </summary>
+    /// <summary>Whole seconds until <paramref name="expiresAt"/> by this machine's clock, never negative.</summary>
+    internal static int SecondsLeft(DateTimeOffset expiresAt) =>
+        (int)Math.Max(0, Math.Ceiling((expiresAt - DateTimeOffset.UtcNow).TotalSeconds));
+
     internal static string? NormalizeBaseUrl(string value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)

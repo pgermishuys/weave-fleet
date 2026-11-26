@@ -602,6 +602,8 @@ public sealed class FleetRosterTests
         made.GetProperty("code").GetString()!.ShouldMatch("^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$");
         made.GetProperty("addresses").EnumerateArray().Select(a => a.GetString()).ShouldContain($"https://{inviting.Name}.test");
         (made.GetProperty("expiresAt").GetDateTimeOffset() - DateTimeOffset.UtcNow).ShouldBeInRange(TimeSpan.FromMinutes(29), TimeSpan.FromMinutes(31));
+        // For a screen whose clock differs from this machine's: it counts down from this, not from expiresAt.
+        made.GetProperty("expiresInSeconds").GetInt32().ShouldBeInRange(29 * 60, 30 * 60);
         return made.GetProperty("target").GetString()!;
     }
 

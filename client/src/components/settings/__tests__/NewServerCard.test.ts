@@ -78,6 +78,19 @@ describe("Add a machine → On a new server", () => {
     expect(wrapper.get("[data-testid='machines-new-server-waiting']").text()).toContain("expires in 30 s");
   });
 
+  it("counts down from what the machine says is left, whatever this screen's clock reads", async () => {
+    // The screen's clock is 40 minutes ahead of the machine's: by it, the machine's expiry is already 10 minutes past.
+    routes["/api/machines/join-code"] = () => { made++; return json({ ...joinCode(new Date(NOW.getTime() - 10 * 60_000)), expiresInSeconds: 30 * 60 }); };
+    const wrapper = mount(NewServerCard);
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='machines-new-server-expired']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='machines-new-server-waiting']").text()).toContain("expires in 30 min");
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(wrapper.get("[data-testid='machines-new-server-waiting']").text()).toContain("expires in 20 min");
+  });
+
   it("copies the whole line", async () => {
     const wrapper = mount(NewServerCard);
     await flushPromises();
