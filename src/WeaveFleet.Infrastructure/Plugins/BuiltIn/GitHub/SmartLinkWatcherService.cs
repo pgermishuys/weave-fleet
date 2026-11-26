@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.GitHub;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;
@@ -220,6 +221,18 @@ internal sealed partial class SmartLinkWatcherService(
             if (remote is not { } repo)
                 continue;
 
+            // `gh pr checkout` of a fork's pull request (maintainers can't edit it) leaves a branch that tracks the base
+            // repository's refs/pull/N/head, so no pull request has head {owner}:{branch}: the ref names it instead.
+            if (await PullRefNumberAsync(target.Directory, target.Branch).ConfigureAwait(false) is { } pullNumber)
+            {
+                var checkedOut = await repository.InsertDetectedAsync(
+                    NewLink(target.SessionId, target.UserId, new GitHubLinkReference(repo.Owner, repo.Repo, pullNumber, GitHubLinkReference.PullRequest), SmartLinkRelationships.Own),
+                    restoreDismissed: false,
+                    ct).ConfigureAwait(false);
+                if (checkedOut is not null)
+                    await BroadcastAsync(checkedOut, ct).ConfigureAwait(false);
+            }
+
             // Sessions on the same branch ask the same question; the cycle sends it once.
             var head = Uri.EscapeDataString($"{repo.Owner}:{target.Branch}");
             var response = await cycle.GetAsync(
@@ -252,6 +265,25 @@ internal sealed partial class SmartLinkWatcherService(
             }
         }
     }
+
+    /// <summary>The pull request a branch tracks through <c>refs/pull/N/head</c> (set by <c>gh pr checkout</c>), or null.</summary>
+    private static async Task<int?> PullRefNumberAsync(string directory, string branch)
+    {
+        try
+        {
+            var merge = await GitCommand.RunAsync(directory, TimeSpan.FromSeconds(5), "config", "--get", $"branch.{branch}.merge").ConfigureAwait(false);
+            var match = PullRefRegex().Match(merge.Trim());
+            return match.Success && int.TryParse(match.Groups["number"].Value, CultureInfo.InvariantCulture, out var number) && number > 0 ? number : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // No such setting (git exits 1), or no git here: the branch-name lookup is all there is.
+            return null;
+        }
+    }
+
+    [GeneratedRegex(@"^refs/pull/(?<number>\d+)/head$", RegexOptions.CultureInvariant)]
+    private static partial Regex PullRefRegex();
 
     internal static bool ClosedBeforeSessionStarted(JsonObject pull, string? sessionStartedAt)
         => DateTimeOffset.TryParse(sessionStartedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var started)
