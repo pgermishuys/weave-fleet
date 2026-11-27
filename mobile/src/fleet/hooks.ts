@@ -1,6 +1,7 @@
 // React side of the fleet modules: the app-wide manager, foreground/background, and the session stream.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
+import { foregroundChange } from "~/fleet/foreground-core";
 import { applyDomainEvent, createSessionStreamState, type SessionStreamState } from "@fleet/lib/domain-event-reducer";
 import { isCanvasEvent, type DomainEvent } from "@fleet/lib/domain-events";
 import type { SessionSnapshot } from "@fleet/lib/session-snapshot";
@@ -14,10 +15,14 @@ export const manager = new FleetManager(machines, undefined, undefined, new Rost
 /** Stops the sockets while the app is in the background and starts them again when it comes back. */
 export function useForegroundConnections() {
   useEffect(() => {
+    let foreground = AppState.currentState !== "background";
     const subscription = AppState.addEventListener("change", (next) => {
-      // "inactive" is iOS's Control Center, app switcher or a permission alert: the app is still in front.
-      if (next === "background") manager.setForeground(false);
-      else if (next === "active") manager.setForeground(true);
+      // "inactive" is iOS's Control Center, app switcher or a permission alert: the app is still in front, and
+      // coming back from it is not coming back from the background.
+      const change = foregroundChange(foreground, next);
+      if (change === null) return;
+      foreground = change;
+      manager.setForeground(change);
     });
     return () => subscription.remove();
   }, []);

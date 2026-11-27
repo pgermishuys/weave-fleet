@@ -218,3 +218,17 @@ describe("the owner's order", () => {
     await expect(manager.reorder(ID, [LAN, TS])).rejects.toThrow("changed meanwhile");
   });
 });
+
+describe("coming to the front", () => {
+  test("setForeground(true) on a phone that never left refetches every list (why hooks.ts guards it)", async () => {
+    answering.add(LAN);
+    holding.add(LAN);
+    const { manager, hub } = await start([machine(ID, LAN, [address(LAN, "lan")])]);
+    await until(() => hub().state === "connected");
+    await new Promise((r) => setTimeout(r, 100));
+    const lists = () => requests.filter((r) => r.url.includes("/api/sessions")).length;
+    const before = lists();
+    manager.setForeground(true);
+    await until(() => lists() > before);
+  });
+});
