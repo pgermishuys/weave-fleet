@@ -245,6 +245,12 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// <summary>The clock for the idle shutdown and the turn timeout; the system's unless a test says otherwise.</summary>
     internal TimeProvider Time { get; init; } = TimeProvider.System;
 
+    /// <summary>
+    /// How long a turn that owes a wake turn (<see cref="Turn.OwesWake"/>) waits after its <c>result</c> for Claude to
+    /// start it before it counts as over. The wake turn opens with its <c>init</c> as soon as the result is out.
+    /// </summary>
+    internal TimeSpan WakeGrace { get; init; } = TimeSpan.FromSeconds(5);
+
     /// <summary>The background work Claude Code has reported and not yet reported finished, by task id.</summary>
     internal IReadOnlyCollection<string> BackgroundWork
     {
@@ -1307,6 +1313,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         _turn = null;
         _retrying = false;
         turn.Timeout?.Dispose();
+        turn.WakeWait?.Dispose();
         if (_status is not HarnessSessionStatus.Stopping and not HarnessSessionStatus.Stopped)
             _status = HarnessSessionStatus.Idle;
         ArmIdleTimer();
@@ -1328,6 +1335,24 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         await process.StopForTimeoutAsync(_shutdownTimeout).ConfigureAwait(false);
     }
 
+    private void NoteNotice()
+    {
+        lock (_gate)
+        {
+            if (_turn is { } turn)
+                turn.OwesWake = true;
+        }
+    }
+
+    private void NoteNoticeTaken()
+    {
+        lock (_gate)
+        {
+            if (_turn is { } turn)
+                turn.OwesWake = false;
+        }
+    }
+
     /// <summary>The process this line came from, and the turn it belongs to; a line with no turn starts one.</summary>
     private void JoinTurn(ClaudeCodeProcessManager processManager)
     {
@@ -1339,9 +1364,20 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
             woke = _turn is null;
             if (woke)
+            {
                 BeginTurn(processManager);
+            }
             else
+            {
                 _turn!.Process ??= processManager;
+                // The wake turn the last one's end waited for has started: it goes on as one turn.
+                if (_turn.WakeWait is { } waiting)
+                {
+                    waiting.Dispose();
+                    _turn.WakeWait = null;
+                    _turn.OwesWake = false;
+                }
+            }
         }
 
         if (woke)
@@ -1507,7 +1543,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                             await AddCompactionDividerAsync(divider).ConfigureAwait(false);
                     }
                     else
+                    {
+                        if (system is { Subtype: "task_notification", ParentToolUseId: null })
+                            NoteNotice();
                         await ReportWorkAsync(TrackBackgroundWork(system), children).ConfigureAwait(false);
+                    }
                 }
                 else if (msg is ClaudeCodeStreamEvent { Event: { } streamed } streamEvent)
                 {
@@ -1583,6 +1623,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     }
                     else
                     {
+                        // The next tool round's request carries every notice so far: none is left for a wake turn.
+                        if (userMsg.Message?.Content?.Any(block => block is ClaudeCodeToolResultBlock) == true)
+                            NoteNoticeTaken();
                         await ClaimTranscriptEntriesAsync(userMsg.Uuid).ConfigureAwait(false);
                         await ApplyToolResultsAsync(_root, userMsg).ConfigureAwait(false);
                     }
@@ -1944,6 +1987,22 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         if (turn is null)
             return;
 
+        // A background task's notice came after the last tool round: Claude answers it in a turn of its own right after
+        // this result. Saying idle now would tell whoever waits on this session (a parent's onComplete) the half answer.
+        if (limitFailure is null && !_aborting && result.IsError != true)
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_turn, turn) && turn.OwesWake)
+                {
+                    turn.OwesWake = false;
+                    turn.WakeWait?.Dispose();
+                    turn.WakeWait = Time.CreateTimer(_ => _ = EndWaitingTurnAsync(turn, result), null, WakeGrace, Timeout.InfiniteTimeSpan);
+                    return;
+                }
+            }
+        }
+
         lock (_gate)
         {
             if (!EndTurn(turn))
@@ -1954,6 +2013,19 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         if (limitFailure is not null)
             await _eventChannel.Writer.WriteAsync(ClaudeCodeMapper.CreateSessionErrorEvent(_fleetSessionId, limitFailure), CancellationToken.None)
                 .ConfigureAwait(false);
+
+        foreach (var evt in ClaudeCodeMapper.ToFrontendEvents(result, _fleetSessionId))
+            await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>The wake turn a result waited for never started: the turn ends as that result said.</summary>
+    private async Task EndWaitingTurnAsync(Turn turn, ClaudeCodeResultMessage result)
+    {
+        lock (_gate)
+        {
+            if (turn.WakeWait is null || !EndTurn(turn))
+                return;
+        }
 
         foreach (var evt in ClaudeCodeMapper.ToFrontendEvents(result, _fleetSessionId))
             await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
@@ -2699,5 +2771,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         public ClaudeCodeProcessManager? Process { get; set; }
 
         public ITimer? Timeout { get; set; }
+
+        /// <summary>A background task's notice came after the turn's last tool round, so Claude answers it in a turn of its own after <c>result</c>.</summary>
+        public bool OwesWake { get; set; }
+
+        /// <summary>Set while the turn's end waits to see whether that wake turn starts (<see cref="ClaudeCodeHarnessSession.WakeGrace"/>).</summary>
+        public ITimer? WakeWait { get; set; }
     }
 }
