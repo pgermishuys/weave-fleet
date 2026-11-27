@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- One safe way to write a script a test runs (see the file), shared with Infrastructure.Tests. -->
+    <Compile Include="..\WeaveFleet.Infrastructure.Tests\TestExecutable.cs" Link="TestExecutable.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="Progress\Fixtures\*.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\contracts\worktree-naming-cases.json" CopyToOutputDirectory="PreserveNewest" Link="contracts\worktree-naming-cases.json" />
   </ItemGroup>

@@ -5,10 +5,13 @@ namespace WeaveFleet.Infrastructure.Tests;
 /// <summary>
 /// A test that writes a script and starts it must write it through <see cref="TestExecutable"/>. Writing it in this
 /// process leaves a write handle that a process another test forks inherits, and starting the file then fails with
-/// "Text file busy" (ETXTBSY): the flake that failed main's CI on 27 November 2026.
+/// "Text file busy" (ETXTBSY): the flake that failed main's CI on 27 November 2026. SessionFileWriteTests is left out:
+/// it checks permissions and inodes and never runs the file.
 /// </summary>
 public sealed class TestExecutableUsageTests : IDisposable
 {
+    private static readonly string[] Projects = ["WeaveFleet.Infrastructure.Tests", "WeaveFleet.Application.Tests"];
+
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"fleet-test-exec-{Guid.NewGuid():N}");
 
     public TestExecutableUsageTests() => Directory.CreateDirectory(_dir);
@@ -27,9 +30,10 @@ public sealed class TestExecutableUsageTests : IDisposable
             root = Path.GetDirectoryName(root);
         root.ShouldNotBeNull();
 
-        var offenders = Directory.EnumerateFiles(Path.Combine(root, "tests", "WeaveFleet.Infrastructure.Tests"), "*.cs", SearchOption.AllDirectories)
+        var offenders = Projects
+            .SelectMany(project => Directory.EnumerateFiles(Path.Combine(root, "tests", project), "*.cs", SearchOption.AllDirectories))
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .Where(file => Path.GetFileName(file) is not ("TestExecutable.cs" or "TestExecutableUsageTests.cs" or "FreshExecutableTests.cs"))
+            .Where(file => Path.GetFileName(file) is not ("TestExecutable.cs" or "TestExecutableUsageTests.cs" or "FreshExecutableTests.cs" or "SessionFileWriteTests.cs"))
             .SelectMany(file => File.ReadLines(file).Select((line, index) => (file, line, number: index + 1)))
             .Where(x => x.line.Contains("SetUnixFileMode") && x.line.Contains("UserWrite") && x.line.Contains("UserExecute"))
             .Select(x => $"{Path.GetRelativePath(root, x.file)}:{x.number}")

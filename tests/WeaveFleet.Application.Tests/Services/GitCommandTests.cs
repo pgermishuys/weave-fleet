@@ -116,8 +116,7 @@ public sealed class GitCommandTests
         var folder = Directory.CreateTempSubdirectory("fleet-askpass-").FullName;
         var called = Path.Combine(folder, "called");
         var askpass = Path.Combine(folder, "askpass.sh");
-        await File.WriteAllTextAsync(askpass, $"#!/bin/sh\necho asked >> '{called}'\necho secret\n");
-        File.SetUnixFileMode(askpass, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        WeaveFleet.Infrastructure.Tests.TestExecutable.Write(askpass, $"#!/bin/sh\necho asked >> '{called}'\necho secret\n");
 
         var listener = StartListener(out var port);
         var serving = Task.Run(async () =>
