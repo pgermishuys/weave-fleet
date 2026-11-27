@@ -108,6 +108,57 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
         AllText().ShouldNotContain(t => t.StartsWith("Claude Code", StringComparison.Ordinal));
     }
 
+    // Recorded from Claude Code 2.1.289 (haiku): a background command ends while the reply to its last tool round is
+    // being written; its notice comes before the reply, and Claude answers it in a turn of its own after `result`.
+    private static readonly string[] NoticeMidReply =
+    [
+        """{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-haiku-5-5"}""",
+        """{"type":"assistant","message":{"id":"msg_A","role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"sleep 6; echo bgdone","run_in_background":true}}]},"parent_tool_use_id":null}""",
+        """{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"bk1","task_type":"local_bash","description":"sleep"}],"session_id":"cc-1"}""",
+        """{"type":"system","subtype":"task_started","task_id":"bk1","tool_use_id":"toolu_1","description":"sleep","is_backgrounded":true,"task_type":"local_bash","session_id":"cc-1"}""",
+        """{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":"Command running in background with ID: bk1."}]},"parent_tool_use_id":null}""",
+        """{"type":"system","subtype":"task_notification","task_id":"bk1","tool_use_id":"toolu_1","status":"completed","summary":"done","session_id":"cc-1"}""",
+        """{"type":"system","subtype":"background_tasks_changed","tasks":[],"session_id":"cc-1"}""",
+        """{"type":"assistant","message":{"id":"msg_B","role":"assistant","content":[{"type":"text","text":"The first half of the answer."}]},"parent_tool_use_id":null}""",
+        """{"subtype":"success","is_error":false,"result":"The first half of the answer.","session_id":"cc-1","type":"result"}""",
+        """{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-haiku-5-5"}""",
+        """{"type":"assistant","message":{"id":"msg_C","role":"assistant","content":[{"type":"text","text":"The command finished: the real answer."}]},"parent_tool_use_id":null}""",
+        """{"subtype":"success","is_error":false,"result":"The command finished: the real answer.","session_id":"cc-1","type":"result"}""",
+    ];
+
+    [Fact]
+    public async Task BackgroundNoticeMidReply_DoesNotSayIdleBeforeTheWakeTurnAnswers()
+    {
+        var events = await PumpAsync(NoticeMidReply);
+
+        // Idle fires the parent's onComplete. The notice arrived after the last tool round, so Claude answers it after
+        // `result`: the first result is not the end of what the child has to say.
+        AllText().ShouldBe(["The first half of the answer.", "The command finished: the real answer."]);
+        events.Count(e => e.Type == EventTypes.SessionIdle).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task BackgroundNoticeMidReply_SaysIdleAfterAGraceWhenNoWakeTurnStarts()
+    {
+        var pump = new System.IO.Pipelines.Pipe();
+        await using var process = new ClaudeCodeProcessManager(NullLogger<ClaudeCodeProcessManager>.Instance);
+        var time = (FakeTimeProvider)_session.Time;
+
+        // Up to the first result, then nothing: Claude took the notice into the reply after all.
+        await using var writer = pump.Writer.AsStream();
+        await writer.WriteAsync(Encoding.UTF8.GetBytes(string.Join("\n", NoticeMidReply.Take(9)) + "\n"));
+        var reading = _session.PumpStdoutAsync(new StreamReader(pump.Reader.AsStream()), process);
+        await WaitForAsync(() => AllText().Count == 1);
+        await Task.Delay(100);
+
+        _session.Status.ShouldBe(HarnessSessionStatus.Running);
+        time.Advance(_session.WakeGrace + TimeSpan.FromSeconds(1));
+        await WaitForAsync(() => _session.Status == HarnessSessionStatus.Idle);
+
+        await pump.Writer.CompleteAsync();
+        await reading;
+    }
+
     [Fact]
     public async Task BackgroundWorkStarted_IsTrackedUntilClaudeSaysItEnded()
     {

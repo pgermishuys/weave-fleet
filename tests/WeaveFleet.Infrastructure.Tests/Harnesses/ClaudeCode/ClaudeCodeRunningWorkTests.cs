@@ -87,8 +87,10 @@ public sealed class ClaudeCodeRunningWorkTests : IAsyncLifetime
         // Each child session reads as working while its subagent runs.
         foreach (var child in new[] { NestingCall, BackgroundCall, NestedCall }.Select(Child))
             Statuses(events, child).ShouldBe(["busy", "idle"]);
-        // The session's own turns: the prompt's, then three Claude Code started as its subagents and their work finished.
-        Statuses(events, SessionId).ShouldBe(["busy", "idle", "busy", "idle", "busy", "idle", "busy", "idle"]);
+        // The session's own turns: the prompt's, then the ones Claude Code started as its subagents and their work finished.
+        // A notice that came after a turn's last tool round is answered by the turn that follows its result, so the two
+        // are one turn here: the session isn't idle between them.
+        Statuses(events, SessionId).ShouldBe(["busy", "idle", "busy", "idle"]);
     }
 
     [Fact]
