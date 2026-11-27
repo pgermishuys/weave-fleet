@@ -12,6 +12,9 @@ internal interface IOpenCode2EventSink
 
     void OnEvent(OpenCode2Event evt);
 
+    /// <summary>Whether a turn is running here as far as Fleet knows, which V2's own status is checked against when the stream goes quiet.</summary>
+    bool IsWorking => false;
+
     /// <summary>
     /// The event stream reconnected after a drop: catch up on what was missed. <paramref name="activeSessions"/> are
     /// the sessions with a turn running now. Runs on the event pump before any newer event is delivered.
@@ -123,6 +126,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
+    private readonly Task _quietWatch;
+    private long _lastEventTicks = Environment.TickCount64;
     private TaskCompletionSource _connected = NewConnectedSource();
     private int _stopped;
     private int _outdated;
@@ -150,6 +155,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         }
 
         _pump = Task.Run(PumpAsync, CancellationToken.None);
+        _quietWatch = Task.Run(WatchQuietAsync, CancellationToken.None);
     }
 
     public string OwnerUserId { get; }
@@ -171,6 +177,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     /// <summary>Notes that the server is in use now, so it isn't stopped as idle.</summary>
     public void Touch() => Interlocked.Exchange(ref _lastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
+
+    /// <summary>
+    /// How long the event stream may stay quiet while a session is working before V2's own status is read. A stream
+    /// that is open but lost the event that ends a turn would otherwise leave the session working for ever.
+    /// </summary>
+    internal TimeSpan QuietCheckAfter { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>The clock a sign-in's expiry, a folder's settle time and a catalog change's quiet time are read against.</summary>
     internal TimeProvider Time { get; init; } = TimeProvider.System;
@@ -718,6 +730,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
                         await ResyncAsync(ct).ConfigureAwait(false);
                     }
 
+                    Volatile.Write(ref _lastEventTicks, Environment.TickCount64);
                     Route(evt);
                 }
             }
@@ -745,6 +758,54 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             catch (OperationCanceledException)
             {
                 return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A stream can stay open and lose the event that ends a turn. While a session works and nothing has arrived for
+    /// <see cref="QuietCheckAfter"/>, V2 is asked which sessions run; a working session it doesn't list catches up the
+    /// way it does after a reconnect. A turn that really runs on is left alone.
+    /// </summary>
+    private async Task WatchQuietAsync()
+    {
+        var ct = _stopping.Token;
+        var interval = QuietCheckAfter;
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(interval, ct).ConfigureAwait(false);
+                var heard = Volatile.Read(ref _lastEventTicks);
+                if (Environment.TickCount64 - heard < interval.TotalMilliseconds || !_sinks.Values.Any(sink => sink.IsWorking))
+                    continue;
+
+                var active = await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false);
+                // An event that came while asking says V2 is talking: what it says is the truth.
+                if (Volatile.Read(ref _lastEventTicks) != heard)
+                    continue;
+
+                foreach (var (sessionId, sink) in _sinks.ToArray())
+                {
+                    if (!sink.IsWorking || active.Contains(sessionId))
+                        continue;
+                    try
+                    {
+                        await sink.ResyncAsync(active, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                    {
+                        LogSinkFailed(_logger, "quiet check", ex);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                LogResyncFailed(_logger, ProcessId ?? 0, ex);
             }
         }
     }
@@ -854,6 +915,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         try
         {
             await _pump.ConfigureAwait(false);
+            await _quietWatch.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

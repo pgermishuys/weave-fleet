@@ -121,6 +121,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     public HarnessSessionStatus Status => _status;
 
+    bool IOpenCode2EventSink.IsWorking => _status is HarnessSessionStatus.Running;
+
     public async Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
