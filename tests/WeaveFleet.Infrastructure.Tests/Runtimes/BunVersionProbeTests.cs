@@ -29,9 +29,10 @@ public sealed class BunVersionProbeTests : IDisposable
         var directory = folder is null ? _dir : Path.Combine(_dir, folder);
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, "bun");
-        File.WriteAllText(path, "#!/bin/sh\n" + body + "\n");
-        if (executable && !OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (executable)
+            TestExecutable.Write(path, "#!/bin/sh\n" + body + "\n");
+        else
+            File.WriteAllText(path, "#!/bin/sh\n" + body + "\n");
         return path;
     }
 

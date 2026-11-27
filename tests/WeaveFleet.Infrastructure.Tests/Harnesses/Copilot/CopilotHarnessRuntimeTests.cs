@@ -126,7 +126,7 @@ public sealed class CopilotHarnessRuntimeTests
         {
             // A weave-copilot that answers every request, and session/new with its session's id.
             var agent = Path.Combine(home, "weave-copilot");
-            File.WriteAllText(agent, """
+            TestExecutable.Write(agent, """
                 #!/bin/sh
                 while IFS= read -r line; do
                   id=$(printf '%s' "$line" | sed -n 's/^{"jsonrpc":"2.0","id":\([0-9]*\).*/\1/p')
@@ -137,7 +137,6 @@ public sealed class CopilotHarnessRuntimeTests
                   esac
                 done
                 """);
-            File.SetUnixFileMode(agent, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             var services = new ServiceCollection();
             services.AddScoped<IUserPreferenceRepository>(_ => new Preferences(new() { [CopilotHarnessRuntime.PathPreferenceKey] = agent }));
             var runtime = new CopilotHarnessRuntime(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLoggerFactory.Instance, home: home);

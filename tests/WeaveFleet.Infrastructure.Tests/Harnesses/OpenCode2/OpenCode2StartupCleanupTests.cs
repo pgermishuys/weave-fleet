@@ -25,8 +25,7 @@ public sealed class OpenCode2StartupCleanupTests : IDisposable
 
         var childPid = Path.Combine(_directory, "child.pid");
         var executable = Path.Combine(_directory, "opencode2");
-        await File.WriteAllTextAsync(executable, $"#!/bin/sh\nsleep 300 &\necho $! > '{childPid}'\nsleep 300\n");
-        File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        TestExecutable.Write(executable, $"#!/bin/sh\nsleep 300 &\necho $! > '{childPid}'\nsleep 300\n");
 
         var manager = new OpenCode2ProcessManager(NullLogger<OpenCode2ProcessManager>.Instance);
         using var cancel = new CancellationTokenSource();
