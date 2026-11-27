@@ -462,13 +462,12 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
 
         // An organisation's managed settings (disableSideloadFlags) make Claude Code refuse --mcp-config and exit.
         var refusing = Path.Combine(_directory, "claude-refusing");
-        await File.WriteAllTextAsync(refusing, $"""
+        TestExecutable.Write(refusing, $"""
             #!/bin/sh
             sleep {exitsAfterSeconds}
             echo "Error: --mcp-config is disabled by your organization's managed settings (disableSideloadFlags)." >&2
             exit 1
             """.Replace("\r", ""));
-        File.SetUnixFileMode(refusing, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         Start(binary: refusing);
 
         const string refusal = "--mcp-config is disabled by your organization's managed settings (disableSideloadFlags)";
