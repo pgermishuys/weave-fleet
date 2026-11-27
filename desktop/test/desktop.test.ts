@@ -183,6 +183,29 @@ describe("server environment", () => {
   });
 });
 
+describe("server environment under a Linux AppImage", () => {
+  const paths = linuxPaths();
+  const appImageEnv = {
+    APPIMAGE: "/home/me/Apps/Fleet.AppImage",
+    APPDIR: "/tmp/.mount_FleetAb12Cd",
+    ARGV0: "Fleet.AppImage",
+    OWD: "/home/me/Downloads",
+    PATH: "/tmp/.mount_FleetAb12Cd/usr/bin:/tmp/.mount_FleetAb12Cd/usr/sbin:/usr/local/bin:/usr/bin:/bin",
+    KEEP: "yes",
+  };
+
+  it("keeps the AppImage's variables and mount out of the agents' shells", () => {
+    const env = buildServerEnv(appImageEnv, paths, 5123);
+    for (const name of ["APPIMAGE", "APPDIR", "ARGV0", "OWD"]) expect(env[name], name).toBeUndefined();
+    expect(env.PATH).toBe("/usr/local/bin:/usr/bin:/bin");
+    expect(env.KEEP).toBe("yes");
+  });
+
+  it("leaves PATH alone when there is no AppImage", () => {
+    expect(buildServerEnv({ PATH: "/usr/bin:/bin", OWD: "/x" }, paths, 5123)).toMatchObject({ PATH: "/usr/bin:/bin", OWD: "/x" });
+  });
+});
+
 describe("restarts", () => {
   const now = 1_000_000;
 

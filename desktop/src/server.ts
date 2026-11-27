@@ -13,6 +13,9 @@ export const IN_USE_EXIT_CODE = 75;
 const DROPPED_PREFIXES = ["ELECTRON_"];
 const DROPPED_NAMES = ["URLS", "ASPNETCORE_URLS", "DOTNET_URLS", "ASPNETCORE_ENVIRONMENT"];
 
+/** The variables an AppImage's launcher sets for itself. */
+const APPIMAGE_NAMES = ["APPIMAGE", "APPDIR", "ARGV0", "OWD"];
+
 /**
  * The environment the bundled Fleet runs with: the launcher's settings, under the shared data directory. No login
  * token: Fleet signs in loopback requests on its own, the window's and the app's alike.
@@ -28,11 +31,19 @@ const DROPPED_NAMES = ["URLS", "ASPNETCORE_URLS", "DOTNET_URLS", "ASPNETCORE_ENV
  */
 export function buildServerEnv(base: NodeJS.ProcessEnv, paths: FleetPaths, port: number): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
+  // Run from a Linux AppImage, the app's environment carries the AppImage's own variables and a PATH that starts with
+  // folders inside its read-only mount. Fleet and every agent shell it starts would find the AppImage's tools before
+  // the user's. (The updater reads APPIMAGE from the Electron process, which keeps it.)
+  const appDir = base.APPDIR;
+  const inAppImage = Boolean(base.APPIMAGE || appDir);
+  const insideAppDir = (entry: string): boolean =>
+    Boolean(appDir) && (entry === appDir || entry.startsWith(`${appDir}/`));
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;
     const upper = key.toUpperCase();
     if (DROPPED_NAMES.includes(upper) || DROPPED_PREFIXES.some((prefix) => upper.startsWith(prefix))) continue;
-    env[key] = value;
+    if (inAppImage && APPIMAGE_NAMES.includes(key)) continue;
+    env[key] = key === "PATH" && inAppImage ? value.split(path.delimiter).filter((entry) => !insideAppDir(entry)).join(path.delimiter) : value;
   }
   return {
     ...env,
