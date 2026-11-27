@@ -191,6 +191,7 @@ public sealed partial class WorkspaceService(
             {
                 // Plain remove first: git itself refuses a checkout with uncommitted work or a paused merge/rebase.
                 var source = workspace.SourceDirectory ?? workspace.Directory;
+                await UnlockInterruptedCreateAsync(source, workspace.Directory).ConfigureAwait(false);
                 try
                 {
                     await RunGitAsync(source, "worktree", "remove", workspace.Directory);
@@ -214,6 +215,8 @@ public sealed partial class WorkspaceService(
                 LogCloneDeleteFailed(ex, workspace.Directory);
                 try { System.IO.Directory.Delete(workspace.Directory, recursive: true); }
                 catch { /* best effort */ }
+                // The folder is gone by hand; drop git's entry too, or its branch stays "checked out".
+                await TryRunGitAsync(workspace.SourceDirectory ?? workspace.Directory, "worktree", "prune").ConfigureAwait(false);
             }
 
             await RemoveEmptyWorktreeRootAsync(workspace).ConfigureAwait(false);
@@ -690,6 +693,35 @@ public sealed partial class WorkspaceService(
 
     private static async Task<IEnumerable<string>> ListLocalBranchesAsync(string sourceDir)
         => ParseLines(await RunGitAsync(sourceDir, "for-each-ref", "--format=%(refname:short)", "refs/heads"));
+
+    /// <summary>
+    /// A `git worktree add` that was killed leaves its entry locked "initializing", which neither `worktree remove`
+    /// (even with --force) nor `prune` will touch. That one lock is git's own and safe to lift; a lock a person put
+    /// there for another reason is left alone.
+    /// </summary>
+    private static async Task UnlockInterruptedCreateAsync(string sourceDir, string worktreeDir)
+    {
+        var porcelain = await TryRunGitAsync(sourceDir, "worktree", "list", "--porcelain").ConfigureAwait(false);
+        if (porcelain is null)
+            return;
+
+        const string worktreePrefix = "worktree ";
+        const string lockedPrefix = "locked";
+        var comparison = BranchNamesAreCaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var target = Path.GetFullPath(worktreeDir).TrimEnd('/', '\\');
+        var inTarget = false;
+        foreach (var line in ParseLines(porcelain))
+        {
+            if (line.StartsWith(worktreePrefix, StringComparison.Ordinal))
+                inTarget = string.Equals(Path.GetFullPath(line[worktreePrefix.Length..]).TrimEnd('/', '\\'), target, comparison);
+            else if (inTarget && line.StartsWith(lockedPrefix, StringComparison.Ordinal))
+            {
+                if (line[lockedPrefix.Length..].Trim() == "initializing")
+                    await TryRunGitAsync(sourceDir, "worktree", "unlock", worktreeDir).ConfigureAwait(false);
+                return;
+            }
+        }
+    }
 
     private static async Task<IEnumerable<string>> GetCheckedOutBranchesAsync(string sourceDir)
     {
