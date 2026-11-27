@@ -212,6 +212,33 @@ public sealed class WorkspaceServiceWorktreeNamingTests
         Directory.Exists(created.Value.Directory).ShouldBeFalse();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CleaningUp_AWorktreeGitHasLocked_LeavesNoWorktreeEntryAndFreesItsBranch(bool folderStillThere)
+    {
+        using var repository = new RealGitRepository();
+        var service = Service();
+        var created = await service.CreateWorkspaceAsync(
+            repository.Path, "worktree", branch: null, provenance: null, message: "Add rate limiting");
+        created.IsSuccess.ShouldBeTrue(ErrorOf(created));
+        var directory = created.Value.Directory!;
+        // What a killed `git worktree add` leaves behind: an entry locked "initializing".
+        repository.Git("worktree", "lock", "--reason", "initializing", directory);
+        if (!folderStillThere)
+            Directory.Delete(directory, recursive: true);
+
+        (await service.CleanupWorkspaceAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+
+        repository.Git("worktree", "list", "--porcelain").ShouldNotContain(created.Value.Branch!);
+        Directory.Exists(directory).ShouldBeFalse();
+
+        var again = await service.CreateWorkspaceAsync(
+            repository.Path, "worktree", branch: created.Value.Branch, provenance: null, message: null);
+        again.IsSuccess.ShouldBeTrue(ErrorOf(again));
+        again.Value.Branch.ShouldBe(created.Value.Branch);
+    }
+
     private async Task SaveUserNamingAsync(WorktreeNamingOverride layer)
     {
         var naming = new WorktreeNamingService(_preferences, NullLogger<WorktreeNamingService>.Instance);
